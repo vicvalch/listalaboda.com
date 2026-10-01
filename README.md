@@ -6,10 +6,15 @@ listalaboda.com es una plataforma que facilita la gestión de muchos items en tu
 
 ## Status
 
-**Auth and membership flows (LB-04).** On top of the application foundation (LB-02) and the wedding
-tenancy schema with RLS (LB-03), couples can sign up, sign in, create a wedding, invite a partner or
-collaborator with a copyable single-use link, and the invitee joins the same wedding. The checklist
-arrives in LB-05.
+**Checklist foundation (LB-05).** On top of the application foundation (LB-02), the wedding tenancy
+schema with RLS (LB-03) and auth/membership flows (LB-04: sign up, create a wedding, invite a partner
+or collaborator), each wedding now opens on its checklist. An owner creates the list once from the
+default Spanish template (`default-wedding-es`, version 1); owners and collaborators then add, edit,
+complete, mark as not applicable and delete items.
+
+Applying the template **copies** its items into the wedding. The wedding's copy is independent: later
+template changes never mutate existing weddings (template content changes ship as a new version).
+The template is seeded by a migration, so `npm run db:reset` is all a fresh database needs.
 
 ## Stack
 

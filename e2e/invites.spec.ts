@@ -26,7 +26,12 @@ test.describe("membership invites", () => {
     await logIn(page, await createAccount("owner-d"));
     const weddingId = await createWedding(page, "Boda con colaboradora");
     const inviteUrl = await createInvite(page, "collaborator");
-    await expect(page.getByText(es.invites.status.pending, { exact: true })).toBeVisible();
+    // Scoped: the wedding page also shows checklist "Pendiente" labels.
+    await expect(
+      page
+        .getByRole("region", { name: es.invites.title })
+        .getByText(es.invites.status.pending, { exact: true }),
+    ).toBeVisible();
     await logOut(page);
 
     // E: the same browser, now logged out, opens the link.

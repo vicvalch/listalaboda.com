@@ -29,4 +29,14 @@ export function formatNumber(
   return new Intl.NumberFormat(locale, options).format(value);
 }
 
+/**
+ * Fills `{name}` placeholders in a catalog string. Unknown placeholders are
+ * left as-is so a missing value is visible rather than silently blank.
+ */
+export function interpolate(template: string, values: Readonly<Record<string, string>>): string {
+  return template.replace(/\{(\w+)\}/g, (match, name: string) =>
+    Object.hasOwn(values, name) ? values[name] : match,
+  );
+}
+
 export type { Messages };

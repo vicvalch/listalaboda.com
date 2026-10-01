@@ -37,8 +37,10 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 
 - `npm run verify`: lint, typecheck, unit tests, build (same as CI)
 - `npm run test:e2e`: Playwright smoke test against a production build (needs `npx playwright install chromium`)
+- `npm run db:verify`: reset local DB, run RLS/security integration tests, check generated types (needs Docker + `npm run db:start`)
+- `npm run db:types`: regenerate `src/lib/supabase/database.types.ts` after any schema change (never hand-edit it)
 
 ## Prompt sequencing
 
-Work is delivered in numbered prompts (LB-NN). LB-02 is foundation only: no domain schema, auth flows or
-features. Later prompts own the domain: LB-03 is the first product data foundation. Don't implement ahead of the current prompt.
+Work is delivered in numbered prompts (LB-NN). LB-02 is the application foundation. LB-03 is the product
+data foundation: weddings, memberships, membership invites, RLS (no UI). Don't implement ahead of the current prompt.

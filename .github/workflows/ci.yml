@@ -29,3 +29,31 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:run
       - run: npm run build
+
+  database:
+    # Real RLS/security tests and the generated-types contract (ADR-002 §4,
+    # §10) against a throwaway local Supabase stack on the runner. Never
+    # touches a remote project.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Start local Supabase (applies all migrations from zero)
+        run: >-
+          npx supabase start
+          -x realtime,storage-api,imgproxy,mailpit,studio,edge-runtime,logflare,vector,supavisor
+
+      - run: npm run db:test
+      - run: npm run db:types:check
+
+      - name: Stop local Supabase
+        if: always()
+        run: npx supabase stop --no-backup

@@ -59,7 +59,7 @@ jobs:
         run: npx supabase stop --no-backup
 
   e2e:
-    # LB-04 auth and membership journeys in a real browser against the
+    # LB-04 auth/membership and LB-05 checklist journeys in a real browser against the
     # production build and a throwaway local Supabase stack on the runner
     # (auto-confirmed sign-ups, see supabase/config.toml). Never touches a
     # remote project; playwright.config.ts refuses non-local Supabase URLs.

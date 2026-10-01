@@ -5,7 +5,64 @@ export type Database = {
 
   "public": {
           Tables: {
-            "membership_invites": {
+            "checklist_items": {
+                  Row: {
+                    "category": Database["public"]['Enums']["checklist_category"] | null,"completed_at": string | null,"completed_by": string | null,"created_at": string,"created_by": string | null,"description": string | null,"due_date": string | null,"id": string,"relative_days": number | null,"sort_order": number,"source_template_item_id": string | null,"status": Database["public"]['Enums']["checklist_item_status"],"timing_mode": Database["public"]['Enums']["checklist_timing_mode"],"title": string,"updated_at": string,"wedding_id": string
+                  }
+                  Insert: {
+                    "category"?: Database["public"]['Enums']["checklist_category"] | null,"completed_at"?: string | null,"completed_by"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"due_date"?: string | null,"id"?: string,"relative_days"?: number | null,"sort_order"?: number,"source_template_item_id"?: string | null,"status"?: Database["public"]['Enums']["checklist_item_status"],"timing_mode"?: Database["public"]['Enums']["checklist_timing_mode"],"title": string,"updated_at"?: string,"wedding_id": string
+                  }
+                  Update: {
+                    "category"?: Database["public"]['Enums']["checklist_category"] | null,"completed_at"?: string | null,"completed_by"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"due_date"?: string | null,"id"?: string,"relative_days"?: number | null,"sort_order"?: number,"source_template_item_id"?: string | null,"status"?: Database["public"]['Enums']["checklist_item_status"],"timing_mode"?: Database["public"]['Enums']["checklist_timing_mode"],"title"?: string,"updated_at"?: string,"wedding_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "checklist_items_source_template_item_id_fkey"
+      columns: ["source_template_item_id"]
+isOneToOne: false
+      referencedRelation: "checklist_template_items"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "checklist_items_wedding_id_fkey"
+      columns: ["wedding_id"]
+isOneToOne: false
+      referencedRelation: "weddings"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"checklist_template_items": {
+                  Row: {
+                    "category": Database["public"]['Enums']["checklist_category"],"created_at": string,"description": string | null,"id": string,"relative_days": number | null,"sort_order": number,"stable_key": string,"template_id": string,"timing_mode": Database["public"]['Enums']["checklist_timing_mode"],"title": string,"updated_at": string
+                  }
+                  Insert: {
+                    "category": Database["public"]['Enums']["checklist_category"],"created_at"?: string,"description"?: string | null,"id"?: string,"relative_days"?: number | null,"sort_order": number,"stable_key": string,"template_id": string,"timing_mode"?: Database["public"]['Enums']["checklist_timing_mode"],"title": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "category"?: Database["public"]['Enums']["checklist_category"],"created_at"?: string,"description"?: string | null,"id"?: string,"relative_days"?: number | null,"sort_order"?: number,"stable_key"?: string,"template_id"?: string,"timing_mode"?: Database["public"]['Enums']["checklist_timing_mode"],"title"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "checklist_template_items_template_id_fkey"
+      columns: ["template_id"]
+isOneToOne: false
+      referencedRelation: "checklist_templates"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"checklist_templates": {
+                  Row: {
+                    "created_at": string,"description": string | null,"id": string,"is_active": boolean,"key": string,"locale": string,"name": string,"updated_at": string,"version": number
+                  }
+                  Insert: {
+                    "created_at"?: string,"description"?: string | null,"id"?: string,"is_active"?: boolean,"key": string,"locale": string,"name": string,"updated_at"?: string,"version": number
+                  }
+                  Update: {
+                    "created_at"?: string,"description"?: string | null,"id"?: string,"is_active"?: boolean,"key"?: string,"locale"?: string,"name"?: string,"updated_at"?: string,"version"?: number
+                  }
+                  Relationships: [
+
+                  ]
+                },"membership_invites": {
                   Row: {
                     "accepted_at": string | null,"accepted_by": string | null,"created_at": string,"created_by": string | null,"email": string | null,"expires_at": string,"id": string,"intended_role": Database["public"]['Enums']["wedding_role"],"revoked_at": string | null,"token_hash": string,"updated_at": string,"wedding_id": string
                   }
@@ -20,6 +77,31 @@ export type Database = {
       foreignKeyName: "membership_invites_wedding_id_fkey"
       columns: ["wedding_id"]
 isOneToOne: false
+      referencedRelation: "weddings"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"wedding_checklist_template_applications": {
+                  Row: {
+                    "applied_at": string,"applied_by": string | null,"id": string,"template_id": string,"wedding_id": string
+                  }
+                  Insert: {
+                    "applied_at"?: string,"applied_by"?: string | null,"id"?: string,"template_id": string,"wedding_id": string
+                  }
+                  Update: {
+                    "applied_at"?: string,"applied_by"?: string | null,"id"?: string,"template_id"?: string,"wedding_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "wedding_checklist_template_applications_template_id_fkey"
+      columns: ["template_id"]
+isOneToOne: false
+      referencedRelation: "checklist_templates"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "wedding_checklist_template_applications_wedding_id_fkey"
+      columns: ["wedding_id"]
+isOneToOne: true
       referencedRelation: "weddings"
       referencedColumns: ["id"]
     }
@@ -81,10 +163,15 @@ isOneToOne: false
         to: "weddings"
         isOneToOne: true
         isSetofReturn: false
-      } }
+      } },
+"initialize_wedding_checklist":
+{ Args: { "target_wedding_id": string }; Returns: {
+              "already_initialized": boolean,"item_count": number,"template_key": string,"template_version": number
+            }[]
+                           }
           }
           Enums: {
-            "wedding_role": "owner"|"collaborator"
+            "checklist_category": "first_steps"|"venue_and_date"|"vendors"|"attire"|"invitations"|"ceremony"|"reception"|"final_preparations"|"after_wedding","checklist_item_status": "pending"|"done"|"not_applicable","checklist_timing_mode": "none"|"relative_to_wedding"|"absolute","wedding_role": "owner"|"collaborator"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -200,7 +287,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "wedding_role": ["owner", "collaborator"]
+            "checklist_category": ["first_steps", "venue_and_date", "vendors", "attire", "invitations", "ceremony", "reception", "final_preparations", "after_wedding"],"checklist_item_status": ["pending", "done", "not_applicable"],"checklist_timing_mode": ["none", "relative_to_wedding", "absolute"],"wedding_role": ["owner", "collaborator"]
           }
         }
 } as const

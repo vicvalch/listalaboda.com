@@ -48,6 +48,19 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - Code that reads cookies must not swallow Next's dynamic-rendering signal inside `try/catch`, or the
   route gets prerendered as signed-out.
 
+## Checklist rules (LB-05)
+
+- The checklist is the Wedding home: `/app/weddings/[weddingId]` opens on it; people/invites are secondary.
+- `checklist_templates`/`checklist_template_items` are global, versioned reference data. Clients have no
+  privileges on them; content changes ship as a new `(key, version)`, never by editing a shipped version.
+- `checklist_items` is wedding-owned mutable data. Applying a template copies; it never live-links.
+- Seeding goes only through the owner-only, at-most-once `initialize_wedding_checklist` RPC. No
+  auto-seed in `create_wedding`, no reset/resync to the template.
+- Owners and collaborators both manage checklist content (add/edit/status/delete) through `@/lib/checklist/service`.
+  `created_by`/`completed_by` are provenance only, never authority.
+- Status is exactly `pending | done | not_applicable`; the database stamps `completed_at`. Store timing
+  rules (`relative_days`, negative = before the wedding), derive effective dates; never persist them.
+
 ## Commands
 
 - `npm run verify`: lint, typecheck, unit tests, build (same as CI)
@@ -59,4 +72,5 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 
 Work is delivered in numbered prompts (LB-NN). LB-02 is the application foundation. LB-03 is the product
 data foundation: weddings, memberships, membership invites, RLS (no UI). LB-04 adds auth and membership
-flows (signup/login/logout, wedding creation, invites). Don't implement ahead of the current prompt.
+flows (signup/login/logout, wedding creation, invites). LB-05 adds the checklist domain (templates,
+wedding checklist items, RLS) and the checklist-first wedding page. Don't implement ahead of the current prompt.

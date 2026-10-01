@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
 import { es } from "../../src/lib/i18n/messages/es";
@@ -85,4 +85,57 @@ export async function createInvite(
 
 export function weddingIdFromUrl(url: string): string | null {
   return WEDDING_PATH.exec(url)?.[1] ?? null;
+}
+
+// ---------------------------------------------------------------- checklist
+
+/** The checklist row whose title is exactly `title`. */
+export function checklistItem(page: Page, title: string) {
+  return page
+    .getByTestId("checklist-item")
+    .filter({ has: page.getByText(title, { exact: true }) });
+}
+
+export function progressSummary(page: Page) {
+  return page.getByTestId("checklist-progress-summary");
+}
+
+/** Owner action: creates the suggested checklist on the current wedding page. */
+export async function initializeChecklist(page: Page) {
+  await page.getByRole("button", { name: es.checklist.init.cta }).click();
+  await expect(progressSummary(page)).toHaveText("0 de 38 completados");
+}
+
+type NewItem = {
+  title: string;
+  category?: string;
+  timing?:
+    | { mode: "absolute"; date: string }
+    | { mode: "relative"; days: number; direction: "before" | "after" | "on" };
+};
+
+/** Fills a checklist item form (add or edit) inside `scope`. */
+export async function fillItemForm(scope: Locator, item: NewItem) {
+  const form = es.checklist.form;
+  await scope.getByLabel(form.titleLabel, { exact: true }).fill(item.title);
+  if (item.category) await scope.getByLabel(form.categoryLabel).selectOption(item.category);
+  if (item.timing?.mode === "absolute") {
+    await scope.getByRole("radio", { name: form.timingAbsolute }).check();
+    await scope.getByLabel(form.dateLabel, { exact: true }).fill(item.timing.date);
+  } else if (item.timing?.mode === "relative") {
+    await scope.getByRole("radio", { name: form.timingRelative }).check();
+    await scope.getByLabel(form.directionLabel).selectOption(item.timing.direction);
+    if (item.timing.direction !== "on") {
+      await scope.getByLabel(form.daysLabel).fill(String(item.timing.days));
+    }
+  }
+}
+
+/** Adds a custom item through "Agregar pendiente" and waits for it to appear. */
+export async function addChecklistItem(page: Page, item: NewItem) {
+  const section = page.getByRole("region", { name: es.checklist.form.addTitle });
+  await fillItemForm(section, item);
+  await section.getByRole("button", { name: es.checklist.form.submitAdd }).click();
+  await expect(section.getByRole("status")).toHaveText(es.checklist.announcements.created);
+  await expect(checklistItem(page, item.title)).toHaveCount(1);
 }

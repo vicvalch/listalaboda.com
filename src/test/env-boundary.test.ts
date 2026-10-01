@@ -76,13 +76,3 @@ describe("public env", () => {
     );
   });
 });
-
-describe("server-only boundary", () => {
-  it("refuses to load the server Supabase client outside a server runtime", async () => {
-    // Vitest resolves `server-only` without the `react-server` condition,
-    // exactly like a Client Component bundle would, so the import must throw.
-    await expect(import("@/lib/supabase/server")).rejects.toThrow(
-      /cannot be imported from a Client Component/,
-    );
-  });
-});

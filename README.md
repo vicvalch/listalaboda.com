@@ -6,9 +6,10 @@ listalaboda.com es una plataforma que facilita la gestión de muchos items en tu
 
 ## Status
 
-**Data foundation (LB-03).** The application shell, tooling and Supabase client setup are in place
-(LB-02), plus the wedding tenancy schema: weddings, memberships (owner/collaborator) and membership
-invites, with RLS tested against a real local database. There is no product UI yet.
+**Auth and membership flows (LB-04).** On top of the application foundation (LB-02) and the wedding
+tenancy schema with RLS (LB-03), couples can sign up, sign in, create a wedding, invite a partner or
+collaborator with a copyable single-use link, and the invitee joins the same wedding. The checklist
+arrives in LB-05.
 
 ## Stack
 
@@ -27,6 +28,11 @@ npm run dev                  # http://localhost:3000
 Local Supabase (requires Docker): `npx supabase start`. Then copy the API URL and publishable key
 from `npx supabase status` into `.env.local`. The project is not linked to any remote Supabase project.
 
+Local auth: email + password. The local stack auto-confirms sign-ups (`enable_confirmations = false`
+in `supabase/config.toml`), so a new account is signed in immediately. If confirmation is enabled (as
+expected in production), sign-up shows "Revisa tu correo" and the emailed link returns through
+`/auth/callback`. Locally, those emails would appear in Mailpit (`http://127.0.0.1:54324`).
+
 ## Tests and checks
 
 | Command | What it does |
@@ -34,7 +40,7 @@ from `npx supabase status` into `.env.local`. The project is not linked to any r
 | `npm run lint` | ESLint |
 | `npm run typecheck` | Route typegen + `tsc --noEmit` |
 | `npm run test:run` | Vitest unit tests (`npm test` for watch mode) |
-| `npm run test:e2e` | Playwright smoke test (run `npx playwright install chromium` once) |
+| `npm run test:e2e` | Playwright journeys against a production build and the local Supabase stack (run `npx playwright install chromium` once; needs `npm run db:start`) |
 | `npm run verify` | lint + typecheck + unit tests + build (CI `verify` job) |
 
 ### Database (local Supabase, requires Docker)
@@ -51,6 +57,12 @@ from `npx supabase status` into `.env.local`. The project is not linked to any r
 The DB tests sign up fake `@example.test` users on the local stack and use a direct local Postgres
 connection only to arrange fixtures and read ground truth. They refuse to run against non-local hosts.
 CI runs them in the `database` job on a throwaway local stack.
+
+The E2E suite (`npm run test:e2e`) signs up fresh `e2e-…@example.test` accounts each run and deletes
+the previous run's E2E accounts and weddings from the local database first. It reads the Supabase URL
+and publishable key from `supabase status` (or the `NEXT_PUBLIC_*` env) and refuses non-local hosts.
+CI runs it in the `e2e` job. `npm run db:reset` wipes all local accounts; nothing depends on rows
+created by hand.
 
 Formatting: no formatter is configured yet. Follow the existing style in your editor. We can add
 one later.

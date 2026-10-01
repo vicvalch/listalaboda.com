@@ -30,8 +30,9 @@ export async function createSupabaseServerClient() {
             cookieStore.set(name, value, options);
           }
         } catch {
-          // Server Components cannot write cookies. Session refresh will be
-          // handled by the proxy introduced with the auth prompt.
+          // Server Components cannot write cookies; `src/proxy.ts` refreshes
+          // the session before rendering. Server Actions and Route Handlers
+          // (sign-in, sign-out, code exchange) do write here.
         }
       },
     },

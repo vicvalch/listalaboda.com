@@ -1,17 +1,39 @@
 @import "tailwindcss";
 
-/* Neutral baseline only. The visual design system arrives in a later prompt. */
+/* Small warm baseline. A fuller visual design system arrives in a later prompt. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  --muted: #525252;
+  --background: #fdfaf7;
+  --foreground: #2a2220;
+  --muted: #6b5f5a;
+  --surface: #ffffff;
+  --border: #e8ddd6;
+  --accent: #9f3a4f;
+  --accent-hover: #86304a;
+  --accent-foreground: #ffffff;
+  --accent-soft: #f8e9ec;
+  --danger: #b42318;
+  --danger-soft: #fdecea;
+  --success: #1f6f43;
+  --success-soft: #e7f5ec;
+  --focus: #9f3a4f;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-    --muted: #a3a3a3;
+    --background: #171312;
+    --foreground: #f1ebe8;
+    --muted: #b3a7a2;
+    --surface: #221c1a;
+    --border: #3d3330;
+    --accent: #e08a9c;
+    --accent-hover: #eaa3b2;
+    --accent-foreground: #1d1414;
+    --accent-soft: #3a2228;
+    --danger: #f2877c;
+    --danger-soft: #3b1f1c;
+    --success: #7fd3a1;
+    --success-soft: #1b3326;
+    --focus: #e08a9c;
   }
 }
 
@@ -19,10 +41,26 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Visible keyboard focus everywhere. */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }

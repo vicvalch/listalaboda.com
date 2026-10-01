@@ -33,14 +33,30 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - No hidden auth shortcuts: authority comes from server-side membership checks, never client input or `user_metadata`.
 - Tests validate behavior, not source text.
 
+## Auth and membership rules (LB-04)
+
+- Server identity is `auth.getUser()` via `@/lib/auth/session` (`getCurrentUser`/`requireUser`),
+  never `getSession()`, cookie presence or client input. Every protected page and Server Action calls
+  it; the `/app` layout alone is not a security boundary.
+- Wedding access goes through `@/lib/authz/wedding`; non-members get `notFound()` (same as a missing
+  wedding). Don't re-implement membership checks.
+- `src/proxy.ts` only refreshes the Supabase session. No authorization or redirects there.
+- Every redirect target from input (`next=`, callbacks) goes through `safeNextPath`.
+- Invite tokens: plaintext only in the one link shown to the owner, the `/invite/[token]` path and the
+  httpOnly `lb_membership_invite` handoff cookie. Never log, persist, put in `next=`/query strings,
+  error text or client storage. Acceptance is an explicit POST through `accept_membership_invite`.
+- Code that reads cookies must not swallow Next's dynamic-rendering signal inside `try/catch`, or the
+  route gets prerendered as signed-out.
+
 ## Commands
 
 - `npm run verify`: lint, typecheck, unit tests, build (same as CI)
-- `npm run test:e2e`: Playwright smoke test against a production build (needs `npx playwright install chromium`)
+- `npm run test:e2e`: Playwright journeys against a production build and local Supabase (needs `npx playwright install chromium` and `npm run db:start`)
 - `npm run db:verify`: reset local DB, run RLS/security integration tests, check generated types (needs Docker + `npm run db:start`)
 - `npm run db:types`: regenerate `src/lib/supabase/database.types.ts` after any schema change (never hand-edit it)
 
 ## Prompt sequencing
 
 Work is delivered in numbered prompts (LB-NN). LB-02 is the application foundation. LB-03 is the product
-data foundation: weddings, memberships, membership invites, RLS (no UI). Don't implement ahead of the current prompt.
+data foundation: weddings, memberships, membership invites, RLS (no UI). LB-04 adds auth and membership
+flows (signup/login/logout, wedding creation, invites). Don't implement ahead of the current prompt.

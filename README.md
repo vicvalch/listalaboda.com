@@ -24,8 +24,7 @@ category's progress. "Lo próximo" shows the first five pending items in plan or
 on read and never rewrite the stored order. Effective dates are derived, not persisted: a relative
 item's date is always the *current* wedding date plus its offset, so changing or clearing the wedding
 date in **Ajustes de la boda** (`/app/weddings/[id]/settings`, owner-only) moves every relative item
-at once, while items with a specific date stay put. No "overdue" status exists yet (there is no
-time-zone model).
+at once, while items with a specific date stay put.
 
 **Assignment and "Mis pendientes" (LB-07).** Each checklist item can have one responsible person:
 a current member (`wedding_memberships` row) of the same wedding, or nobody ("Sin asignar"). Owners
@@ -37,6 +36,20 @@ them. Pending invites can't be assigned. **Mis pendientes** (`?view=mine`, combi
 lists the items assigned to you in plan order. Each member can set how they appear in a wedding
 (`display_name`, scoped to that wedding, only by themselves). Without a name, others see a neutral
 role label; you always see yourself as "Tú". Emails and user ids are never shown.
+
+**City, time zone, "Atrasado" and member removal (LB-08).** A wedding has an optional **city**
+(plain text, up to 120 characters) and an optional **time zone**, an IANA identifier such as
+`America/Costa_Rica` (never an offset, never inferred from the browser, server or IP; the database
+checks it against Postgres's time-zone catalog). Both can be set when creating the wedding and in its
+settings (owner-only); existing weddings have neither. The time zone defines the wedding's local
+calendar day, from which **overdue** is derived on read: a *pending* item whose effective due date is
+strictly before the wedding-local today. Due today is not overdue, done/not applicable never are, and
+without a time zone nothing is. Overdue is never stored and is not a status (still `pending | done |
+not_applicable`). It shows as "Pendiente · Atrasado" on rows, in an "Atrasados" summary and first in the
+Plan view; "Lo próximo" lists only non-overdue pending items. Owners can **remove another member**
+("Quitar de la boda", with confirmation): that deletes only their membership in this wedding, never
+their account or other weddings; items assigned to them stay and become "Sin asignar". Nobody removes
+themselves through this flow, and the last owner can never be removed (database-enforced).
 
 ## Stack
 

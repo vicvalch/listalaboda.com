@@ -8,10 +8,13 @@ import { Notice } from "@/components/ui/Notice";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { secondaryButtonClass } from "@/components/ui/styles";
 import { getMessages } from "@/lib/i18n";
+import { WEDDING_CITY_MAX_LENGTH } from "@/lib/weddings/validation";
 
+import { TimeZoneField } from "../TimeZoneField";
 import { createWeddingAction, type NewWeddingState } from "./actions";
 
-export function NewWeddingForm() {
+/** Name (required), then optional date, city and time zone. */
+export function NewWeddingForm({ timeZones }: { timeZones: readonly string[] }) {
   const [state, formAction] = useActionState<NewWeddingState, FormData>(createWeddingAction, null);
   const failure = state && !state.ok ? state : null;
   const { weddingNew } = getMessages();
@@ -39,6 +42,23 @@ export function NewWeddingForm() {
         hint={weddingNew.dateHint}
         defaultValue={failure?.values?.weddingDate}
         error={failure?.fieldErrors?.weddingDate}
+      />
+      <FormField
+        id="wedding-city"
+        name="city"
+        type="text"
+        label={weddingNew.cityLabel}
+        hint={weddingNew.cityHint}
+        maxLength={WEDDING_CITY_MAX_LENGTH}
+        autoComplete="off"
+        defaultValue={failure?.values?.city}
+        error={failure?.fieldErrors?.city}
+      />
+      <TimeZoneField
+        id="wedding-time-zone"
+        options={timeZones}
+        defaultValue={failure?.values?.timeZone ?? ""}
+        error={failure?.fieldErrors?.timeZone}
       />
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         <Link href="/app" className={secondaryButtonClass}>

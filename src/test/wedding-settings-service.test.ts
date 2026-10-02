@@ -87,24 +87,59 @@ function clientFor(backend: Backend) {
   return { supabase, requests };
 }
 
-const input = { name: "Boda de Ana y Luis", weddingDate: "2027-08-14" };
+const input = {
+  name: "Boda de Ana y Luis",
+  weddingDate: "2027-08-14",
+  city: "San José",
+  timeZone: "America/Costa_Rica",
+};
 const patches = (requests: Recorded[]) => requests.filter((r) => r.method === "PATCH");
 
 describe("updateWeddingSettings", () => {
-  it("owner: sends only name and date, scoped to the authorized wedding", async () => {
+  it("owner: sends only name, date, city and time zone, scoped to the authorized wedding", async () => {
     const { supabase, requests } = clientFor({ role: "owner" });
     await expect(updateWeddingSettings(supabase, WEDDING_ID, input)).resolves.toEqual({ ok: true });
 
     const [patch] = patches(requests);
     expect(patch?.url.pathname).toBe("/rest/v1/weddings");
     expect(patch?.url.searchParams.get("id")).toBe(`eq.${WEDDING_ID}`);
-    expect(patch?.body).toEqual({ name: "Boda de Ana y Luis", wedding_date: "2027-08-14" });
+    expect(patch?.body).toEqual({
+      name: "Boda de Ana y Luis",
+      wedding_date: "2027-08-14",
+      city: "San José",
+      time_zone: "America/Costa_Rica",
+    });
   });
 
-  it("a cleared date is sent as null", async () => {
+  it("a cleared date, city and time zone are sent as null", async () => {
     const { supabase, requests } = clientFor({ role: "owner" });
-    await updateWeddingSettings(supabase, WEDDING_ID, { ...input, weddingDate: null });
-    expect(patches(requests)[0]?.body).toEqual({ name: "Boda de Ana y Luis", wedding_date: null });
+    await updateWeddingSettings(supabase, WEDDING_ID, {
+      ...input,
+      weddingDate: null,
+      city: null,
+      timeZone: null,
+    });
+    expect(patches(requests)[0]?.body).toEqual({
+      name: "Boda de Ana y Luis",
+      wedding_date: null,
+      city: null,
+      time_zone: null,
+    });
+  });
+
+  it("maps the city CHECK and the time-zone trigger to field errors", async () => {
+    const cases = [
+      [{ code: "23514", message: 'violates check constraint "weddings_city_valid"' }, "invalid_city"],
+      [{ code: "22023", message: "invalid_time_zone" }, "invalid_time_zone"],
+      // Another invalid_parameter_value is not a time-zone error.
+      [{ code: "22023", message: "something else" }, "error"],
+    ] as const;
+    for (const [body, reason] of cases) {
+      const { supabase } = clientFor({ role: "owner", update: { status: 400, body } });
+      const result = await updateWeddingSettings(supabase, WEDDING_ID, input);
+      expect(result).toEqual({ ok: false, reason });
+      expect(JSON.stringify(result)).not.toContain("weddings_city_valid");
+    }
   });
 
   it("never touches checklist items", async () => {

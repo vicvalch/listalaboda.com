@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth/session";
 import { formText, type FormState } from "@/lib/forms/result";
@@ -13,7 +13,7 @@ import {
 } from "@/lib/membership-invites/service";
 import { parseInviteInput, type InviteField } from "@/lib/membership-invites/validation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { updateMyDisplayName } from "@/lib/weddings/service";
+import { removeWeddingMember, updateMyDisplayName } from "@/lib/weddings/service";
 import { parseDisplayName } from "@/lib/weddings/validation";
 
 /**
@@ -113,4 +113,56 @@ export async function updateDisplayNameAction(
 
   revalidatePath(`/app/weddings/${weddingId}`);
   return { ok: true, data: { message: copy.saved, nonce: crypto.randomUUID() } };
+}
+
+export type RemoveMemberState = FormState<never> | null;
+
+/**
+ * Owner-only: removes another member from this wedding. The form carries
+ * only the wedding id and the target membership id, both lookup keys; the
+ * caller, their membership and their role are derived on the server (and
+ * re-checked by RLS and the final-owner trigger). The caller's own
+ * membership is refused: there is no "leave wedding" flow.
+ */
+export async function removeMemberAction(
+  _prev: RemoveMemberState,
+  formData: FormData,
+): Promise<RemoveMemberState> {
+  const weddingId = formText(formData, "weddingId");
+  const weddingPath = `/app/weddings/${encodeURIComponent(weddingId)}`;
+  await requireUser(weddingPath);
+  const copy = getMessages().members.remove;
+
+  const result = await removeWeddingMember(
+    await createSupabaseServerClient(),
+    weddingId,
+    formText(formData, "membershipId"),
+  );
+  if (!result.ok) {
+    switch (result.reason) {
+      case "unauthenticated":
+        await requireUser(weddingPath);
+        return { ok: false, formError: copy.failed };
+      case "not_found":
+        // Non-members get the same 404 as a nonexistent wedding.
+        notFound();
+      case "invalid_target":
+        // Not a member of THIS wedding (any more). Says nothing about any
+        // other wedding; the caller already belongs to this one.
+        revalidatePath(weddingPath);
+        return { ok: false, formError: copy.notFound };
+      case "forbidden":
+        return { ok: false, formError: copy.forbidden };
+      case "cannot_remove_self":
+        return { ok: false, formError: copy.cannotRemoveSelf };
+      case "last_owner":
+        return { ok: false, formError: copy.lastOwner };
+      case "error":
+        return { ok: false, formError: copy.failed };
+    }
+  }
+
+  revalidatePath(weddingPath);
+  // A fixed flag, no user data: the wedding page shows "removed".
+  redirect(`${weddingPath}?removed=member#people-title`);
 }

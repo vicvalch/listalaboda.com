@@ -68,8 +68,8 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - Effective due dates are derived from the *current* `weddings.wedding_date` + `relative_days` through
   `@/lib/checklist/timing`; never persist them or rewrite items when the wedding date changes.
   Absolute dates never move. Clearing the wedding date never clears `relative_days`.
-- Wedding settings (name, date) are owner-only through `updateWeddingSettings` in `@/lib/weddings/service`.
-- No "overdue"/"today"/"late" semantics until there is an explicit time-zone model.
+- Wedding settings (name, date, city, time zone) are owner-only through `updateWeddingSettings` in `@/lib/weddings/service`.
+- "Today"/overdue only through the wedding time zone (LB-08 rules below); never server or browser local time.
 - Categories stay the fixed enum (Constitution §5); custom categories are Phase 3.
 
 ## Assignment rules (LB-07)
@@ -83,6 +83,18 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - `wedding_memberships.display_name` is wedding-scoped presentation identity. Only the member themselves sets
   it, through the `set_wedding_display_name` RPC (no table grant; it would widen role updates). Never derive
   names from emails; never show emails or user/membership ids as labels (`@/lib/weddings/members`).
+
+## MVP completion rules (LB-08)
+
+- `weddings.time_zone` is an IANA identifier (never an offset), validated by the database; null is valid.
+  Never infer it (browser, server, IP, UTC); a device suggestion is only an explicit, visible, editable action.
+- Overdue = `pending` + effective due date strictly before the wedding-local today (`@/lib/weddings/timezone`
+  `weddingLocalToday`, from one server clock read per request). Due today is not overdue; no time zone means
+  nothing is overdue. Overdue is derived (`@/lib/checklist/overdue`), never a status or a stored column.
+- `weddings.city` is optional plain text (trimmed, blank = null); not a venue, address or geocode.
+- Removing a member deletes one `WeddingMembership` (owner-only, `removeWeddingMember`), never the auth user,
+  their other memberships or checklist items. Assigned items become unassigned via the FK. The generic removal
+  flow never removes the caller (no "leave wedding"), and the final owner stays database-enforced.
 
 ## Commands
 
@@ -98,4 +110,6 @@ data foundation: weddings, memberships, membership invites, RLS (no UI). LB-04 a
 flows (signup/login/logout, wedding creation, invites). LB-05 adds the checklist domain (templates,
 wedding checklist items, RLS) and the checklist-first wedding page. LB-06 refines it: List/Plan/category
 views, "Lo próximo", owner-only wedding settings (no schema change). LB-07 adds single-assignee checklist
-assignment, "Mis pendientes" and wedding-scoped member display names. Don't implement ahead of the current prompt.
+assignment, "Mis pendientes" and wedding-scoped member display names. LB-08 completes the MVP gaps: optional
+wedding city, IANA wedding time zone, derived overdue ("Atrasado") and owner-only member removal. Don't
+implement ahead of the current prompt.

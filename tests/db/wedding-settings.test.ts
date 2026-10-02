@@ -54,8 +54,8 @@ async function weddingRow(weddingId: string) {
   return rows[0];
 }
 
-function input(name: string, weddingDate: string) {
-  const parsed = parseWeddingInput({ name, weddingDate });
+function input(name: string, weddingDate: string, city = "", timeZone = "") {
+  const parsed = parseWeddingInput({ name, weddingDate, city, timeZone });
   if (!parsed.ok) throw new Error("fixture input should be valid");
   return parsed.input;
 }
@@ -104,19 +104,19 @@ describe("updateWeddingSettings", () => {
   });
 
   it("validation rejects blank and over-long names before the database", () => {
-    expect(parseWeddingInput({ name: "   ", weddingDate: "" }).ok).toBe(false);
-    expect(parseWeddingInput({ name: "x".repeat(201), weddingDate: "" }).ok).toBe(false);
-    expect(parseWeddingInput({ name: "x".repeat(200), weddingDate: "" }).ok).toBe(true);
+    expect(parseWeddingInput({ name: "   ", weddingDate: "", city: "", timeZone: "" }).ok).toBe(false);
+    expect(parseWeddingInput({ name: "x".repeat(201), weddingDate: "", city: "", timeZone: "" }).ok).toBe(false);
+    expect(parseWeddingInput({ name: "x".repeat(200), weddingDate: "", city: "", timeZone: "" }).ok).toBe(true);
   });
 
   it("the database stays authoritative for blank and over-long names", async () => {
     const supabase = await sessionClient("ownerA");
     const before = await weddingRow(weddingId);
     expect(
-      await updateWeddingSettings(supabase, weddingId, { name: "   ", weddingDate: null }),
+      await updateWeddingSettings(supabase, weddingId, { name: "   ", weddingDate: null, city: null, timeZone: null }),
     ).toEqual({ ok: false, reason: "invalid_name" });
     expect(
-      await updateWeddingSettings(supabase, weddingId, { name: "x".repeat(201), weddingDate: null }),
+      await updateWeddingSettings(supabase, weddingId, { name: "x".repeat(201), weddingDate: null, city: null, timeZone: null }),
     ).toEqual({ ok: false, reason: "invalid_name" });
     expect(await weddingRow(weddingId)).toEqual(before);
   });

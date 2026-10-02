@@ -95,6 +95,15 @@ export const es = {
     nameHint: "Por ejemplo: «Boda de Ana y Luis».",
     dateLabel: "Fecha de la boda (opcional)",
     dateHint: "Si aún no la tienen, déjala en blanco.",
+    cityLabel: "Ciudad (opcional)",
+    cityHint: "Por ejemplo: San José, Lima o Madrid.",
+    timeZoneLabel: "Zona horaria (opcional)",
+    timeZoneHint: "Se usa para saber cuándo un pendiente ya está atrasado.",
+    timeZoneNone: "Sin definir",
+    timeZoneUseDevice: "Usar la zona horaria de este dispositivo",
+    timeZoneDeviceUsed: "Elegimos {zone}, la zona horaria de este dispositivo. Revísala antes de guardar.",
+    timeZoneDeviceUnavailable:
+      "No pudimos usar la zona horaria de este dispositivo. Elígela de la lista.",
     submit: "Crear boda",
     submitting: "Creando boda…",
     cancel: "Volver a mis bodas",
@@ -102,11 +111,15 @@ export const es = {
       nameRequired: "Escribe un nombre para la boda.",
       nameTooLong: "El nombre es demasiado largo (máximo 200 caracteres).",
       dateInvalid: "Escribe una fecha válida.",
+      cityTooLong: "La ciudad es demasiado larga (máximo 120 caracteres).",
+      cityInvalid: "La ciudad tiene caracteres no válidos.",
+      timeZoneInvalid: "Elige una zona horaria de la lista.",
     },
   },
   wedding: {
     dateLabel: "Fecha",
     noDate: "Por definir",
+    cityLabel: "Ciudad",
     yourRole: "Tu papel",
     members: "Personas en esta boda",
     membersSummary: {
@@ -121,6 +134,8 @@ export const es = {
     peopleTitle: "Personas",
     settingsLink: "Ajustes de la boda",
     settingsSaved: "Guardamos los cambios de la boda.",
+    memberRemoved:
+      "Quitamos a la persona de la boda. Sus pendientes siguen en la lista, sin responsable.",
   },
   weddingSettings: {
     title: "Ajustes de la boda",
@@ -129,10 +144,13 @@ export const es = {
     nameLabel: "Nombre de la boda",
     dateLabel: "Fecha de la boda (opcional)",
     dateHint: "Si todavía no la tienen, déjala en blanco.",
+    cityLabel: "Ciudad (opcional)",
+    cityHint: "Déjala en blanco para quitarla.",
     submit: "Guardar cambios",
     submitting: "Guardando…",
     back: "Volver a la boda",
-    ownerOnly: "Solo quienes organizan la boda pueden cambiar su nombre y su fecha.",
+    ownerOnly:
+      "Solo quienes organizan la boda pueden cambiar su nombre, fecha, ciudad y zona horaria.",
   },
   checklist: {
     title: "Lista de la boda",
@@ -163,6 +181,7 @@ export const es = {
       title: "Lo próximo",
       hint: "Primero lo que tiene fecha más cercana; al final, lo que aún no tiene fecha.",
       allDone: "Todo lo que aplica está hecho. Tus pendientes completados siguen en la lista.",
+      onlyOverdue: "Todo lo que falta por hacer ya está atrasado. Míralo arriba, en «Atrasados».",
       noneApplicable: "No hay pendientes por hacer: todo está marcado como «no aplica».",
     },
     views: {
@@ -177,6 +196,20 @@ export const es = {
         category: "Agrupados por área de la boda, con el avance de cada una.",
         mine: "Lo que tienes asignado en esta boda, ordenado por fecha.",
       },
+    },
+    overdue: {
+      badge: "Atrasado",
+      title: "Atrasados",
+      hint: "Pendientes cuya fecha ya pasó en la zona horaria de la boda.",
+      more: "Y {count} más.",
+      seeAll: "Verlos todos en el Plan",
+      planTitle: "Atrasados ({count})",
+      upcomingTitle: "Lo que sigue ({count})",
+    },
+    noTimeZone: {
+      owner: "Define la zona horaria para identificar pendientes atrasados.",
+      ownerCta: "Definir la zona horaria",
+      collaborator: "Cuando se defina la zona horaria podremos identificar pendientes atrasados.",
     },
     mine: {
       empty: "No tienes pendientes asignados.",
@@ -325,6 +358,23 @@ export const es = {
       tooLong: "El nombre es demasiado largo (máximo 80 caracteres).",
       invalid: "El nombre tiene caracteres no válidos.",
       failed: "No pudimos guardar tu nombre. Inténtalo de nuevo en unos minutos.",
+    },
+    remove: {
+      open: "Quitar de la boda",
+      openFor: "Quitar de la boda: {name}",
+      confirmTitle: "¿Quitar a {name} de esta boda?",
+      confirmBody:
+        "Esta persona perderá acceso a esta boda. Sus pendientes asignados quedarán sin responsable. Su cuenta no se eliminará.",
+      confirmOwner:
+        "Esta persona también organiza la boda. Tú seguirás organizándola.",
+      confirmButton: "Quitar",
+      cancel: "Cancelar",
+      notFound: "Esa persona ya no forma parte de la boda. Recarga la página.",
+      forbidden: "Solo quienes organizan la boda pueden quitar a otras personas.",
+      cannotRemoveSelf: "Esta opción no sirve para quitar tu propio acceso.",
+      lastOwner:
+        "La boda necesita al menos una persona que la organice, así que no podemos quitar a esta persona.",
+      failed: "No pudimos quitar a esta persona. Recarga la página e inténtalo de nuevo.",
     },
   },
   roles: {

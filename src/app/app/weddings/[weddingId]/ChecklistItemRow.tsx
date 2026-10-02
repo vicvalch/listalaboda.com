@@ -42,6 +42,11 @@ function withTitle(label: string, title: string): string {
 type Props = {
   weddingId: string;
   item: ChecklistItem;
+  /**
+   * Derived on the server for this request (pending, dated, before the
+   * wedding-local today). A marker only: the status stays "Pendiente".
+   */
+  overdue: boolean;
   /** Server-formatted timing line (dates are formatted once, on the server). */
   timingText: string | null;
   /**
@@ -57,7 +62,7 @@ type Props = {
  * and "Volver a pendiente" are explicit buttons, so status never depends on
  * the checkbox (or on color) alone. Each status change is announced.
  */
-export function ChecklistItemRow({ weddingId, item, timingText, assignment }: Props) {
+export function ChecklistItemRow({ weddingId, item, overdue, timingText, assignment }: Props) {
   const [statusState, statusAction, statusPending] = useActionState<StatusChangeState, FormData>(
     setChecklistItemStatusAction,
     null,
@@ -80,6 +85,7 @@ export function ChecklistItemRow({ weddingId, item, timingText, assignment }: Pr
       id={`item-${item.id}`}
       data-testid="checklist-item"
       data-status={item.status}
+      data-overdue={overdue ? "true" : undefined}
       className="rounded-xl border border-border bg-surface p-4"
     >
       <div className="flex items-start gap-3">
@@ -129,6 +135,15 @@ export function ChecklistItemRow({ weddingId, item, timingText, assignment }: Pr
             >
               {checklist.status[item.status]}
             </span>
+            {/* Text, not just color: "Pendiente · Atrasado". */}
+            {overdue ? (
+              <span
+                className="rounded-full border border-danger px-2 py-0.5 text-xs font-semibold text-danger"
+                data-testid="checklist-item-overdue"
+              >
+                {checklist.overdue.badge}
+              </span>
+            ) : null}
             {item.category ? (
               <span className="text-muted">{checklist.categories[item.category]}</span>
             ) : null}

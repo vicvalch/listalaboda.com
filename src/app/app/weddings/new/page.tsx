@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { cardClass } from "@/components/ui/styles";
 import { requireUser } from "@/lib/auth/session";
 import { getMessages } from "@/lib/i18n";
+import { selectableTimeZones } from "@/lib/weddings/timezone";
 
 import { NewWeddingForm } from "./NewWeddingForm";
 
@@ -18,7 +19,7 @@ export default async function NewWeddingPage() {
         <h1 className="text-2xl font-semibold tracking-tight">{weddingNew.title}</h1>
         <p className="text-muted">{weddingNew.intro}</p>
       </header>
-      <NewWeddingForm />
+      <NewWeddingForm timeZones={selectableTimeZones()} />
     </section>
   );
 }

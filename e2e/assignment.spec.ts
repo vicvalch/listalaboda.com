@@ -140,7 +140,8 @@ test.describe("checklist assignment", () => {
     // Before naming: the owner sees a neutral role label, never an email or id.
     await owner.page.reload();
     const members = owner.page.getByTestId("wedding-members");
-    await expect(members.getByRole("listitem")).toHaveText([
+    // Each row's identity line (owners also see "Quitar de la boda" there, LB-08).
+    await expect(members.getByTestId("wedding-member")).toHaveText([
       `${es.members.you} · ${es.roles.owner.label}`,
       `${es.members.fallback.collaborator} · ${es.roles.collaborator.label}`,
     ]);
@@ -152,7 +153,7 @@ test.describe("checklist assignment", () => {
     await expect(collab.page.getByTestId("display-name-current")).toContainText("Sofía");
 
     await owner.page.reload();
-    await expect(members.getByRole("listitem").nth(1)).toHaveText(
+    await expect(members.getByTestId("wedding-member").nth(1)).toHaveText(
       `Sofía · ${es.roles.collaborator.label}`,
     );
     await assignTo(owner.page, ESTIMATE, "Sofía");

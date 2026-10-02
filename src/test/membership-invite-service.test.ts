@@ -306,12 +306,12 @@ describe("inviteStatus", () => {
 });
 
 describe("createWedding", () => {
-  it("calls create_wedding with name and date only — never a user, owner or role", async () => {
+  it("calls create_wedding with name and date only when there is no city or zone — never a user, owner or role", async () => {
     const { supabase, requests } = clientFor({
       rpc: { status: 200, body: { id: WEDDING_ID, name: "Boda", wedding_date: "2027-06-12" } },
     });
     await expect(
-      createWedding(supabase, { name: "Boda", weddingDate: "2027-06-12" }),
+      createWedding(supabase, { name: "Boda", weddingDate: "2027-06-12", city: null, timeZone: null }),
     ).resolves.toEqual({ ok: true, weddingId: WEDDING_ID });
 
     const rpc = requests.find((r) => r.url.pathname === "/rest/v1/rpc/create_wedding");
@@ -322,21 +322,39 @@ describe("createWedding", () => {
     const { supabase, requests } = clientFor({
       rpc: { status: 200, body: { id: WEDDING_ID } },
     });
-    await createWedding(supabase, { name: "Boda", weddingDate: null });
+    await createWedding(supabase, { name: "Boda", weddingDate: null, city: null, timeZone: null });
     const rpc = requests.find((r) => r.url.pathname === "/rest/v1/rpc/create_wedding");
     expect(rpc?.body).toEqual({ wedding_name: "Boda" });
+  });
+
+  it("sends city and time zone when present (still no user, owner or role)", async () => {
+    const { supabase, requests } = clientFor({ rpc: { status: 200, body: { id: WEDDING_ID } } });
+    await createWedding(supabase, {
+      name: "Boda",
+      weddingDate: null,
+      city: "San José",
+      timeZone: "America/Costa_Rica",
+    });
+    const rpc = requests.find((r) => r.url.pathname === "/rest/v1/rpc/create_wedding");
+    expect(rpc?.body).toEqual({
+      wedding_name: "Boda",
+      wedding_city: "San José",
+      wedding_time_zone: "America/Costa_Rica",
+    });
   });
 
   it("maps database rejections without leaking them", async () => {
     const cases = [
       [{ code: "23514", message: "check" }, "invalid_name"],
+      [{ code: "23514", message: 'violates check constraint "weddings_city_valid"' }, "invalid_city"],
+      [{ code: "22023", message: "invalid_time_zone" }, "invalid_time_zone"],
       [{ code: "22008", message: "date" }, "invalid_date"],
       [{ code: "42501", message: "not_authenticated" }, "unauthenticated"],
       [{ code: "XX000", message: "internal detail" }, "error"],
     ] as const;
     for (const [body, reason] of cases) {
       const { supabase } = clientFor({ rpc: { status: 400, body } });
-      await expect(createWedding(supabase, { name: "Boda", weddingDate: null })).resolves.toEqual({
+      await expect(createWedding(supabase, { name: "Boda", weddingDate: null, city: null, timeZone: null })).resolves.toEqual({
         ok: false,
         reason,
       });

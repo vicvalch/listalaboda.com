@@ -133,13 +133,13 @@ isOneToOne: false
                   ]
                 },"weddings": {
                   Row: {
-                    "created_at": string,"created_by": string | null,"id": string,"name": string,"updated_at": string,"wedding_date": string | null
+                    "city": string | null,"created_at": string,"created_by": string | null,"id": string,"name": string,"time_zone": string | null,"updated_at": string,"wedding_date": string | null
                   }
                   Insert: {
-                    "created_at"?: string,"created_by"?: string | null,"id"?: string,"name": string,"updated_at"?: string,"wedding_date"?: string | null
+                    "city"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"name": string,"time_zone"?: string | null,"updated_at"?: string,"wedding_date"?: string | null
                   }
                   Update: {
-                    "created_at"?: string,"created_by"?: string | null,"id"?: string,"name"?: string,"updated_at"?: string,"wedding_date"?: string | null
+                    "city"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"name"?: string,"time_zone"?: string | null,"updated_at"?: string,"wedding_date"?: string | null
                   }
                   Relationships: [
 
@@ -156,11 +156,13 @@ isOneToOne: false
             }[]
                            },
 "create_wedding":
-{ Args: { "wedding_date"?: string,"wedding_name": string }; Returns: {
-              "created_at": string,
+{ Args: { "wedding_city"?: string,"wedding_date"?: string,"wedding_name": string,"wedding_time_zone"?: string }; Returns: {
+              "city": string | null,
+"created_at": string,
 "created_by": string | null,
 "id": string,
 "name": string,
+"time_zone": string | null,
 "updated_at": string,
 "wedding_date": string | null
             }

@@ -10,13 +10,14 @@ import { requireWeddingMembership } from "@/lib/authz/wedding";
 import { getMessages } from "@/lib/i18n";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getWeddingDetail } from "@/lib/weddings/service";
+import { selectableTimeZones } from "@/lib/weddings/timezone";
 
 import { WeddingSettingsForm } from "./WeddingSettingsForm";
 
 export const metadata: Metadata = { title: getMessages().weddingSettings.title };
 
 /**
- * Wedding settings: name and date, owner-only (Constitution §3). A
+ * Wedding settings: name, date, city and time zone, owner-only (Constitution §3). A
  * non-member gets the same 404 as a missing wedding; a collaborator, who
  * already knows the wedding exists, gets an explanation and no form. The
  * form hiding is cosmetic: the action re-checks the owner role.
@@ -56,6 +57,9 @@ export default async function WeddingSettingsPage({
             weddingId={wedding.id}
             name={wedding.name}
             weddingDate={wedding.weddingDate}
+            city={wedding.city}
+            timeZone={wedding.timeZone}
+            timeZones={selectableTimeZones()}
           />
         </>
       ) : (

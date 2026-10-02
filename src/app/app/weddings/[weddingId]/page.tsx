@@ -16,10 +16,12 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatTimestampDate, formatWeddingDate } from "@/lib/weddings/format";
 import { labelMembers } from "@/lib/weddings/members";
 import { getWeddingDetail, listWeddingMembers } from "@/lib/weddings/service";
+import { weddingLocalToday } from "@/lib/weddings/timezone";
 
 import { ChecklistSection } from "./ChecklistSection";
 import { DisplayNameForm } from "./DisplayNameForm";
 import { InviteForm } from "./InviteForm";
+import { RemoveMemberButton } from "./RemoveMemberButton";
 import { RevokeInviteButton } from "./RevokeInviteButton";
 
 export const metadata: Metadata = { title: getMessages().metadata.title };
@@ -59,7 +61,11 @@ export default async function WeddingPage({
   ]);
   const members = memberRows ? labelMembers(memberRows) : null;
   const me = members?.find((member) => member.isCurrentUser) ?? null;
-  const { joined, saved, status, view } = await searchParams;
+  // The clock is read once per request, here on the server, and only turned
+  // into the wedding's local calendar date. Without a time zone there is no
+  // "today" for this wedding, so nothing is classified as overdue.
+  const today = wedding.timeZone ? weddingLocalToday(wedding.timeZone, new Date()) : null;
+  const { joined, saved, removed, status, view } = await searchParams;
   const { wedding: copy, roles, invites: inviteCopy, common, members: memberCopy } = getMessages();
 
   return (
@@ -67,6 +73,7 @@ export default async function WeddingPage({
       {joined === "new" ? <Notice tone="success">{copy.joined}</Notice> : null}
       {joined === "existing" ? <Notice tone="info">{copy.alreadyMember}</Notice> : null}
       {saved === "settings" ? <Notice tone="success">{copy.settingsSaved}</Notice> : null}
+      {removed === "member" ? <Notice tone="success">{copy.memberRemoved}</Notice> : null}
 
       <header className="space-y-3">
         <h1 id="wedding-name" className="text-3xl font-semibold tracking-tight break-words">
@@ -79,6 +86,14 @@ export default async function WeddingPage({
               {wedding.weddingDate ? formatWeddingDate(wedding.weddingDate) : copy.noDate}
             </dd>
           </div>
+          {wedding.city ? (
+            <div>
+              <dt className="text-muted text-sm">{copy.cityLabel}</dt>
+              <dd className="font-semibold break-words" data-testid="wedding-city">
+                {wedding.city}
+              </dd>
+            </div>
+          ) : null}
           <div>
             <dt className="text-muted text-sm">{copy.yourRole}</dt>
             <dd className="font-semibold" data-testid="wedding-role">
@@ -98,6 +113,7 @@ export default async function WeddingPage({
       <ChecklistSection
         weddingId={wedding.id}
         weddingDate={wedding.weddingDate}
+        today={today}
         role={access.access.role}
         checklist={checklist}
         view={parseChecklistView(view)}
@@ -123,9 +139,24 @@ export default async function WeddingPage({
           {members ? (
             <ul className="space-y-1" aria-label={copy.members} data-testid="wedding-members">
               {members.map((member) => (
-                <li key={member.membershipId}>
-                  <span className="font-semibold">{member.optionLabel}</span>
-                  <span className="text-muted"> · {roles[member.role].label}</span>
+                <li
+                  key={member.membershipId}
+                  className="flex flex-col gap-2 py-1 sm:flex-row sm:items-start sm:justify-between"
+                >
+                  <p data-testid="wedding-member">
+                    <span className="font-semibold break-words">{member.optionLabel}</span>
+                    <span className="text-muted"> · {roles[member.role].label}</span>
+                  </p>
+                  {/* Owner-only, never for yourself (no "leave wedding" here).
+                      Cosmetic: the action and the database re-check. */}
+                  {isOwner && !member.isCurrentUser ? (
+                    <RemoveMemberButton
+                      weddingId={wedding.id}
+                      membershipId={member.membershipId}
+                      label={member.label}
+                      isOwner={member.role === "owner"}
+                    />
+                  ) : null}
                 </li>
               ))}
             </ul>

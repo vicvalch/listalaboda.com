@@ -6,14 +6,23 @@ import { FormField } from "@/components/ui/FormField";
 import { Notice } from "@/components/ui/Notice";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { getMessages } from "@/lib/i18n";
-import { WEDDING_NAME_MAX_LENGTH } from "@/lib/weddings/validation";
+import { WEDDING_CITY_MAX_LENGTH, WEDDING_NAME_MAX_LENGTH } from "@/lib/weddings/validation";
 
+import { TimeZoneField } from "../../TimeZoneField";
 import { updateWeddingSettingsAction, type WeddingSettingsState } from "./actions";
 
-type Props = { weddingId: string; name: string; weddingDate: string | null };
+type Props = {
+  weddingId: string;
+  name: string;
+  weddingDate: string | null;
+  city: string | null;
+  timeZone: string | null;
+  /** The server's list of selectable IANA zones. */
+  timeZones: readonly string[];
+};
 
-/** Name and date. Leaving the date blank clears it. */
-export function WeddingSettingsForm({ weddingId, name, weddingDate }: Props) {
+/** Name, date, city and time zone. Leaving date, city or zone blank clears it. */
+export function WeddingSettingsForm({ weddingId, name, weddingDate, city, timeZone, timeZones }: Props) {
   const [state, formAction] = useActionState<WeddingSettingsState, FormData>(
     updateWeddingSettingsAction,
     null,
@@ -44,6 +53,23 @@ export function WeddingSettingsForm({ weddingId, name, weddingDate }: Props) {
         hint={copy.dateHint}
         defaultValue={failure?.values?.weddingDate ?? weddingDate ?? ""}
         error={failure?.fieldErrors?.weddingDate}
+      />
+      <FormField
+        id="settings-city"
+        name="city"
+        type="text"
+        label={copy.cityLabel}
+        hint={copy.cityHint}
+        maxLength={WEDDING_CITY_MAX_LENGTH}
+        autoComplete="off"
+        defaultValue={failure?.values?.city ?? city ?? ""}
+        error={failure?.fieldErrors?.city}
+      />
+      <TimeZoneField
+        id="settings-time-zone"
+        options={timeZones}
+        defaultValue={failure?.values?.timeZone ?? timeZone ?? ""}
+        error={failure?.fieldErrors?.timeZone}
       />
       <SubmitButton label={copy.submit} pendingLabel={copy.submitting} />
     </form>

@@ -88,6 +88,7 @@ describe("schema guarantees", () => {
       "private.is_wedding_member",
       "private.set_updated_at",
       "private.stamp_checklist_item_completion",
+      "private.validate_wedding_time_zone",
       "public.accept_membership_invite",
       "public.create_wedding",
       "public.initialize_wedding_checklist",
@@ -122,7 +123,10 @@ describe("schema guarantees", () => {
     );
     expect(rows).toEqual([
       { name: "accept_membership_invite", args: "invite_token_hash text" },
-      { name: "create_wedding", args: "wedding_name text, wedding_date date" },
+      {
+        name: "create_wedding",
+        args: "wedding_name text, wedding_date date, wedding_city text, wedding_time_zone text",
+      },
       { name: "has_wedding_role", args: "target_wedding_id uuid, allowed_roles wedding_role[]" },
       { name: "initialize_wedding_checklist", args: "target_wedding_id uuid" },
       { name: "is_wedding_member", args: "target_wedding_id uuid" },
@@ -174,6 +178,36 @@ describe("schema guarantees", () => {
       "wedding_date",
       "created_at",
       "updated_at",
+      "city",
+      "time_zone",
     ]);
+  });
+
+  it("there is exactly one create_wedding (no ambiguous overloads)", async () => {
+    const rows = await sql<{ n: number }>(
+      `select count(*)::int as n from pg_proc
+       where pronamespace = 'public'::regnamespace and proname = 'create_wedding'`,
+    );
+    expect(rows[0]?.n).toBe(1);
+  });
+
+  it("authenticated may UPDATE only name, date, city and time zone of weddings", async () => {
+    const rows = await sql<{ column_name: string }>(
+      `select column_name from information_schema.column_privileges
+       where grantee = 'authenticated' and privilege_type = 'UPDATE'
+         and table_schema = 'public' and table_name = 'weddings'
+       order by column_name`,
+    );
+    expect(rows.map((r) => r.column_name)).toEqual(["city", "name", "time_zone", "wedding_date"]);
+  });
+
+  it("no overdue state is persisted anywhere", async () => {
+    const rows = await sql(
+      `select 1 from information_schema.columns
+       where table_schema = 'public'
+         and (column_name ilike '%overdue%' or column_name ilike '%effective%'
+              or column_name in ('late', 'is_late', 'late_status'))`,
+    );
+    expect(rows).toEqual([]);
   });
 });

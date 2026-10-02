@@ -8,15 +8,21 @@ import { formText, type FormState } from "@/lib/forms/result";
 import { getMessages } from "@/lib/i18n";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { updateWeddingSettings } from "@/lib/weddings/service";
-import { parseWeddingInput, type WeddingField } from "@/lib/weddings/validation";
+import {
+  parseWeddingInput,
+  weddingFieldErrorMessage,
+  weddingFormValues,
+  type WeddingField,
+} from "@/lib/weddings/validation";
 
 export type WeddingSettingsState = FormState<WeddingField> | null;
 
 /**
- * Owner-only: saves the wedding's name and date. The wedding id from the
+ * Owner-only: saves the wedding's name, date, city and time zone. The wedding id from the
  * form is only a lookup key; the service re-checks the owner role and RLS
  * re-checks it in the database, so a collaborator posting this action
- * directly changes nothing. A blank date clears it (stored as null).
+ * directly changes nothing. A blank date, city or time zone clears it
+ * (stored as null).
  */
 export async function updateWeddingSettingsAction(
   _prev: WeddingSettingsState,
@@ -26,9 +32,9 @@ export async function updateWeddingSettingsAction(
   const weddingPath = `/app/weddings/${encodeURIComponent(weddingId)}`;
   const settingsPath = `${weddingPath}/settings`;
   await requireUser(settingsPath);
-  const { common, weddingNew, weddingSettings } = getMessages();
+  const { common, weddingSettings } = getMessages();
 
-  const values = { name: formText(formData, "name"), weddingDate: formText(formData, "weddingDate") };
+  const values = weddingFormValues(formData);
   const parsed = parseWeddingInput(values);
   if (!parsed.ok) return { ok: false, fieldErrors: parsed.fieldErrors, values };
 
@@ -44,12 +50,8 @@ export async function updateWeddingSettingsAction(
     if (result.reason === "forbidden") {
       return { ok: false, formError: weddingSettings.ownerOnly, values };
     }
-    if (result.reason === "invalid_name") {
-      return { ok: false, fieldErrors: { name: weddingNew.validation.nameRequired }, values };
-    }
-    if (result.reason === "invalid_date") {
-      return { ok: false, fieldErrors: { weddingDate: weddingNew.validation.dateInvalid }, values };
-    }
+    const fieldError = weddingFieldErrorMessage(result.reason);
+    if (fieldError) return { ok: false, fieldErrors: fieldError, values };
     return { ok: false, formError: common.unexpectedError, values };
   }
 

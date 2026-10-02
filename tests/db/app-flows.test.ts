@@ -66,7 +66,12 @@ function tokenFrom(url: string): string {
 describe("wedding creation service", () => {
   it("creates the wedding with the caller as owner; ids come from the database", async () => {
     const supabase = await sessionClient("ownerA");
-    const result = await createWedding(supabase, { name: "Boda del servicio", weddingDate: "2027-05-01" });
+    const result = await createWedding(supabase, {
+      name: "Boda del servicio",
+      weddingDate: "2027-05-01",
+      city: null,
+      timeZone: null,
+    });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     createdWeddings.push(result.weddingId);

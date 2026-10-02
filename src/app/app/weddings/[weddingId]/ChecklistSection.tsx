@@ -4,10 +4,18 @@ import { Notice } from "@/components/ui/Notice";
 import { cardClass, textLinkClass } from "@/components/ui/styles";
 import type { WeddingRole } from "@/lib/authz/wedding";
 import { STATUS_FILTERS, filterItems, type StatusFilter } from "@/lib/checklist/filters";
-import { assignedTo, groupByCategory, nextItems, sortByPlanning } from "@/lib/checklist/planning";
+import {
+  isOverdue,
+  nextUpcomingItems,
+  overdueItems,
+  planSections,
+  type PlanningDateContext,
+} from "@/lib/checklist/overdue";
+import { NEXT_ITEMS_LIMIT, assignedTo, groupByCategory, sortByPlanning } from "@/lib/checklist/planning";
 import { shortTimingLabel, timingLine } from "@/lib/checklist/presentation";
 import { summarizeProgress, type ChecklistProgress } from "@/lib/checklist/progress";
 import type { WeddingChecklist } from "@/lib/checklist/service";
+import { effectiveDueDate } from "@/lib/checklist/timing";
 import type { ChecklistItem } from "@/lib/checklist/types";
 import { CHECKLIST_VIEWS, checklistHref, type ChecklistView } from "@/lib/checklist/views";
 import { formatNumber, getMessages, interpolate } from "@/lib/i18n";
@@ -20,6 +28,11 @@ import { InitializeChecklistForm } from "./InitializeChecklistForm";
 type Props = {
   weddingId: string;
   weddingDate: string | null;
+  /**
+   * The wedding-local calendar date for this request (`YYYY-MM-DD`), or null
+   * when the wedding has no time zone: then nothing is overdue.
+   */
+  today: string | null;
   role: WeddingRole;
   /** null when it couldn't be loaded. */
   checklist: WeddingChecklist | null;
@@ -74,6 +87,7 @@ export function ChecklistSection(props: Props) {
 function ChecklistBody({
   weddingId,
   weddingDate,
+  today,
   role,
   checklist,
   view,
@@ -134,6 +148,16 @@ function ChecklistBody({
       }
     : null;
   const hasRelativeItems = items.some((item) => item.timing.mode === "relative_to_wedding");
+  // One date context for every derived view; "today" was computed once on
+  // the server for this request.
+  const dates: PlanningDateContext = { weddingDate, today };
+  // Mentioned once, only when it matters: some pending item has a date that
+  // could become overdue.
+  const showNoTimeZone =
+    today === null &&
+    items.some(
+      (item) => item.status === "pending" && effectiveDueDate(item.timing, weddingDate) !== null,
+    );
   // "Lo próximo" (always the whole wedding's) links must land on a rendered
   // row: pending items show in every view but "mine" under "all" and
   // "pending"; from "mine" they open the list.
@@ -158,7 +182,25 @@ function ChecklistBody({
 
       <ProgressSummary progress={progress} />
 
-      <NextUp items={items} weddingDate={weddingDate} progress={progress} hrefBase={nextUpBase} />
+      <OverdueSummary items={items} dates={dates} hrefBase={nextUpBase} basePath={basePath} />
+
+      <NextUp items={items} dates={dates} progress={progress} hrefBase={nextUpBase} />
+
+      {showNoTimeZone ? (
+        <div
+          className="space-y-2 rounded-2xl border border-border bg-surface p-4 text-sm"
+          data-testid="checklist-no-time-zone"
+        >
+          <p>{isOwner ? copy.noTimeZone.owner : copy.noTimeZone.collaborator}</p>
+          {isOwner ? (
+            <p>
+              <Link href={`${basePath}/settings`} className={textLinkClass}>
+                {copy.noTimeZone.ownerCta}
+              </Link>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {!weddingDate && hasRelativeItems ? (
         <div
@@ -232,7 +274,7 @@ function ChecklistBody({
       {view === "plan" ? (
         <PlanView
           weddingId={weddingId}
-          weddingDate={weddingDate}
+          dates={dates}
           items={items}
           filter={filter}
           assignment={assignment}
@@ -240,7 +282,7 @@ function ChecklistBody({
       ) : view === "category" ? (
         <CategoryView
           weddingId={weddingId}
-          weddingDate={weddingDate}
+          dates={dates}
           items={items}
           filter={filter}
           assignment={assignment}
@@ -248,7 +290,7 @@ function ChecklistBody({
       ) : view === "mine" ? (
         <MineView
           weddingId={weddingId}
-          weddingDate={weddingDate}
+          dates={dates}
           items={mine}
           filter={filter}
           assignment={assignment}
@@ -256,7 +298,7 @@ function ChecklistBody({
       ) : (
         <ItemList
           weddingId={weddingId}
-          weddingDate={weddingDate}
+          dates={dates}
           items={filterItems(items, filter)}
           labelledBy="checklist-title"
           assignment={assignment}
@@ -328,20 +370,84 @@ function NotApplicableNote({ count }: { count: number }) {
   );
 }
 
-/** "Lo próximo": the first pending items in planning order, derived on read, never stored. */
+/**
+ * "Atrasados": pending items whose effective date is before the wedding's
+ * local today, earliest first. Shown only when there are some (and so only
+ * when the wedding has a time zone). Compact: the first few, then a link to
+ * the Plan view, which lists them all.
+ */
+function OverdueSummary({
+  items,
+  dates,
+  hrefBase,
+  basePath,
+}: {
+  items: readonly ChecklistItem[];
+  dates: PlanningDateContext;
+  hrefBase: string;
+  basePath: string;
+}) {
+  const { checklist: copy } = getMessages();
+  const overdue = overdueItems(items, dates);
+  if (overdue.length === 0) return null;
+  const shown = overdue.slice(0, NEXT_ITEMS_LIMIT);
+  const hidden = overdue.length - shown.length;
+
+  return (
+    <section
+      aria-labelledby="overdue-title"
+      className="space-y-2 rounded-2xl border border-danger/40 bg-danger-soft p-5"
+      data-testid="overdue-summary"
+    >
+      <h3 id="overdue-title" className="font-semibold">
+        {copy.overdue.title} · <span data-testid="overdue-count">{formatNumber(overdue.length)}</span>
+      </h3>
+      <p className="text-sm">{copy.overdue.hint}</p>
+      <ol className="space-y-2" data-testid="overdue-items">
+        {shown.map((item) => (
+          <li key={item.id} className="text-sm">
+            <a href={`${hrefBase}#item-${item.id}`} className="font-semibold hover:underline">
+              {item.title}
+            </a>
+            <span className="block">{shortTimingLabel(item.timing, dates.weddingDate)}</span>
+          </li>
+        ))}
+      </ol>
+      {hidden > 0 ? (
+        <p className="text-sm">
+          {interpolate(copy.overdue.more, { count: formatNumber(hidden) })}{" "}
+          <Link
+            href={checklistHref(basePath, { view: "plan", status: "pending" })}
+            className={textLinkClass}
+          >
+            {copy.overdue.seeAll}
+          </Link>
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+/**
+ * "Lo próximo": the first pending items in planning order that are not
+ * overdue (those are in "Atrasados", so nothing is listed twice). Without a
+ * time zone nothing is overdue, so this is simply the first pending items.
+ * Derived on read, never stored.
+ */
 function NextUp({
   items,
-  weddingDate,
+  dates,
   progress,
   hrefBase,
 }: {
   items: readonly ChecklistItem[];
-  weddingDate: string | null;
+  dates: PlanningDateContext;
   progress: ChecklistProgress;
   hrefBase: string;
 }) {
   const { checklist: copy } = getMessages();
-  const next = nextItems(items, weddingDate);
+  const weddingDate = dates.weddingDate;
+  const next = nextUpcomingItems(items, dates);
 
   return (
     <section
@@ -374,7 +480,11 @@ function NextUp({
         </>
       ) : (
         <p className="text-sm" data-testid="next-up-empty">
-          {progress.applicable > 0 ? copy.nextUp.allDone : copy.nextUp.noneApplicable}
+          {progress.pending > 0
+            ? copy.nextUp.onlyOverdue
+            : progress.applicable > 0
+              ? copy.nextUp.allDone
+              : copy.nextUp.noneApplicable}
         </p>
       )}
     </section>
@@ -383,19 +493,22 @@ function NextUp({
 
 type ViewProps = {
   weddingId: string;
-  weddingDate: string | null;
+  dates: PlanningDateContext;
   items: readonly ChecklistItem[];
   filter: StatusFilter;
   assignment: Assignment;
 };
 
 /**
- * Planning order. Under "Todos", pending items come first in planning order
- * and finished ones (done / no aplica) follow in a collapsed section.
+ * Planning order. Under "Todos" and "Pendientes", overdue items (when the
+ * wedding has a time zone and there are any) come first under "Atrasados",
+ * then the rest of the pending items in planning order; under "Todos",
+ * finished ones (done / no aplica) follow in a collapsed section. Viewing
+ * never writes anything, least of all `sort_order`.
  */
 function PlanView({
   weddingId,
-  weddingDate,
+  dates,
   items,
   filter,
   assignment,
@@ -403,42 +516,68 @@ function PlanView({
 }: ViewProps & { noPendingText?: string }) {
   const copy = getMessages().checklist;
 
-  if (filter !== "all") {
+  if (filter === "done" || filter === "not_applicable") {
     return (
       <ItemList
         weddingId={weddingId}
-        weddingDate={weddingDate}
-        items={sortByPlanning(filterItems(items, filter), weddingDate)}
+        dates={dates}
+        items={sortByPlanning(filterItems(items, filter), dates.weddingDate)}
         labelledBy="checklist-title"
         assignment={assignment}
       />
     );
   }
 
-  const pending = sortByPlanning(filterItems(items, "pending"), weddingDate);
-  const resolved = items.filter((item) => item.status !== "pending");
+  const { overdue, upcoming, resolved } = planSections(items, dates);
+  // Under "Pendientes" an empty list is just an empty filter, as in every view.
+  const emptyText = filter === "all" ? (noPendingText ?? copy.plan.noPending) : undefined;
   return (
     <div className="space-y-4">
-      <ItemList
-        weddingId={weddingId}
-        weddingDate={weddingDate}
-        items={pending}
-        labelledBy="checklist-title"
-        emptyText={noPendingText ?? copy.plan.noPending}
-        assignment={assignment}
-      />
-      {resolved.length > 0 ? (
+      {overdue.length > 0 ? (
+        <>
+          <section aria-labelledby="plan-overdue-title" className="space-y-3" data-testid="plan-overdue">
+            <h3 id="plan-overdue-title" className="text-lg font-semibold">
+              {interpolate(copy.overdue.planTitle, { count: formatNumber(overdue.length) })}
+            </h3>
+            <ItemList
+              weddingId={weddingId}
+              dates={dates}
+              items={overdue}
+              labelledBy="plan-overdue-title"
+              assignment={assignment}
+            />
+          </section>
+          <section aria-labelledby="plan-upcoming-title" className="space-y-3" data-testid="plan-upcoming">
+            <h3 id="plan-upcoming-title" className="text-lg font-semibold">
+              {interpolate(copy.overdue.upcomingTitle, { count: formatNumber(upcoming.length) })}
+            </h3>
+            <ItemList
+              weddingId={weddingId}
+              dates={dates}
+              items={upcoming}
+              labelledBy="plan-upcoming-title"
+              emptyText={emptyText}
+              assignment={assignment}
+            />
+          </section>
+        </>
+      ) : (
+        <ItemList
+          weddingId={weddingId}
+          dates={dates}
+          items={upcoming}
+          labelledBy="checklist-title"
+          emptyText={emptyText}
+          assignment={assignment}
+        />
+      )}
+      {filter === "all" && resolved.length > 0 ? (
         <details className="space-y-3 rounded-2xl border border-border p-4">
           <summary className="min-h-11 cursor-pointer content-center font-semibold">
             {interpolate(copy.plan.resolvedTitle, { count: formatNumber(resolved.length) })}
           </summary>
           <div className="pt-3">
-            <ItemList
-              weddingId={weddingId}
-              weddingDate={weddingDate}
-              items={resolved}
-              assignment={assignment}
-            />
+            <ItemList weddingId={weddingId} dates={dates} items={resolved} assignment={assignment} />
           </div>
         </details>
       ) : null}
@@ -448,8 +587,9 @@ function PlanView({
 
 /**
  * "Mis pendientes": the items assigned to the current member, laid out like
- * the Plan view (pending first in planning order, then done / no aplica).
- * The status filter narrows it as everywhere else.
+ * the Plan view (overdue first, then pending in planning order, then done /
+ * no aplica), with the same overdue rule as everywhere else. The status
+ * filter narrows it as everywhere else.
  */
 function MineView(props: ViewProps) {
   const copy = getMessages().checklist.mine;
@@ -465,8 +605,12 @@ function MineView(props: ViewProps) {
   return <PlanView {...props} noPendingText={copy.noPending} />;
 }
 
-/** Grouped by category, with each category's progress; persisted order inside. */
-function CategoryView({ weddingId, weddingDate, items, filter, assignment }: ViewProps) {
+/**
+ * Grouped by category, with each category's progress; persisted order
+ * inside. Overdue items are only marked, never moved, and don't affect
+ * progress.
+ */
+function CategoryView({ weddingId, dates, items, filter, assignment }: ViewProps) {
   const copy = getMessages().checklist;
   const groups = groupByCategory(items)
     .map((group) => ({ ...group, visible: filterItems(group.items, filter) }))
@@ -524,7 +668,7 @@ function CategoryView({ weddingId, weddingDate, items, filter, assignment }: Vie
             </div>
             <ItemList
               weddingId={weddingId}
-              weddingDate={weddingDate}
+              dates={dates}
               items={visible}
               labelledBy={headingId}
               assignment={assignment}
@@ -536,16 +680,17 @@ function CategoryView({ weddingId, weddingDate, items, filter, assignment }: Vie
   );
 }
 
+/** Rows in the given order; each one is marked "Atrasado" when it is. */
 function ItemList({
   weddingId,
-  weddingDate,
+  dates,
   items,
   labelledBy,
   emptyText,
   assignment,
 }: {
   weddingId: string;
-  weddingDate: string | null;
+  dates: PlanningDateContext;
   items: readonly ChecklistItem[];
   labelledBy?: string;
   emptyText?: string;
@@ -560,7 +705,8 @@ function ItemList({
           key={item.id}
           weddingId={weddingId}
           item={item}
-          timingText={timingLine(item.timing, weddingDate) ?? copy.timing.none}
+          overdue={isOverdue(item, dates)}
+          timingText={timingLine(item.timing, dates.weddingDate) ?? copy.timing.none}
           assignment={
             assignment
               ? {

@@ -4,13 +4,14 @@ import { Notice } from "@/components/ui/Notice";
 import { cardClass, textLinkClass } from "@/components/ui/styles";
 import type { WeddingRole } from "@/lib/authz/wedding";
 import { STATUS_FILTERS, filterItems, type StatusFilter } from "@/lib/checklist/filters";
-import { groupByCategory, nextItems, sortByPlanning } from "@/lib/checklist/planning";
+import { assignedTo, groupByCategory, nextItems, sortByPlanning } from "@/lib/checklist/planning";
 import { shortTimingLabel, timingLine } from "@/lib/checklist/presentation";
 import { summarizeProgress, type ChecklistProgress } from "@/lib/checklist/progress";
 import type { WeddingChecklist } from "@/lib/checklist/service";
 import type { ChecklistItem } from "@/lib/checklist/types";
 import { CHECKLIST_VIEWS, checklistHref, type ChecklistView } from "@/lib/checklist/views";
 import { formatNumber, getMessages, interpolate } from "@/lib/i18n";
+import { assigneeLabel, type LabeledMember, type MemberOption } from "@/lib/weddings/members";
 
 import { AddChecklistItem } from "./AddChecklistItem";
 import { ChecklistItemRow } from "./ChecklistItemRow";
@@ -25,7 +26,17 @@ type Props = {
   view: ChecklistView;
   filter: StatusFilter;
   basePath: string;
+  /** The caller's own membership (from the server-side access check). */
+  currentMembershipId: string;
+  /** Current members, ordered and labeled; null when they couldn't be loaded. */
+  members: readonly LabeledMember[] | null;
 };
+
+/** Everything a row needs to show and change its assignee. */
+type Assignment = Readonly<{
+  members: readonly LabeledMember[];
+  options: readonly MemberOption[];
+}> | null;
 
 const pillClass = (current: boolean) =>
   `inline-flex min-h-11 items-center gap-1.5 rounded-full border px-4 text-sm font-semibold ${
@@ -68,6 +79,8 @@ function ChecklistBody({
   view,
   filter,
   basePath,
+  currentMembershipId,
+  members,
 }: Props & { checklist: WeddingChecklist }) {
   const copy = getMessages().checklist;
   const isOwner = role === "owner";
@@ -104,17 +117,28 @@ function ChecklistBody({
   }
 
   const progress = summarizeProgress(items);
+  const mine = assignedTo(items, currentMembershipId);
+  const minePending = mine.filter((item) => item.status === "pending").length;
+  // Status counts describe what the current view can show.
+  const viewProgress = view === "mine" ? summarizeProgress(mine) : progress;
   const counts: Record<StatusFilter, number> = {
-    all: items.length,
-    pending: progress.pending,
-    done: progress.done,
-    not_applicable: progress.notApplicable,
+    all: view === "mine" ? mine.length : items.length,
+    pending: viewProgress.pending,
+    done: viewProgress.done,
+    not_applicable: viewProgress.notApplicable,
   };
+  const assignment: Assignment = members
+    ? {
+        members,
+        options: members.map(({ membershipId, optionLabel }) => ({ membershipId, optionLabel })),
+      }
+    : null;
   const hasRelativeItems = items.some((item) => item.timing.mode === "relative_to_wedding");
-  // "Lo próximo" links must land on a rendered row: pending items show in
-  // every view under "all" and "pending".
+  // "Lo próximo" (always the whole wedding's) links must land on a rendered
+  // row: pending items show in every view but "mine" under "all" and
+  // "pending"; from "mine" they open the list.
   const nextUpBase = checklistHref(basePath, {
-    view,
+    view: view === "mine" ? "list" : view,
     status: filter === "pending" ? "pending" : "all",
   });
 
@@ -166,6 +190,11 @@ function ChecklistBody({
                     className={pillClass(current)}
                   >
                     {copy.views[value]}
+                    {value === "mine" ? (
+                      <span className={current ? "" : "text-muted"}>
+                        ({formatNumber(minePending)})
+                      </span>
+                    ) : null}
                   </Link>
                 </li>
               );
@@ -201,15 +230,36 @@ function ChecklistBody({
       </div>
 
       {view === "plan" ? (
-        <PlanView weddingId={weddingId} weddingDate={weddingDate} items={items} filter={filter} />
+        <PlanView
+          weddingId={weddingId}
+          weddingDate={weddingDate}
+          items={items}
+          filter={filter}
+          assignment={assignment}
+        />
       ) : view === "category" ? (
-        <CategoryView weddingId={weddingId} weddingDate={weddingDate} items={items} filter={filter} />
+        <CategoryView
+          weddingId={weddingId}
+          weddingDate={weddingDate}
+          items={items}
+          filter={filter}
+          assignment={assignment}
+        />
+      ) : view === "mine" ? (
+        <MineView
+          weddingId={weddingId}
+          weddingDate={weddingDate}
+          items={mine}
+          filter={filter}
+          assignment={assignment}
+        />
       ) : (
         <ItemList
           weddingId={weddingId}
           weddingDate={weddingDate}
           items={filterItems(items, filter)}
           labelledBy="checklist-title"
+          assignment={assignment}
         />
       )}
     </div>
@@ -336,13 +386,21 @@ type ViewProps = {
   weddingDate: string | null;
   items: readonly ChecklistItem[];
   filter: StatusFilter;
+  assignment: Assignment;
 };
 
 /**
  * Planning order. Under "Todos", pending items come first in planning order
  * and finished ones (done / no aplica) follow in a collapsed section.
  */
-function PlanView({ weddingId, weddingDate, items, filter }: ViewProps) {
+function PlanView({
+  weddingId,
+  weddingDate,
+  items,
+  filter,
+  assignment,
+  noPendingText,
+}: ViewProps & { noPendingText?: string }) {
   const copy = getMessages().checklist;
 
   if (filter !== "all") {
@@ -352,6 +410,7 @@ function PlanView({ weddingId, weddingDate, items, filter }: ViewProps) {
         weddingDate={weddingDate}
         items={sortByPlanning(filterItems(items, filter), weddingDate)}
         labelledBy="checklist-title"
+        assignment={assignment}
       />
     );
   }
@@ -365,7 +424,8 @@ function PlanView({ weddingId, weddingDate, items, filter }: ViewProps) {
         weddingDate={weddingDate}
         items={pending}
         labelledBy="checklist-title"
-        emptyText={copy.plan.noPending}
+        emptyText={noPendingText ?? copy.plan.noPending}
+        assignment={assignment}
       />
       {resolved.length > 0 ? (
         <details className="space-y-3 rounded-2xl border border-border p-4">
@@ -373,7 +433,12 @@ function PlanView({ weddingId, weddingDate, items, filter }: ViewProps) {
             {interpolate(copy.plan.resolvedTitle, { count: formatNumber(resolved.length) })}
           </summary>
           <div className="pt-3">
-            <ItemList weddingId={weddingId} weddingDate={weddingDate} items={resolved} />
+            <ItemList
+              weddingId={weddingId}
+              weddingDate={weddingDate}
+              items={resolved}
+              assignment={assignment}
+            />
           </div>
         </details>
       ) : null}
@@ -381,8 +446,27 @@ function PlanView({ weddingId, weddingDate, items, filter }: ViewProps) {
   );
 }
 
+/**
+ * "Mis pendientes": the items assigned to the current member, laid out like
+ * the Plan view (pending first in planning order, then done / no aplica).
+ * The status filter narrows it as everywhere else.
+ */
+function MineView(props: ViewProps) {
+  const copy = getMessages().checklist.mine;
+
+  if (props.items.length === 0) {
+    return (
+      <div className="space-y-1" data-testid="mine-empty">
+        <p className="font-semibold">{copy.empty}</p>
+        <p className="text-muted text-sm">{copy.emptyHint}</p>
+      </div>
+    );
+  }
+  return <PlanView {...props} noPendingText={copy.noPending} />;
+}
+
 /** Grouped by category, with each category's progress; persisted order inside. */
-function CategoryView({ weddingId, weddingDate, items, filter }: ViewProps) {
+function CategoryView({ weddingId, weddingDate, items, filter, assignment }: ViewProps) {
   const copy = getMessages().checklist;
   const groups = groupByCategory(items)
     .map((group) => ({ ...group, visible: filterItems(group.items, filter) }))
@@ -443,6 +527,7 @@ function CategoryView({ weddingId, weddingDate, items, filter }: ViewProps) {
               weddingDate={weddingDate}
               items={visible}
               labelledBy={headingId}
+              assignment={assignment}
             />
           </section>
         );
@@ -457,12 +542,14 @@ function ItemList({
   items,
   labelledBy,
   emptyText,
+  assignment,
 }: {
   weddingId: string;
   weddingDate: string | null;
   items: readonly ChecklistItem[];
   labelledBy?: string;
   emptyText?: string;
+  assignment: Assignment;
 }) {
   const copy = getMessages().checklist;
   if (items.length === 0) return <p className="text-muted">{emptyText ?? copy.empty.filtered}</p>;
@@ -474,6 +561,14 @@ function ItemList({
           weddingId={weddingId}
           item={item}
           timingText={timingLine(item.timing, weddingDate) ?? copy.timing.none}
+          assignment={
+            assignment
+              ? {
+                  label: assigneeLabel(assignment.members, item.assigneeMembershipId),
+                  options: assignment.options,
+                }
+              : null
+          }
         />
       ))}
     </ul>

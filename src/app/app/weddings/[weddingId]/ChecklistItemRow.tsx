@@ -4,17 +4,20 @@ import { useActionState, useEffect, useRef, useState } from "react";
 
 import { Notice } from "@/components/ui/Notice";
 import { SubmitButton } from "@/components/ui/SubmitButton";
-import { secondaryButtonClass } from "@/components/ui/styles";
+import { inputClass, secondaryButtonClass } from "@/components/ui/styles";
 import { statusControls } from "@/lib/checklist/presentation";
 import type { ChecklistItem } from "@/lib/checklist/types";
 import { itemFormValues } from "@/lib/checklist/validation";
 import { getMessages } from "@/lib/i18n";
+import type { MemberOption } from "@/lib/weddings/members";
 
 import { ChecklistItemFields } from "./ChecklistItemFields";
 import {
   deleteChecklistItemAction,
+  setChecklistItemAssigneeAction,
   setChecklistItemStatusAction,
   updateChecklistItemAction,
+  type AssignmentState,
   type ChecklistItemFormState,
   type DeleteItemState,
   type StatusChangeState,
@@ -41,6 +44,12 @@ type Props = {
   item: ChecklistItem;
   /** Server-formatted timing line (dates are formatted once, on the server). */
   timingText: string | null;
+  /**
+   * Who is responsible ("Tú", a name, "Sin asignar") and who it can be
+   * assigned to (current members of this wedding). null when the members
+   * couldn't be loaded: the assignment is then not shown at all.
+   */
+  assignment: Readonly<{ label: string; options: readonly MemberOption[] }> | null;
 };
 
 /**
@@ -48,7 +57,7 @@ type Props = {
  * and "Volver a pendiente" are explicit buttons, so status never depends on
  * the checkbox (or on color) alone. Each status change is announced.
  */
-export function ChecklistItemRow({ weddingId, item, timingText }: Props) {
+export function ChecklistItemRow({ weddingId, item, timingText, assignment }: Props) {
   const [statusState, statusAction, statusPending] = useActionState<StatusChangeState, FormData>(
     setChecklistItemStatusAction,
     null,
@@ -123,6 +132,14 @@ export function ChecklistItemRow({ weddingId, item, timingText }: Props) {
             {item.category ? (
               <span className="text-muted">{checklist.categories[item.category]}</span>
             ) : null}
+            {assignment ? (
+              <span data-testid="checklist-item-assignee">
+                <span className="text-muted">{checklist.assignment.label}: </span>
+                <span className={item.assigneeMembershipId ? "font-semibold" : "text-muted"}>
+                  {assignment.label}
+                </span>
+              </span>
+            ) : null}
           </p>
           {timingText ? (
             <p className="text-sm" data-testid="checklist-item-timing">
@@ -160,6 +177,18 @@ export function ChecklistItemRow({ weddingId, item, timingText }: Props) {
             </p>
           ) : null}
 
+          {assignment ? (
+            <details className="pt-1">
+              <summary
+                aria-label={withTitle(checklist.assignment.open, item.title)}
+                className="text-accent inline-flex min-h-9 cursor-pointer items-center text-sm font-semibold underline-offset-4 hover:underline"
+              >
+                {checklist.assignment.open}
+              </summary>
+              <AssignChecklistItem weddingId={weddingId} item={item} options={assignment.options} />
+            </details>
+          ) : null}
+
           <details className="group pt-1">
             <summary
               aria-label={withTitle(checklist.actions.edit, item.title)}
@@ -175,6 +204,78 @@ export function ChecklistItemRow({ weddingId, item, timingText }: Props) {
         </div>
       </div>
     </li>
+  );
+}
+
+/**
+ * "Asignar a": a native select (keyboard and mobile friendly) and an
+ * explicit save, so nothing changes just by moving through the options.
+ * No confirmation: assignment is ordinary, reversible planning.
+ */
+function AssignChecklistItem({
+  weddingId,
+  item,
+  options,
+}: {
+  weddingId: string;
+  item: ChecklistItem;
+  options: readonly MemberOption[];
+}) {
+  const [state, formAction] = useActionState<AssignmentState, FormData>(
+    setChecklistItemAssigneeAction,
+    null,
+  );
+  const { assignment: copy } = getMessages().checklist;
+  const selectId = `assign-${item.id}`;
+  const errorId = `assign-${item.id}-error`;
+  const failure = state && !state.ok ? state : null;
+
+  return (
+    <div className="mt-2 space-y-2">
+      {/* Remount when the saved assignee changes, so the select shows it. */}
+      <form
+        key={`${item.assigneeMembershipId ?? "none"}-${state?.ok ? state.data.nonce : ""}`}
+        action={formAction}
+        className="flex flex-wrap items-end gap-2"
+      >
+        <input type="hidden" name="weddingId" value={weddingId} />
+        <input type="hidden" name="itemId" value={item.id} />
+        <div className="min-w-0 flex-1 space-y-1 sm:max-w-64">
+          <label htmlFor={selectId} className="block text-sm font-semibold">
+            {copy.selectLabel}
+          </label>
+          <select
+            id={selectId}
+            name="assigneeMembershipId"
+            defaultValue={item.assigneeMembershipId ?? ""}
+            aria-invalid={failure ? true : undefined}
+            aria-describedby={failure ? errorId : undefined}
+            className={`${inputClass} min-h-9 py-1.5`}
+          >
+            <option value="">{copy.unassigned}</option>
+            {options.map((option) => (
+              <option key={option.membershipId} value={option.membershipId}>
+                {option.optionLabel}
+              </option>
+            ))}
+          </select>
+        </div>
+        <SubmitButton
+          label={copy.submit}
+          pendingLabel={copy.submitting}
+          variant="secondary"
+          className="min-h-9 px-3 py-1.5"
+        />
+      </form>
+      <p role="status" className="text-success text-sm font-medium">
+        {state?.ok ? copy.saved : null}
+      </p>
+      {failure ? (
+        <p id={errorId} role="alert" className="text-danger text-sm">
+          {failure.formError}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

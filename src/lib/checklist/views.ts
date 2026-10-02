@@ -8,11 +8,14 @@ import type { StatusFilter } from "@/lib/checklist/filters";
  *   list     — persisted order (the wedding's own order)
  *   plan     — planning order (derived from timing)
  *   category — grouped by category, persisted order inside each group
+ *   mine     — "Mis pendientes": items assigned to the current member, in
+ *              planning order. Responsibility filtering, not privacy: every
+ *              member can already see every item.
  */
 
-export type ChecklistView = "list" | "plan" | "category";
+export type ChecklistView = "list" | "plan" | "category" | "mine";
 
-export const CHECKLIST_VIEWS: readonly ChecklistView[] = ["list", "plan", "category"];
+export const CHECKLIST_VIEWS: readonly ChecklistView[] = ["list", "plan", "category", "mine"];
 
 export const DEFAULT_VIEW: ChecklistView = "list";
 

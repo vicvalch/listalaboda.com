@@ -31,7 +31,7 @@ export type ChecklistDenial = "unauthenticated" | "not_found" | "forbidden" | "e
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const ITEM_COLUMNS =
-  "id, title, description, category, status, timing_mode, relative_days, due_date, sort_order";
+  "id, title, description, category, status, timing_mode, relative_days, due_date, sort_order, assignee_membership_id";
 
 // -------------------------------------------------------------------- read
 
@@ -78,6 +78,7 @@ export async function getWeddingChecklist(
         // The table's CHECK makes inconsistent timing impossible.
         timing: timingFromColumns(row) ?? { mode: "none" },
         sortOrder: row.sort_order,
+        assigneeMembershipId: row.assignee_membership_id,
       })),
     };
   } catch {
@@ -128,17 +129,25 @@ export async function initializeWeddingChecklist(
 /**
  * `not_found` is about the WEDDING (missing or not a member: callers 404).
  * `item_not_found` means the wedding is accessible but the item isn't in it,
- * e.g. a partner deleted it a moment ago.
+ * e.g. a partner deleted it a moment ago. `invalid_assignee` means the
+ * requested assignee isn't a current member of this wedding (it never says
+ * whether it belongs to some other wedding).
  */
 export type MutationResult =
   | Readonly<{ ok: true }>
-  | Readonly<{ ok: false; reason: ChecklistDenial | "invalid" | "item_not_found" }>;
+  | Readonly<{
+      ok: false;
+      reason: ChecklistDenial | "invalid" | "item_not_found" | "invalid_assignee";
+    }>;
 
 /** check_violation: the database rejected the values (blank title, bad timing…). */
 const CHECK_VIOLATION = "23514";
+/** foreign_key_violation: here, only the same-wedding assignee reference. */
+const FOREIGN_KEY_VIOLATION = "23503";
 
 function failure(code: string | undefined): MutationResult {
   if (code === CHECK_VIOLATION) return { ok: false, reason: "invalid" };
+  if (code === FOREIGN_KEY_VIOLATION) return { ok: false, reason: "invalid_assignee" };
   if (code === "42501") return { ok: false, reason: "forbidden" };
   return { ok: false, reason: "error" };
 }
@@ -236,6 +245,34 @@ export function setChecklistItemStatus(
       .eq("id", itemId)
       .eq("wedding_id", access.weddingId)
       .select("id"),
+  );
+}
+
+/**
+ * Assigns the item to a member of this wedding, or unassigns it (null). Any
+ * member may do it, for any member: assignment is shared planning content,
+ * not authorization. The membership id is only a requested target: the
+ * database accepts it only if it is a membership of the item's own wedding
+ * (composite foreign key), so a membership of another wedding, a former
+ * member or a made-up id are all `invalid_assignee`. Only the assignee
+ * column is sent: status, timing and order are untouched.
+ */
+export function setChecklistItemAssignee(
+  supabase: Client,
+  weddingId: string,
+  itemId: string,
+  assigneeMembershipId: string | null,
+): Promise<MutationResult> {
+  return mutateItem(supabase, weddingId, itemId, (access) =>
+    // A malformed id can't be a membership: answer as the database would.
+    assigneeMembershipId !== null && !UUID_PATTERN.test(assigneeMembershipId)
+      ? Promise.resolve({ data: null, error: { code: FOREIGN_KEY_VIOLATION } })
+      : supabase
+          .from("checklist_items")
+          .update({ assignee_membership_id: assigneeMembershipId })
+          .eq("id", itemId)
+          .eq("wedding_id", access.weddingId)
+          .select("id"),
   );
 }
 

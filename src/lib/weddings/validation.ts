@@ -43,3 +43,28 @@ export function parseWeddingInput(raw: { name: string; weddingDate: string }): W
   if (Object.keys(fieldErrors).length > 0) return { ok: false, fieldErrors };
   return { ok: true, input: { name, weddingDate: date || null } };
 }
+
+// ------------------------------------------------------------ display name
+
+export const DISPLAY_NAME_MAX_LENGTH = 80;
+
+export type DisplayNameResult =
+  | Readonly<{ ok: true; displayName: string | null }>
+  | Readonly<{ ok: false; error: string }>;
+
+// Control characters (C0, DEL, C1): plain text only.
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/;
+
+/**
+ * A member's wedding-scoped display name. Trimmed; blank means "no name"
+ * (null). Mirrors the database CHECK (1–80 characters, no control
+ * characters), which stays authoritative.
+ */
+export function parseDisplayName(raw: string): DisplayNameResult {
+  const messages = es.members.displayName;
+  const value = raw.trim();
+  if (!value) return { ok: true, displayName: null };
+  if ([...value].length > DISPLAY_NAME_MAX_LENGTH) return { ok: false, error: messages.tooLong };
+  if (CONTROL_CHARACTERS.test(value)) return { ok: false, error: messages.invalid };
+  return { ok: true, displayName: value };
+}

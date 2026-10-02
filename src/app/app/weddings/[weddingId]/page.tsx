@@ -14,9 +14,11 @@ import { formatNumber, getMessages } from "@/lib/i18n";
 import { listMembershipInvites } from "@/lib/membership-invites/service";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatTimestampDate, formatWeddingDate } from "@/lib/weddings/format";
-import { getWeddingDetail } from "@/lib/weddings/service";
+import { labelMembers } from "@/lib/weddings/members";
+import { getWeddingDetail, listWeddingMembers } from "@/lib/weddings/service";
 
 import { ChecklistSection } from "./ChecklistSection";
+import { DisplayNameForm } from "./DisplayNameForm";
 import { InviteForm } from "./InviteForm";
 import { RevokeInviteButton } from "./RevokeInviteButton";
 
@@ -48,12 +50,17 @@ export default async function WeddingPage({
   if (!wedding) notFound();
 
   const isOwner = access.access.role === "owner";
-  const [checklist, invites] = await Promise.all([
+  // Loaded once per page (no per-item lookups), only after the membership
+  // check; labels are derived in memory.
+  const [checklist, invites, memberRows] = await Promise.all([
     getWeddingChecklist(supabase, access.access),
     isOwner ? listMembershipInvites(supabase, wedding.id) : Promise.resolve(null),
+    listWeddingMembers(supabase, access.access),
   ]);
+  const members = memberRows ? labelMembers(memberRows) : null;
+  const me = members?.find((member) => member.isCurrentUser) ?? null;
   const { joined, saved, status, view } = await searchParams;
-  const { wedding: copy, roles, invites: inviteCopy, common } = getMessages();
+  const { wedding: copy, roles, invites: inviteCopy, common, members: memberCopy } = getMessages();
 
   return (
     <div className="space-y-8">
@@ -96,6 +103,8 @@ export default async function WeddingPage({
         view={parseChecklistView(view)}
         filter={parseStatusFilter(status)}
         basePath={`/app/weddings/${wedding.id}`}
+        currentMembershipId={access.access.membershipId}
+        members={members}
       />
 
       <section aria-labelledby="people-title" className="space-y-6 border-t border-border pt-8">
@@ -111,8 +120,36 @@ export default async function WeddingPage({
               {formatNumber(wedding.memberCounts.collaborator)}
             </span>
           </p>
+          {members ? (
+            <ul className="space-y-1" aria-label={copy.members} data-testid="wedding-members">
+              {members.map((member) => (
+                <li key={member.membershipId}>
+                  <span className="font-semibold">{member.optionLabel}</span>
+                  <span className="text-muted"> · {roles[member.role].label}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <Notice tone="error">{copy.membersFailed}</Notice>
+          )}
           <p className="text-muted text-sm">{copy.membersNote}</p>
         </header>
+
+        {me ? (
+          <section className={`${cardClass} space-y-4`} aria-labelledby="display-name-title">
+            <header className="space-y-1">
+              <h3 id="display-name-title" className="text-xl font-semibold">
+                {memberCopy.displayName.title}
+              </h3>
+              <p className="text-muted text-sm" data-testid="display-name-current">
+                {me.displayName
+                  ? `${memberCopy.displayName.current} «${me.displayName}».`
+                  : memberCopy.displayName.none}
+              </p>
+            </header>
+            <DisplayNameForm weddingId={wedding.id} displayName={me.displayName} />
+          </section>
+        ) : null}
 
         {isOwner ? (
           <section className={`${cardClass} space-y-6`} aria-labelledby="invite-title">

@@ -6,7 +6,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/lib/supabase/database.types";
 
 import type { TestUserKey } from "./context";
-import { addMember, createWedding, ctx, users } from "./support";
+import { addMember, createWedding, ctx, sql, users } from "./support";
 
 vi.mock("server-only", () => ({}));
 const { requireWeddingMembership, requireWeddingRole } = await import("@/lib/authz/wedding");
@@ -38,11 +38,15 @@ describe("server wedding authorization (real database)", () => {
     weddingB = await createWedding("ownerB");
   });
 
-  it("owner: member and owner of A", async () => {
+  it("owner: member and owner of A, with their own membership resolved server-side", async () => {
     const supabase = await sessionClient("ownerA");
+    const [own] = await sql<{ id: string }>(
+      "select id from public.wedding_memberships where wedding_id = $1 and user_id = $2",
+      [weddingA, users.ownerA.id],
+    );
     expect(await requireWeddingRole(supabase, weddingA, ["owner"])).toEqual({
       ok: true,
-      access: { weddingId: weddingA, userId: users.ownerA.id, role: "owner" },
+      access: { weddingId: weddingA, userId: users.ownerA.id, membershipId: own?.id, role: "owner" },
     });
   });
 

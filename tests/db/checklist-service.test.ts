@@ -13,9 +13,11 @@ const {
   deleteChecklistItem,
   getWeddingChecklist,
   initializeWeddingChecklist,
+  setChecklistItemAssignee,
   setChecklistItemStatus,
   updateChecklistItem,
 } = await import("@/lib/checklist/service");
+const { listWeddingMembers, updateMyDisplayName } = await import("@/lib/weddings/service");
 
 // LB-05 checklist services (what the Server Actions call) against the real
 // local stack: identity from the real Auth server, authority from real
@@ -205,5 +207,148 @@ describe("checklist services", () => {
       timing: { mode: "relative_to_wedding", relativeDays: 5000 },
     });
     expect(result).toEqual({ ok: false, reason: "invalid" });
+  });
+});
+
+// LB-07: assignment and display-name services against the real stack.
+describe("assignment services", () => {
+  let weddingId: string;
+  let otherWedding: string;
+  let itemId: string;
+  let ownerMembership: string;
+  let collabMembership: string;
+  let foreignMembership: string;
+
+  async function membershipOf(wedding: string, user: TestUserKey): Promise<string> {
+    const [row] = await sql<{ id: string }>(
+      "select id from public.wedding_memberships where wedding_id = $1 and user_id = $2",
+      [wedding, users[user].id],
+    );
+    if (!row) throw new Error("membership missing");
+    return row.id;
+  }
+
+  async function assigneeOf(id: string): Promise<string | null> {
+    const [row] = await sql<{ assignee_membership_id: string | null }>(
+      "select assignee_membership_id from public.checklist_items where id = $1",
+      [id],
+    );
+    return row?.assignee_membership_id ?? null;
+  }
+
+  beforeAll(async () => {
+    weddingId = await fixtureWedding("ownerA", "Boda de responsables (servicio)");
+    await addMember(weddingId, "collabA", "collaborator");
+    otherWedding = await fixtureWedding("ownerB", "Otra boda de responsables (servicio)");
+    ownerMembership = await membershipOf(weddingId, "ownerA");
+    collabMembership = await membershipOf(weddingId, "collabA");
+    foreignMembership = await membershipOf(otherWedding, "ownerB");
+
+    const supabase = await sessionClient("ownerA");
+    expect(await createChecklistItem(supabase, weddingId, customInput)).toEqual({ ok: true });
+    const items = (await checklistOf("ownerA", weddingId)).items;
+    itemId = items[0]?.id ?? "";
+    expect(items[0]?.assigneeMembershipId).toBeNull();
+  });
+
+  it("owner → self, owner → collaborator; the checklist read reflects it", async () => {
+    const owner = await sessionClient("ownerA");
+    expect(await setChecklistItemAssignee(owner, weddingId, itemId, ownerMembership)).toEqual({
+      ok: true,
+    });
+    expect(await assigneeOf(itemId)).toBe(ownerMembership);
+
+    expect(await setChecklistItemAssignee(owner, weddingId, itemId, collabMembership)).toEqual({
+      ok: true,
+    });
+    const item = (await checklistOf("collabA", weddingId)).items.find((i) => i.id === itemId);
+    expect(item?.assigneeMembershipId).toBe(collabMembership);
+  });
+
+  it("collaborator → self, collaborator → owner, then unassign", async () => {
+    const collab = await sessionClient("collabA");
+    for (const target of [collabMembership, ownerMembership, null]) {
+      expect(await setChecklistItemAssignee(collab, weddingId, itemId, target)).toEqual({ ok: true });
+      expect(await assigneeOf(itemId)).toBe(target);
+    }
+  });
+
+  it("a membership of another wedding is invalid_assignee and changes nothing", async () => {
+    const owner = await sessionClient("ownerA");
+    await setChecklistItemAssignee(owner, weddingId, itemId, collabMembership);
+    expect(await setChecklistItemAssignee(owner, weddingId, itemId, foreignMembership)).toEqual({
+      ok: false,
+      reason: "invalid_assignee",
+    });
+    expect(
+      await setChecklistItemAssignee(owner, weddingId, itemId, crypto.randomUUID()),
+    ).toEqual({ ok: false, reason: "invalid_assignee" });
+    expect(await assigneeOf(itemId)).toBe(collabMembership);
+  });
+
+  it("an item of another wedding is item_not_found; an outsider gets not_found", async () => {
+    const owner = await sessionClient("ownerA");
+    expect(
+      await setChecklistItemAssignee(owner, weddingId, crypto.randomUUID(), ownerMembership),
+    ).toEqual({ ok: false, reason: "item_not_found" });
+
+    const outsider = await sessionClient("outsider");
+    expect(await setChecklistItemAssignee(outsider, weddingId, itemId, null)).toEqual({
+      ok: false,
+      reason: "not_found",
+    });
+    expect(await assigneeOf(itemId)).toBe(collabMembership);
+  });
+
+  it("members are listed with safe fields; the caller is resolved server-side", async () => {
+    const supabase = await sessionClient("collabA");
+    const access = await requireWeddingMembership(supabase, weddingId);
+    if (!access.ok) throw new Error("no access");
+    expect(access.access.membershipId).toBe(collabMembership);
+
+    const members = await listWeddingMembers(supabase, access.access);
+    expect(members?.map((m) => [m.membershipId, m.role, m.isCurrentUser]).sort()).toEqual(
+      [
+        [ownerMembership, "owner", false],
+        [collabMembership, "collaborator", true],
+      ].sort(),
+    );
+    expect(JSON.stringify(members)).not.toContain(users.collabA.id);
+    expect(JSON.stringify(members)).not.toContain(users.collabA.email);
+  });
+
+  it("each member sets only their own display name", async () => {
+    const collab = await sessionClient("collabA");
+    expect(await updateMyDisplayName(collab, weddingId, "Sofía")).toEqual({
+      ok: true,
+      displayName: "Sofía",
+    });
+    const owner = await sessionClient("ownerA");
+    expect(await updateMyDisplayName(owner, weddingId, "Victor")).toEqual({
+      ok: true,
+      displayName: "Victor",
+    });
+    const names = await sql<{ id: string; display_name: string | null }>(
+      "select id, display_name from public.wedding_memberships where wedding_id = $1",
+      [weddingId],
+    );
+    expect(Object.fromEntries(names.map((n) => [n.id, n.display_name]))).toEqual({
+      [ownerMembership]: "Victor",
+      [collabMembership]: "Sofía",
+    });
+
+    expect(await updateMyDisplayName(collab, weddingId, null)).toEqual({
+      ok: true,
+      displayName: null,
+    });
+    expect(await updateMyDisplayName(collab, weddingId, "x".repeat(81))).toEqual({
+      ok: false,
+      reason: "invalid",
+    });
+    const outsider = await sessionClient("outsider");
+    expect(await updateMyDisplayName(outsider, weddingId, "Intrusa")).toEqual({
+      ok: false,
+      reason: "not_found",
+    });
   });
 });

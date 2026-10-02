@@ -8,6 +8,7 @@ import {
   createChecklistItem,
   deleteChecklistItem,
   initializeWeddingChecklist,
+  setChecklistItemAssignee,
   setChecklistItemStatus,
   updateChecklistItem,
   type MutationResult,
@@ -159,6 +160,41 @@ export async function setChecklistItemStatusAction(
   revalidatePath(weddingPath(weddingId));
   if (!result.ok) return { ok: false, formError: checklist.errors.saveFailed };
   return { ok: true, data: { status } };
+}
+
+// -------------------------------------------------------------- assignment
+
+export type AssignmentState = FormState<never, { nonce: string }> | null;
+
+/**
+ * Assigns, reassigns or unassigns an item. The submitted membership id is
+ * only the requested target ("" = Sin asignar): the service checks the
+ * caller's membership, and the database accepts only a membership of the
+ * item's own wedding. Status, timing and order are never touched.
+ */
+export async function setChecklistItemAssigneeAction(
+  _prev: AssignmentState,
+  formData: FormData,
+): Promise<AssignmentState> {
+  const weddingId = await startAction(formData);
+  const { assignment } = getMessages().checklist;
+  const assignee = formText(formData, "assigneeMembershipId").trim();
+
+  const result = await setChecklistItemAssignee(
+    await createSupabaseServerClient(),
+    weddingId,
+    formText(formData, "itemId"),
+    assignee === "" ? null : assignee,
+  );
+  await handleDenial(result, weddingId);
+  revalidatePath(weddingPath(weddingId));
+  if (!result.ok) {
+    return {
+      ok: false,
+      formError: result.reason === "invalid_assignee" ? assignment.invalidMember : assignment.failed,
+    };
+  }
+  return { ok: true, data: { nonce: crypto.randomUUID() } };
 }
 
 // ------------------------------------------------------------------ delete

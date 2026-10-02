@@ -13,6 +13,8 @@ import {
 } from "@/lib/membership-invites/service";
 import { parseInviteInput, type InviteField } from "@/lib/membership-invites/validation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { updateMyDisplayName } from "@/lib/weddings/service";
+import { parseDisplayName } from "@/lib/weddings/validation";
 
 /**
  * Owner-only invite mutations. The wedding id from the form is only a
@@ -72,4 +74,43 @@ export async function revokeInviteAction(
   revalidatePath(`/app/weddings/${weddingId}`);
   if (!result.ok) return { ok: false, formError: getMessages().invites.revokeFailed };
   return { ok: true, data: undefined };
+}
+
+export type DisplayNameState =
+  | FormState<"displayName", { message: string; nonce: string }>
+  | null;
+
+/**
+ * Sets how the current member appears in this wedding. There is no
+ * membership id in the form: the service (and the database function) only
+ * ever change the caller's own membership. Any member may do it.
+ */
+export async function updateDisplayNameAction(
+  _prev: DisplayNameState,
+  formData: FormData,
+): Promise<DisplayNameState> {
+  const weddingId = formText(formData, "weddingId");
+  await requireUser(`/app/weddings/${encodeURIComponent(weddingId)}`);
+  const copy = getMessages().members.displayName;
+
+  const values = { displayName: formText(formData, "displayName") };
+  const parsed = parseDisplayName(values.displayName);
+  if (!parsed.ok) return { ok: false, fieldErrors: { displayName: parsed.error }, values };
+
+  const result = await updateMyDisplayName(
+    await createSupabaseServerClient(),
+    weddingId,
+    parsed.displayName,
+  );
+  if (!result.ok) {
+    if (result.reason === "not_found") notFound();
+    if (result.reason === "unauthenticated") await requireUser();
+    if (result.reason === "invalid") {
+      return { ok: false, fieldErrors: { displayName: copy.invalid }, values };
+    }
+    return { ok: false, formError: copy.failed, values };
+  }
+
+  revalidatePath(`/app/weddings/${weddingId}`);
+  return { ok: true, data: { message: copy.saved, nonce: crypto.randomUUID() } };
 }

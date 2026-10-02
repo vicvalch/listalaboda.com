@@ -76,7 +76,7 @@ describe("schema guarantees", () => {
        where (p.pronamespace = 'private'::regnamespace)
           or (p.pronamespace = 'public'::regnamespace
               and p.proname in ('create_wedding', 'accept_membership_invite',
-                                'initialize_wedding_checklist'))
+                                'initialize_wedding_checklist', 'set_wedding_display_name'))
        order by 1`,
     );
 
@@ -91,6 +91,7 @@ describe("schema guarantees", () => {
       "public.accept_membership_invite",
       "public.create_wedding",
       "public.initialize_wedding_checklist",
+      "public.set_wedding_display_name",
     ]);
     for (const fn of rows) {
       expect(fn.config, fn.name).toEqual(['search_path=""']);
@@ -105,6 +106,7 @@ describe("schema guarantees", () => {
       "public.accept_membership_invite",
       "public.create_wedding",
       "public.initialize_wedding_checklist",
+      "public.set_wedding_display_name",
     ]);
   });
 
@@ -115,7 +117,7 @@ describe("schema guarantees", () => {
        where p.pronamespace in ('private'::regnamespace, 'public'::regnamespace)
          and p.proname in ('create_wedding', 'accept_membership_invite',
                            'is_wedding_member', 'has_wedding_role',
-                           'initialize_wedding_checklist')
+                           'initialize_wedding_checklist', 'set_wedding_display_name')
        order by 1`,
     );
     expect(rows).toEqual([
@@ -124,6 +126,10 @@ describe("schema guarantees", () => {
       { name: "has_wedding_role", args: "target_wedding_id uuid, allowed_roles wedding_role[]" },
       { name: "initialize_wedding_checklist", args: "target_wedding_id uuid" },
       { name: "is_wedding_member", args: "target_wedding_id uuid" },
+      {
+        name: "set_wedding_display_name",
+        args: "target_wedding_id uuid, new_display_name text",
+      },
     ]);
   });
 

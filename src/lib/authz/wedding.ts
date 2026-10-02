@@ -27,6 +27,8 @@ export type WeddingRole = Database["public"]["Enums"]["wedding_role"];
 export type WeddingAccess = Readonly<{
   weddingId: string;
   userId: string;
+  /** The caller's own membership, resolved from auth.uid(); never from input. */
+  membershipId: string;
   role: WeddingRole;
 }>;
 
@@ -78,7 +80,7 @@ export async function requireWeddingRole(
 
     const { data, error } = await supabase
       .from("wedding_memberships")
-      .select("role")
+      .select("id, role")
       .eq("wedding_id", weddingId)
       .eq("user_id", userId)
       .limit(1);
@@ -86,15 +88,19 @@ export async function requireWeddingRole(
       return deny("error");
     }
 
-    const role = data[0]?.role;
-    if (!role || !WEDDING_ROLES.includes(role)) {
+    const membership = data[0];
+    const role = membership?.role;
+    if (!membership || !role || !WEDDING_ROLES.includes(role)) {
       return deny("not_found");
+    }
+    if (!UUID_PATTERN.test(membership.id)) {
+      return deny("error");
     }
     if (!allowedRoles.includes(role)) {
       return deny("forbidden");
     }
 
-    return { ok: true, access: { weddingId, userId, role } };
+    return { ok: true, access: { weddingId, userId, membershipId: membership.id, role } };
   } catch {
     return deny("error");
   }

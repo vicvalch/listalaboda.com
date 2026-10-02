@@ -52,4 +52,9 @@ export type ChecklistItem = Readonly<{
   status: ChecklistStatus;
   timing: ChecklistTiming;
   sortOrder: number;
+  /**
+   * The wedding member responsible for the item (a membership of the same
+   * wedding), or null: "Sin asignar". Planning metadata, never authorization.
+   */
+  assigneeMembershipId: string | null;
 }>;

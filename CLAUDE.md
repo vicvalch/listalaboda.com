@@ -72,6 +72,18 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - No "overdue"/"today"/"late" semantics until there is an explicit time-zone model.
 - Categories stay the fixed enum (Constitution §5); custom categories are Phase 3.
 
+## Assignment rules (LB-07)
+
+- An item has at most one assignee: `checklist_items.assignee_membership_id`, a `wedding_memberships.id`
+  of the SAME wedding (composite FK; never an auth user id, never a MembershipInvite). Null = "Sin asignar".
+- Assignment is planning metadata, never authorization: don't restrict reads/edits to the assignee, and
+  never let assigning change status, timing or `sort_order`. Any member may assign anyone in the wedding.
+- "Mis pendientes" (`view=mine`) = items whose assignee is the caller's own membership, resolved server-side
+  (`WeddingAccess.membershipId`), never from client input. `view` is presentation, not a boundary.
+- `wedding_memberships.display_name` is wedding-scoped presentation identity. Only the member themselves sets
+  it, through the `set_wedding_display_name` RPC (no table grant; it would widen role updates). Never derive
+  names from emails; never show emails or user/membership ids as labels (`@/lib/weddings/members`).
+
 ## Commands
 
 - `npm run verify`: lint, typecheck, unit tests, build (same as CI)
@@ -85,4 +97,5 @@ Work is delivered in numbered prompts (LB-NN). LB-02 is the application foundati
 data foundation: weddings, memberships, membership invites, RLS (no UI). LB-04 adds auth and membership
 flows (signup/login/logout, wedding creation, invites). LB-05 adds the checklist domain (templates,
 wedding checklist items, RLS) and the checklist-first wedding page. LB-06 refines it: List/Plan/category
-views, "Lo próximo", owner-only wedding settings (no schema change). Don't implement ahead of the current prompt.
+views, "Lo próximo", owner-only wedding settings (no schema change). LB-07 adds single-assignee checklist
+assignment, "Mis pendientes" and wedding-scoped member display names. Don't implement ahead of the current prompt.

@@ -118,6 +118,20 @@ export const es = {
     alreadyMember: "Ya tienes acceso a esta boda.",
     backToWeddings: "Volver a mis bodas",
     peopleTitle: "Personas",
+    settingsLink: "Ajustes de la boda",
+    settingsSaved: "Guardamos los cambios de la boda.",
+  },
+  weddingSettings: {
+    title: "Ajustes de la boda",
+    intro:
+      "Si cambias la fecha, las fechas de los pendientes relativos a la boda se recalculan solas. Los pendientes con fecha específica no cambian.",
+    nameLabel: "Nombre de la boda",
+    dateLabel: "Fecha de la boda (opcional)",
+    dateHint: "Si todavía no la tienen, déjala en blanco.",
+    submit: "Guardar cambios",
+    submitting: "Guardando…",
+    back: "Volver a la boda",
+    ownerOnly: "Solo quienes organizan la boda pueden cambiar su nombre y su fecha.",
   },
   checklist: {
     title: "Lista de la boda",
@@ -142,10 +156,37 @@ export const es = {
       summary: "{done} de {total} completados",
       notApplicableOne: "1 pendiente no aplica y no cuenta en el avance.",
       notApplicableMany: "{count} pendientes no aplican y no cuentan en el avance.",
+      noneApplicable: "0 pendientes aplicables",
     },
     nextUp: {
       title: "Lo próximo",
-      hint: "Los pendientes con fecha más cercana.",
+      hint: "Primero lo que tiene fecha más cercana; al final, lo que aún no tiene fecha.",
+      allDone: "Todo lo que aplica está hecho. Tus pendientes completados siguen en la lista.",
+      noneApplicable: "No hay pendientes por hacer: todo está marcado como «no aplica».",
+    },
+    views: {
+      label: "Cómo ver la lista",
+      list: "Lista",
+      plan: "Plan",
+      category: "Por categoría",
+      hint: {
+        list: "En el orden de tu lista.",
+        plan: "Ordenados por fecha: primero lo que va antes. Los pendientes sin fecha van al final.",
+        category: "Agrupados por área de la boda, con el avance de cada una.",
+      },
+    },
+    plan: {
+      noPending: "No quedan pendientes por hacer.",
+      resolvedTitle: "Hechos y no aplica ({count})",
+    },
+    categoryProgress: {
+      label: "Avance de {category}",
+      noneApplicable: "Nada de esta categoría aplica.",
+    },
+    noDate: {
+      owner: "Define la fecha para calcular las fechas de los pendientes relativos.",
+      ownerCta: "Definir la fecha de la boda",
+      collaborator: "Cuando se defina la fecha de la boda podremos calcular estas fechas.",
     },
     filters: {
       label: "Filtrar la lista",
@@ -190,7 +231,8 @@ export const es = {
       daysBefore: "{days} días antes de la boda",
       dayAfter: "1 día después de la boda",
       daysAfter: "{days} días después de la boda",
-      pendingDate: "Se calculará cuando definas la fecha de la boda.",
+      pendingDate: "La fecha exacta se calculará con la fecha de la boda.",
+      none: "Sin fecha",
     },
     empty: {
       title: "Tu lista está vacía",

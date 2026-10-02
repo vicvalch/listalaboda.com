@@ -2,12 +2,13 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { requireWeddingRole } from "@/lib/authz/wedding";
 import type { WeddingInput } from "@/lib/weddings/validation";
 import type { Database } from "@/lib/supabase/database.types";
 
 /**
- * Wedding reads and creation for the current user, through their own
- * RLS-bound client. Access to a wedding comes only from membership (RLS);
+ * Wedding reads, creation and owner settings for the current user, through
+ * their own RLS-bound client. Access to a wedding comes only from membership (RLS);
  * `weddings.created_by` is provenance and is never used here.
  */
 
@@ -138,5 +139,57 @@ export async function getWeddingDetail(
     };
   } catch {
     return null;
+  }
+}
+
+// ---------------------------------------------------------------- settings
+
+export type UpdateWeddingSettingsResult =
+  | Readonly<{ ok: true }>
+  | Readonly<{
+      ok: false;
+      reason:
+        | "unauthenticated"
+        | "not_found"
+        | "forbidden"
+        | "invalid_name"
+        | "invalid_date"
+        | "error";
+    }>;
+
+/**
+ * Owner-only edit of the wedding's name and date (Constitution §3). The
+ * owner role is checked server-side first; RLS (`weddings_update_owner`) and
+ * the column grant (name, wedding_date only) are the backstop. A null date
+ * clears it. Checklist items are never touched: relative items derive their
+ * dates from the current wedding date when read.
+ */
+export async function updateWeddingSettings(
+  supabase: Client,
+  weddingId: string,
+  input: WeddingInput,
+): Promise<UpdateWeddingSettingsResult> {
+  const access = await requireWeddingRole(supabase, weddingId, ["owner"]);
+  if (!access.ok) return { ok: false, reason: access.reason };
+
+  try {
+    const { data, error } = await supabase
+      .from("weddings")
+      .update({ name: input.name, wedding_date: input.weddingDate })
+      .eq("id", access.access.weddingId)
+      .select("id");
+    if (error) {
+      if (error.code === "23514") return { ok: false, reason: "invalid_name" };
+      if (error.code === "22007" || error.code === "22008") {
+        return { ok: false, reason: "invalid_date" };
+      }
+      if (error.code === "42501") return { ok: false, reason: "forbidden" };
+      return { ok: false, reason: "error" };
+    }
+    // No row: the wedding vanished or the role changed since the check.
+    if (!data || data.length === 0) return { ok: false, reason: "not_found" };
+    return { ok: true };
+  } catch {
+    return { ok: false, reason: "error" };
   }
 }

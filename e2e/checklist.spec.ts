@@ -312,6 +312,9 @@ test.describe("wedding checklist", () => {
     await expect(checklistItem(page, BUDGET).getByTestId("checklist-item-timing")).toHaveText(
       `365 días antes de la boda · ${es.checklist.timing.pendingDate}`,
     );
-    await expect(page.getByRole("region", { name: es.checklist.nextUp.title })).toHaveCount(0);
+    // LB-06: "Lo próximo" still orders by the rule (earliest first) without a date.
+    const nextUp = page.getByRole("region", { name: es.checklist.nextUp.title });
+    await expect(nextUp.getByRole("listitem").first()).toContainText(BUDGET);
+    await expect(nextUp.getByRole("listitem").first()).toContainText("365 días antes de la boda");
   });
 });

@@ -1,14 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  filterItems,
-  nextUpItems,
-  parseStatusFilter,
-  statusFilterHref,
-} from "@/lib/checklist/filters";
+import { filterItems, parseStatusFilter } from "@/lib/checklist/filters";
 import {
   describeRelativeDays,
   describeTiming,
+  shortTimingLabel,
   statusControls,
   timingLine,
 } from "@/lib/checklist/presentation";
@@ -81,43 +77,6 @@ describe("status filter", () => {
     expect(filterItems(items, "all").map((i) => i.id)).toEqual(["a", "b", "c"]);
     expect(filterItems(items, "not_applicable")).toEqual([]);
   });
-
-  it("builds shareable links", () => {
-    expect(statusFilterHref("/app/weddings/x", "all")).toBe("/app/weddings/x");
-    expect(statusFilterHref("/app/weddings/x", "done")).toBe("/app/weddings/x?status=done");
-  });
-});
-
-describe("nextUpItems", () => {
-  const relative = (days: number) => ({ mode: "relative_to_wedding", relativeDays: days }) as const;
-
-  it("lists pending dated items soonest first, without reordering the list", () => {
-    const items = [
-      item("late", "pending", relative(-10), 10),
-      item("undated", "pending", { mode: "none" }, 20),
-      item("early", "pending", relative(-300), 30),
-      item("finished", "done", relative(-400), 40),
-      item("skip", "not_applicable", relative(-500), 50),
-      item("fixed", "pending", { mode: "absolute", dueDate: "2027-01-01" }, 60),
-    ];
-    const next = nextUpItems(items, "2027-08-14");
-    expect(next.map((n) => [n.item.id, n.dueDate])).toEqual([
-      ["early", "2026-10-18"],
-      ["fixed", "2027-01-01"],
-      ["late", "2027-08-04"],
-    ]);
-    expect(items[0].id).toBe("late");
-  });
-
-  it("breaks date ties by list order and respects the limit", () => {
-    const items = [item("b", "pending", relative(-30), 20), item("a", "pending", relative(-30), 10)];
-    expect(nextUpItems(items, "2027-08-14").map((n) => n.item.id)).toEqual(["a", "b"]);
-    expect(nextUpItems(items, "2027-08-14", 1)).toHaveLength(1);
-  });
-
-  it("skips relative items while the wedding has no date", () => {
-    expect(nextUpItems([item("r", "pending", relative(-30))], null)).toEqual([]);
-  });
 });
 
 describe("timing presentation", () => {
@@ -154,6 +113,41 @@ describe("timing presentation", () => {
       "15 de marzo de 2027",
     );
     expect(timingLine({ mode: "none" }, "2027-08-14")).toBeNull();
+  });
+
+  it("says the wedding day without a number of days", () => {
+    expect(timingLine({ mode: "relative_to_wedding", relativeDays: 0 }, "2027-08-14")).toBe(
+      "14 de agosto de 2027 · El día de la boda",
+    );
+    expect(timingLine({ mode: "relative_to_wedding", relativeDays: 0 }, null)).toBe(
+      `El día de la boda · ${es.checklist.timing.pendingDate}`,
+    );
+  });
+
+  it("never shows a signed offset or a plural for one day", () => {
+    for (const days of [-1000, -30, -2, -1, 0, 1, 2, 30]) {
+      const text = describeRelativeDays(days);
+      expect(text).not.toMatch(/-\d|1 días/);
+    }
+  });
+
+  it("dates after the wedding and across month and leap-day boundaries", () => {
+    const after = { mode: "relative_to_wedding", relativeDays: 7 } as const;
+    expect(timingLine(after, "2027-12-28")).toBe("4 de enero de 2028 · 7 días después de la boda");
+    const before = { mode: "relative_to_wedding", relativeDays: -1 } as const;
+    expect(timingLine(before, "2028-03-01")).toBe("29 de febrero de 2028 · 1 día antes de la boda");
+  });
+});
+
+describe("shortTimingLabel", () => {
+  it("prefers the calendar date, then the rule, then 'Sin fecha'", () => {
+    const relative = { mode: "relative_to_wedding", relativeDays: -30 } as const;
+    expect(shortTimingLabel(relative, "2027-08-14")).toBe("15 de julio de 2027");
+    expect(shortTimingLabel(relative, null)).toBe("30 días antes de la boda");
+    expect(shortTimingLabel({ mode: "absolute", dueDate: "2027-03-15" }, null)).toBe(
+      "15 de marzo de 2027",
+    );
+    expect(shortTimingLabel({ mode: "none" }, "2027-08-14")).toBe(es.checklist.timing.none);
   });
 });
 

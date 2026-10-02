@@ -9,6 +9,7 @@ import { requireUser } from "@/lib/auth/session";
 import { requireWeddingMembership } from "@/lib/authz/wedding";
 import { parseStatusFilter } from "@/lib/checklist/filters";
 import { getWeddingChecklist } from "@/lib/checklist/service";
+import { parseChecklistView } from "@/lib/checklist/views";
 import { formatNumber, getMessages } from "@/lib/i18n";
 import { listMembershipInvites } from "@/lib/membership-invites/service";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -22,7 +23,8 @@ import { RevokeInviteButton } from "./RevokeInviteButton";
 export const metadata: Metadata = { title: getMessages().metadata.title };
 
 /**
- * The wedding's home: the checklist first, then the people in the wedding.
+ * The wedding's home: the checklist first (planning summary, views, items),
+ * then the people in the wedding. Settings are a subtle owner-only link.
  * Membership is checked server-side first; a non-member, a nonexistent
  * wedding and a malformed id all get the same 404. Everything is loaded
  * here on the server, after that check (RLS re-checks every read).
@@ -50,16 +52,17 @@ export default async function WeddingPage({
     getWeddingChecklist(supabase, access.access),
     isOwner ? listMembershipInvites(supabase, wedding.id) : Promise.resolve(null),
   ]);
-  const { joined, status } = await searchParams;
+  const { joined, saved, status, view } = await searchParams;
   const { wedding: copy, roles, invites: inviteCopy, common } = getMessages();
 
   return (
     <div className="space-y-8">
       {joined === "new" ? <Notice tone="success">{copy.joined}</Notice> : null}
       {joined === "existing" ? <Notice tone="info">{copy.alreadyMember}</Notice> : null}
+      {saved === "settings" ? <Notice tone="success">{copy.settingsSaved}</Notice> : null}
 
       <header className="space-y-3">
-        <h1 id="wedding-name" className="text-3xl font-semibold tracking-tight">
+        <h1 id="wedding-name" className="text-3xl font-semibold tracking-tight break-words">
           {wedding.name}
         </h1>
         <dl className="flex flex-wrap gap-x-8 gap-y-2">
@@ -76,6 +79,13 @@ export default async function WeddingPage({
             </dd>
           </div>
         </dl>
+        {isOwner ? (
+          <p>
+            <Link href={`/app/weddings/${wedding.id}/settings`} className={`${textLinkClass} text-sm`}>
+              {copy.settingsLink}
+            </Link>
+          </p>
+        ) : null}
       </header>
 
       <ChecklistSection
@@ -83,6 +93,7 @@ export default async function WeddingPage({
         weddingDate={wedding.weddingDate}
         role={access.access.role}
         checklist={checklist}
+        view={parseChecklistView(view)}
         filter={parseStatusFilter(status)}
         basePath={`/app/weddings/${wedding.id}`}
       />

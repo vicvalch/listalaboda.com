@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { filterItems } from "@/lib/checklist/filters";
 import {
+  assignedTo,
   comparePlanning,
   groupByCategory,
   nextItems,
@@ -20,8 +22,18 @@ function item(
   timing: ChecklistTiming = { mode: "none" },
   status: ChecklistStatus = "pending",
   category: ChecklistCategory | null = null,
+  assigneeMembershipId: string | null = null,
 ): ChecklistItem {
-  return { id, title: id, description: null, category, status, timing, sortOrder };
+  return {
+    id,
+    title: id,
+    description: null,
+    category,
+    status,
+    timing,
+    sortOrder,
+    assigneeMembershipId,
+  };
 }
 
 const relative = (relativeDays: number) => ({ mode: "relative_to_wedding", relativeDays }) as const;
@@ -197,5 +209,55 @@ describe("groupByCategory", () => {
 
   it("is empty for an empty list", () => {
     expect(groupByCategory([])).toEqual([]);
+  });
+});
+
+describe("assignedTo (Mis pendientes)", () => {
+  const ME = "me";
+  const fixture = [
+    item("mine-late", 10, relative(-10), "pending", null, ME),
+    item("other", 20, relative(-200), "pending", null, "someone-else"),
+    item("unassigned", 30, relative(-300)),
+    item("mine-done", 40, relative(-50), "done", null, ME),
+    item("mine-na", 50, relative(-40), "not_applicable", null, ME),
+    item("mine-early", 60, relative(-100), "pending", null, ME),
+  ];
+
+  it("keeps only the current member's items, in the input order", () => {
+    expect(ids(assignedTo(fixture, ME))).toEqual([
+      "mine-late",
+      "mine-done",
+      "mine-na",
+      "mine-early",
+    ]);
+  });
+
+  it("never includes unassigned items or someone else's", () => {
+    expect(ids(assignedTo(fixture, "nobody"))).toEqual([]);
+    expect(ids(assignedTo(fixture, "someone-else"))).toEqual(["other"]);
+  });
+
+  it("composes with the status filter, which stays independent", () => {
+    const mine = assignedTo(fixture, ME);
+    expect(ids(filterItems(mine, "pending"))).toEqual(["mine-late", "mine-early"]);
+    expect(ids(filterItems(mine, "done"))).toEqual(["mine-done"]);
+    expect(ids(filterItems(mine, "not_applicable"))).toEqual(["mine-na"]);
+    expect(ids(filterItems(mine, "all"))).toHaveLength(4);
+  });
+
+  it("uses the same planning order as Plan, without reordering the input", () => {
+    const mine = assignedTo(fixture, ME);
+    const pending = sortByPlanning(filterItems(mine, "pending"), WEDDING);
+    expect(ids(pending)).toEqual(["mine-early", "mine-late"]);
+    expect(ids(fixture)[0]).toBe("mine-late");
+  });
+
+  it("assignment never changes planning order or Lo próximo", () => {
+    const unassigned = fixture.map((i) => ({ ...i, assigneeMembershipId: null }));
+    expect(ids(sortByPlanning(fixture, WEDDING))).toEqual(ids(sortByPlanning(unassigned, WEDDING)));
+    expect(ids(nextItems(fixture, WEDDING))).toEqual(ids(nextItems(unassigned, WEDDING)));
+    expect(groupByCategory(fixture).map((g) => g.category)).toEqual(
+      groupByCategory(unassigned).map((g) => g.category),
+    );
   });
 });

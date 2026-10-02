@@ -27,6 +27,17 @@ date in **Ajustes de la boda** (`/app/weddings/[id]/settings`, owner-only) moves
 at once, while items with a specific date stay put. No "overdue" status exists yet (there is no
 time-zone model).
 
+**Assignment and "Mis pendientes" (LB-07).** Each checklist item can have one responsible person:
+a current member (`wedding_memberships` row) of the same wedding, or nobody ("Sin asignar"). Owners
+and collaborators can assign, reassign and unassign any item. Assignment is planning metadata, not
+authorization: every member can still see and edit every item, and assigning never changes status,
+dates or order. The database refuses an assignee from another wedding (composite foreign key on
+`(assignee_membership_id, wedding_id)`), and removing a member unassigns their items without deleting
+them. Pending invites can't be assigned. **Mis pendientes** (`?view=mine`, combinable with `?status=`)
+lists the items assigned to you in plan order. Each member can set how they appear in a wedding
+(`display_name`, scoped to that wedding, only by themselves). Without a name, others see a neutral
+role label; you always see yourself as "Tú". Emails and user ids are never shown.
+
 ## Stack
 
 Next.js (App Router) · React · TypeScript (strict) · Tailwind CSS · Supabase (`@supabase/ssr`) ·

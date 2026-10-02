@@ -7,16 +7,22 @@ export type Database = {
           Tables: {
             "checklist_items": {
                   Row: {
-                    "category": Database["public"]['Enums']["checklist_category"] | null,"completed_at": string | null,"completed_by": string | null,"created_at": string,"created_by": string | null,"description": string | null,"due_date": string | null,"id": string,"relative_days": number | null,"sort_order": number,"source_template_item_id": string | null,"status": Database["public"]['Enums']["checklist_item_status"],"timing_mode": Database["public"]['Enums']["checklist_timing_mode"],"title": string,"updated_at": string,"wedding_id": string
+                    "assignee_membership_id": string | null,"category": Database["public"]['Enums']["checklist_category"] | null,"completed_at": string | null,"completed_by": string | null,"created_at": string,"created_by": string | null,"description": string | null,"due_date": string | null,"id": string,"relative_days": number | null,"sort_order": number,"source_template_item_id": string | null,"status": Database["public"]['Enums']["checklist_item_status"],"timing_mode": Database["public"]['Enums']["checklist_timing_mode"],"title": string,"updated_at": string,"wedding_id": string
                   }
                   Insert: {
-                    "category"?: Database["public"]['Enums']["checklist_category"] | null,"completed_at"?: string | null,"completed_by"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"due_date"?: string | null,"id"?: string,"relative_days"?: number | null,"sort_order"?: number,"source_template_item_id"?: string | null,"status"?: Database["public"]['Enums']["checklist_item_status"],"timing_mode"?: Database["public"]['Enums']["checklist_timing_mode"],"title": string,"updated_at"?: string,"wedding_id": string
+                    "assignee_membership_id"?: string | null,"category"?: Database["public"]['Enums']["checklist_category"] | null,"completed_at"?: string | null,"completed_by"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"due_date"?: string | null,"id"?: string,"relative_days"?: number | null,"sort_order"?: number,"source_template_item_id"?: string | null,"status"?: Database["public"]['Enums']["checklist_item_status"],"timing_mode"?: Database["public"]['Enums']["checklist_timing_mode"],"title": string,"updated_at"?: string,"wedding_id": string
                   }
                   Update: {
-                    "category"?: Database["public"]['Enums']["checklist_category"] | null,"completed_at"?: string | null,"completed_by"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"due_date"?: string | null,"id"?: string,"relative_days"?: number | null,"sort_order"?: number,"source_template_item_id"?: string | null,"status"?: Database["public"]['Enums']["checklist_item_status"],"timing_mode"?: Database["public"]['Enums']["checklist_timing_mode"],"title"?: string,"updated_at"?: string,"wedding_id"?: string
+                    "assignee_membership_id"?: string | null,"category"?: Database["public"]['Enums']["checklist_category"] | null,"completed_at"?: string | null,"completed_by"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string | null,"due_date"?: string | null,"id"?: string,"relative_days"?: number | null,"sort_order"?: number,"source_template_item_id"?: string | null,"status"?: Database["public"]['Enums']["checklist_item_status"],"timing_mode"?: Database["public"]['Enums']["checklist_timing_mode"],"title"?: string,"updated_at"?: string,"wedding_id"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "checklist_items_assignee_same_wedding"
+      columns: ["assignee_membership_id","wedding_id"]
+isOneToOne: false
+      referencedRelation: "wedding_memberships"
+      referencedColumns: ["id","wedding_id"]
+    },{
       foreignKeyName: "checklist_items_source_template_item_id_fkey"
       columns: ["source_template_item_id"]
 isOneToOne: false
@@ -108,13 +114,13 @@ isOneToOne: true
                   ]
                 },"wedding_memberships": {
                   Row: {
-                    "created_at": string,"id": string,"role": Database["public"]['Enums']["wedding_role"],"updated_at": string,"user_id": string,"wedding_id": string
+                    "created_at": string,"display_name": string | null,"id": string,"role": Database["public"]['Enums']["wedding_role"],"updated_at": string,"user_id": string,"wedding_id": string
                   }
                   Insert: {
-                    "created_at"?: string,"id"?: string,"role": Database["public"]['Enums']["wedding_role"],"updated_at"?: string,"user_id": string,"wedding_id": string
+                    "created_at"?: string,"display_name"?: string | null,"id"?: string,"role": Database["public"]['Enums']["wedding_role"],"updated_at"?: string,"user_id": string,"wedding_id": string
                   }
                   Update: {
-                    "created_at"?: string,"id"?: string,"role"?: Database["public"]['Enums']["wedding_role"],"updated_at"?: string,"user_id"?: string,"wedding_id"?: string
+                    "created_at"?: string,"display_name"?: string | null,"id"?: string,"role"?: Database["public"]['Enums']["wedding_role"],"updated_at"?: string,"user_id"?: string,"wedding_id"?: string
                   }
                   Relationships: [
                     {
@@ -168,6 +174,9 @@ isOneToOne: false
 { Args: { "target_wedding_id": string }; Returns: {
               "already_initialized": boolean,"item_count": number,"template_key": string,"template_version": number
             }[]
+                           },
+"set_wedding_display_name":
+{ Args: { "new_display_name": string,"target_wedding_id": string }; Returns: string
                            }
           }
           Enums: {

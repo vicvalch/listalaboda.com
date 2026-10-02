@@ -2,7 +2,12 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { requireWeddingRole } from "@/lib/authz/wedding";
+import {
+  requireWeddingMembership,
+  requireWeddingRole,
+  type WeddingAccess,
+} from "@/lib/authz/wedding";
+import type { WeddingMember } from "@/lib/weddings/members";
 import type { WeddingInput } from "@/lib/weddings/validation";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -189,6 +194,75 @@ export async function updateWeddingSettings(
     // No row: the wedding vanished or the role changed since the check.
     if (!data || data.length === 0) return { ok: false, reason: "not_found" };
     return { ok: true };
+  } catch {
+    return { ok: false, reason: "error" };
+  }
+}
+
+// ----------------------------------------------------------------- members
+
+/**
+ * The wedding's current members, safe fields only: membership id, role,
+ * the name each member chose for this wedding, and whether it is the caller
+ * (by the caller's own membership id from the access check, never by input).
+ * No user ids, emails or auth data. Pending invites are not members and are
+ * not listed. Takes the `WeddingAccess` from a successful membership check,
+ * so it can't run before one. Returns null on failure.
+ */
+export async function listWeddingMembers(
+  supabase: Client,
+  access: WeddingAccess,
+): Promise<WeddingMember[] | null> {
+  try {
+    const { data, error } = await supabase
+      .from("wedding_memberships")
+      .select("id, role, display_name, created_at")
+      .eq("wedding_id", access.weddingId);
+    if (error || !data) return null;
+    return data.map((row) => ({
+      membershipId: row.id,
+      role: row.role,
+      displayName: row.display_name,
+      isCurrentUser: row.id === access.membershipId,
+      joinedAt: row.created_at,
+    }));
+  } catch {
+    return null;
+  }
+}
+
+export type UpdateDisplayNameResult =
+  | Readonly<{ ok: true; displayName: string | null }>
+  | Readonly<{ ok: false; reason: "unauthenticated" | "not_found" | "invalid" | "error" }>;
+
+/**
+ * Sets how the CALLER appears in this wedding (null clears it). There is no
+ * way to name whose membership to change: the `set_wedding_display_name`
+ * RPC only updates auth.uid()'s own membership, so an owner can't rename
+ * anyone else either. Any member may do it; it is not wedding settings.
+ */
+export async function updateMyDisplayName(
+  supabase: Client,
+  weddingId: string,
+  displayName: string | null,
+): Promise<UpdateDisplayNameResult> {
+  const access = await requireWeddingMembership(supabase, weddingId);
+  if (!access.ok) {
+    return { ok: false, reason: access.reason === "forbidden" ? "error" : access.reason };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc("set_wedding_display_name", {
+      target_wedding_id: access.access.weddingId,
+      new_display_name: displayName ?? "",
+    });
+    if (error) {
+      if (error.code === "23514") return { ok: false, reason: "invalid" };
+      if (error.message === "wedding_not_found") return { ok: false, reason: "not_found" };
+      if (error.code === "42501") return { ok: false, reason: "unauthenticated" };
+      return { ok: false, reason: "error" };
+    }
+    return { ok: true, displayName: data ?? null };
   } catch {
     return { ok: false, reason: "error" };
   }

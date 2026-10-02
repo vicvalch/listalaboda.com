@@ -86,6 +86,20 @@ export function nextItems(
   ).slice(0, limit);
 }
 
+// ------------------------------------------------------------ assignment
+
+/**
+ * "Mis pendientes": the items assigned to `membershipId` (the current
+ * member's own membership, resolved on the server), in the input's order.
+ * Status is left to the status filter.
+ */
+export function assignedTo<T extends ChecklistItem>(
+  items: readonly T[],
+  membershipId: string,
+): T[] {
+  return items.filter((item) => item.assigneeMembershipId === membershipId);
+}
+
 // ------------------------------------------------------------ categories
 
 export type CategoryGroup = Readonly<{

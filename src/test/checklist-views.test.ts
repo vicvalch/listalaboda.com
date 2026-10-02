@@ -19,7 +19,16 @@ function item(
   timing: ChecklistTiming = { mode: "none" },
   sortOrder = 10,
 ): ChecklistItem {
-  return { id, title: id, description: null, category: null, status, timing, sortOrder };
+  return {
+    id,
+    title: id,
+    description: null,
+    category: null,
+    status,
+    timing,
+    sortOrder,
+    assigneeMembershipId: null,
+  };
 }
 
 const statuses = (...list: ChecklistStatus[]) => list.map((status) => ({ status }));

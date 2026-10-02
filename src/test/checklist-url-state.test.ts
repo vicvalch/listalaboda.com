@@ -11,11 +11,11 @@ import {
 const BASE = "/app/weddings/x";
 
 describe("view parsing", () => {
-  it.each(["list", "plan", "category"] as const)("accepts %s", (value) => {
+  it.each(["list", "plan", "category", "mine"] as const)("accepts %s", (value) => {
     expect(parseChecklistView(value)).toBe(value);
   });
 
-  it.each([undefined, "", "PLAN", "calendar", "plan ", ["plan", "list"]])(
+  it.each([undefined, "", "PLAN", "calendar", "plan ", ["plan", "list"], "MINE", "mio", ["mine"]])(
     "falls back to list for %o",
     (value) => {
       expect(parseChecklistView(value)).toBe("list");
@@ -56,6 +56,31 @@ describe("checklistHref", () => {
       `${BASE}?view=category&status=pending`,
     );
     expect(checklistHref(BASE, { ...current, status: "done" })).toBe(`${BASE}?view=plan&status=done`);
+  });
+
+  it("builds Mis pendientes URLs, with and without a status", () => {
+    expect(checklistHref(BASE, { view: "mine", status: "all" })).toBe(`${BASE}?view=mine`);
+    expect(checklistHref(BASE, { view: "mine", status: "pending" })).toBe(
+      `${BASE}?view=mine&status=pending`,
+    );
+    expect(checklistHref(BASE, { view: "mine", status: "done" })).toBe(
+      `${BASE}?view=mine&status=done`,
+    );
+  });
+
+  it("switching status keeps mine, and leaving mine keeps the status", () => {
+    const current = { view: "mine" as ChecklistView, status: "pending" as const };
+    expect(checklistHref(BASE, { ...current, status: "not_applicable" })).toBe(
+      `${BASE}?view=mine&status=not_applicable`,
+    );
+    expect(checklistHref(BASE, { ...current, view: "list" })).toBe(`${BASE}?status=pending`);
+    expect(checklistHref(BASE, { ...current, view: "plan" })).toBe(
+      `${BASE}?view=plan&status=pending`,
+    );
+  });
+
+  it("offers exactly four views, mine last", () => {
+    expect(CHECKLIST_VIEWS).toEqual(["list", "plan", "category", "mine"]);
   });
 
   it("round-trips through the parsers for every combination", () => {

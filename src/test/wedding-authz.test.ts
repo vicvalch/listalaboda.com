@@ -16,13 +16,14 @@ const { requireWeddingMembership, requireWeddingRole } = await import(
 const SUPABASE_URL = "http://supabase.test";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const WEDDING_ID = "22222222-2222-4222-8222-222222222222";
+const MEMBERSHIP_ID = "33333333-3333-4333-8333-333333333333";
 const STORAGE_KEY = "authz-test";
 
 type Backend = {
   /** HTTP status for GET /auth/v1/user; 200 returns the signed-in user. */
   authStatus?: number;
   /** Membership rows PostgREST returns, or an HTTP error status. */
-  memberships?: ReadonlyArray<{ role: string }> | { status: number };
+  memberships?: ReadonlyArray<{ role: string; id?: string }> | { status: number };
   /** Throw from fetch, as on a network failure. */
   networkError?: boolean;
 };
@@ -61,7 +62,7 @@ function clientFor(backend: Backend, { signedIn = true } = {}) {
       const memberships = backend.memberships ?? [];
       return "status" in memberships
         ? json({ code: "XX000", message: "boom" }, memberships.status)
-        : json(memberships);
+        : json(memberships.map((m) => ({ id: MEMBERSHIP_ID, ...m })));
     }
     return json({ message: "unexpected request" }, 500);
   };
@@ -97,7 +98,7 @@ describe("requireWeddingMembership", () => {
 
     await expect(requireWeddingMembership(supabase, WEDDING_ID)).resolves.toEqual({
       ok: true,
-      access: { weddingId: WEDDING_ID, userId: USER_ID, role },
+      access: { weddingId: WEDDING_ID, userId: USER_ID, membershipId: MEMBERSHIP_ID, role },
     });
 
     // The lookup is scoped to the validated user, not to any client input.
@@ -164,6 +165,14 @@ describe("requireWeddingMembership", () => {
       reason: "not_found",
     });
   });
+
+  it("fails closed when the membership id is missing or malformed", async () => {
+    const { supabase } = clientFor({ memberships: [{ role: "owner", id: "not-a-uuid" }] });
+    await expect(requireWeddingMembership(supabase, WEDDING_ID)).resolves.toEqual({
+      ok: false,
+      reason: "error",
+    });
+  });
 });
 
 describe("requireWeddingRole", () => {
@@ -172,7 +181,7 @@ describe("requireWeddingRole", () => {
     const result = await requireWeddingRole(supabase, WEDDING_ID, ["owner"]);
     expect(result).toEqual({
       ok: true,
-      access: { weddingId: WEDDING_ID, userId: USER_ID, role: "owner" },
+      access: { weddingId: WEDDING_ID, userId: USER_ID, membershipId: MEMBERSHIP_ID, role: "owner" },
     });
   });
 

@@ -147,6 +147,7 @@ describe("itemFormValues", () => {
     status: "pending",
     timing: { mode: "relative_to_wedding", relativeDays: -270 },
     sortOrder: 10,
+    assigneeMembershipId: null,
   };
 
   it("turns a stored offset back into friendly fields", () => {

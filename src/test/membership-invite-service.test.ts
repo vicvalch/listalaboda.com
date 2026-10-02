@@ -76,7 +76,7 @@ function clientFor(backend: Backend) {
       return json({ id: USER_ID, aud: "authenticated", role: "authenticated" });
     }
     if (url.pathname === "/rest/v1/wedding_memberships") {
-      return json(backend.role ? [{ role: backend.role }] : []);
+      return json(backend.role ? [{ id: "33333333-3333-4333-8333-333333333333", role: backend.role }] : []);
     }
     if (url.pathname === "/rest/v1/membership_invites" && method === "POST") {
       const status = backend.insertStatus ?? 201;

@@ -16,6 +16,17 @@ Applying the template **copies** its items into the wedding. The wedding's copy 
 template changes never mutate existing weddings (template content changes ship as a new version).
 The template is seeded by a migration, so `npm run db:reset` is all a fresh database needs.
 
+**Planning views and wedding settings (LB-06).** The checklist has three views, kept in the URL
+(`?view=list|plan|category`, combinable with `?status=`): **Lista** shows the wedding's own stored
+order; **Plan** orders pending items by date (earliest effective date first, then items waiting for
+the wedding date, then undated items; ties by list order); **Por categoría** groups items with each
+category's progress. "Lo próximo" shows the first five pending items in plan order. Views are derived
+on read and never rewrite the stored order. Effective dates are derived, not persisted: a relative
+item's date is always the *current* wedding date plus its offset, so changing or clearing the wedding
+date in **Ajustes de la boda** (`/app/weddings/[id]/settings`, owner-only) moves every relative item
+at once, while items with a specific date stay put. No "overdue" status exists yet (there is no
+time-zone model).
+
 ## Stack
 
 Next.js (App Router) · React · TypeScript (strict) · Tailwind CSS · Supabase (`@supabase/ssr`) ·

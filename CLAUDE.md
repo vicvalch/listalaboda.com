@@ -61,6 +61,17 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - Status is exactly `pending | done | not_applicable`; the database stamps `completed_at`. Store timing
   rules (`relative_days`, negative = before the wedding), derive effective dates; never persist them.
 
+## Planning rules (LB-06)
+
+- Persisted order (`sort_order`) and planning order are different things. Planning order (Plan view,
+  "Lo próximo") is derived in memory by `@/lib/checklist/planning`; never write `sort_order` to provide it.
+- Effective due dates are derived from the *current* `weddings.wedding_date` + `relative_days` through
+  `@/lib/checklist/timing`; never persist them or rewrite items when the wedding date changes.
+  Absolute dates never move. Clearing the wedding date never clears `relative_days`.
+- Wedding settings (name, date) are owner-only through `updateWeddingSettings` in `@/lib/weddings/service`.
+- No "overdue"/"today"/"late" semantics until there is an explicit time-zone model.
+- Categories stay the fixed enum (Constitution §5); custom categories are Phase 3.
+
 ## Commands
 
 - `npm run verify`: lint, typecheck, unit tests, build (same as CI)
@@ -73,4 +84,5 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 Work is delivered in numbered prompts (LB-NN). LB-02 is the application foundation. LB-03 is the product
 data foundation: weddings, memberships, membership invites, RLS (no UI). LB-04 adds auth and membership
 flows (signup/login/logout, wedding creation, invites). LB-05 adds the checklist domain (templates,
-wedding checklist items, RLS) and the checklist-first wedding page. Don't implement ahead of the current prompt.
+wedding checklist items, RLS) and the checklist-first wedding page. LB-06 refines it: List/Plan/category
+views, "Lo próximo", owner-only wedding settings (no schema change). Don't implement ahead of the current prompt.

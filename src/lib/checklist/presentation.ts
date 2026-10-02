@@ -43,7 +43,7 @@ export function describeTiming(
 /**
  * One line for an item's timing, or null when it has no date:
  *   "15 de julio de 2027 · 30 días antes de la boda"
- *   "30 días antes de la boda · Se calculará cuando definas la fecha de la boda."
+ *   "30 días antes de la boda · La fecha exacta se calculará con la fecha de la boda."
  *   "15 de marzo de 2027"
  */
 export function timingLine(timing: ChecklistTiming, weddingDate: string | null): string | null {
@@ -57,7 +57,16 @@ export function timingLine(timing: ChecklistTiming, weddingDate: string | null):
   return parts.filter((part): part is string => part !== null).join(" · ");
 }
 
-export type StatusAction =Readonly<{ target: ChecklistStatus; label: string }>;
+/**
+ * A compact label for summaries such as "Lo próximo": the calendar date when
+ * known, else the relative rule, else "Sin fecha".
+ */
+export function shortTimingLabel(timing: ChecklistTiming, weddingDate: string | null): string {
+  const description = describeTiming(timing, weddingDate);
+  return description?.date ?? description?.relative ?? es.checklist.timing.none;
+}
+
+export type StatusAction = Readonly<{ target: ChecklistStatus; label: string }>;
 
 export type StatusControls = Readonly<{
   /** The done checkbox: pending ⇄ done. Absent for not_applicable items. */

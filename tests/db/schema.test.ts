@@ -16,10 +16,20 @@ const TABLES = [
   "guest_invitations",
   "guests",
   "rsvps",
+  "content_sections",
+  "wedding_publications",
 ];
 
-/** The guest capability: callable without an account, by token hash only. */
-const GUEST_TOKEN_FUNCTIONS = ["public.get_guest_invitation", "public.submit_guest_rsvp"];
+/**
+ * Callable without an account: the guest capability (by token hash only)
+ * and the published website (by public slug only).
+ */
+const ANON_FUNCTIONS = [
+  "public.get_guest_invitation",
+  "public.get_guest_invitation_site_slug",
+  "public.get_published_wedding_site",
+  "public.submit_guest_rsvp",
+];
 
 describe("schema guarantees", () => {
   it("RLS is enabled on every product table", async () => {
@@ -49,7 +59,7 @@ describe("schema guarantees", () => {
     expect(columns).toEqual([]);
   });
 
-  it("authenticated can INSERT only into membership invites, checklist items and the guest list", async () => {
+  it("authenticated can INSERT only into membership invites, checklist items, the guest list and site content", async () => {
     const rows = await sql<{ table_name: string }>(
       `select table_name from information_schema.column_privileges
        where grantee = 'authenticated' and privilege_type = 'INSERT'
@@ -59,13 +69,14 @@ describe("schema guarantees", () => {
     );
     expect(rows.map((r) => r.table_name).sort()).toEqual([
       "checklist_items",
+      "content_sections",
       "guest_invitations",
       "guests",
       "membership_invites",
     ]);
   });
 
-  it("every function pins search_path; only the guest token functions are executable by anon", async () => {
+  it("every function pins search_path; only the guest token and public site functions are executable by anon", async () => {
     const rows = await sql<{
       name: string;
       security_definer: boolean;
@@ -89,7 +100,10 @@ describe("schema guarantees", () => {
               and p.proname in ('create_wedding', 'accept_membership_invite',
                                 'initialize_wedding_checklist', 'set_wedding_display_name',
                                 'create_guest_invitation', 'get_guest_invitation',
-                                'submit_guest_rsvp'))
+                                'submit_guest_rsvp', 'save_wedding_site_section',
+                                'set_wedding_site_slug', 'publish_wedding_site',
+                                'unpublish_wedding_site', 'get_published_wedding_site',
+                                'get_guest_invitation_site_slug'))
        order by 1`,
     );
 
@@ -102,6 +116,7 @@ describe("schema guarantees", () => {
       "private.guest_invitation_expires_at",
       "private.has_wedding_role",
       "private.is_wedding_member",
+      "private.require_wedding_site_owner",
       "private.set_updated_at",
       "private.stamp_checklist_item_completion",
       "private.validate_wedding_time_zone",
@@ -109,13 +124,19 @@ describe("schema guarantees", () => {
       "public.create_guest_invitation",
       "public.create_wedding",
       "public.get_guest_invitation",
+      "public.get_guest_invitation_site_slug",
+      "public.get_published_wedding_site",
       "public.initialize_wedding_checklist",
+      "public.publish_wedding_site",
+      "public.save_wedding_site_section",
       "public.set_wedding_display_name",
+      "public.set_wedding_site_slug",
       "public.submit_guest_rsvp",
+      "public.unpublish_wedding_site",
     ]);
     for (const fn of rows) {
       expect(fn.config, fn.name).toEqual(['search_path=""']);
-      expect(fn.anon_exec, fn.name).toBe(GUEST_TOKEN_FUNCTIONS.includes(fn.name));
+      expect(fn.anon_exec, fn.name).toBe(ANON_FUNCTIONS.includes(fn.name));
       expect(fn.public_exec, fn.name).toBe(false);
     }
 
@@ -127,17 +148,26 @@ describe("schema guarantees", () => {
       "public.create_guest_invitation",
       "public.create_wedding",
       "public.get_guest_invitation",
+      "public.get_guest_invitation_site_slug",
+      "public.get_published_wedding_site",
       "public.initialize_wedding_checklist",
+      "public.publish_wedding_site",
+      "public.save_wedding_site_section",
       "public.set_wedding_display_name",
+      "public.set_wedding_site_slug",
       "public.submit_guest_rsvp",
+      "public.unpublish_wedding_site",
     ]);
 
     // SECURITY DEFINER only where a narrow boundary needs it. The organizer
-    // party RPC runs as the caller (RLS applies).
+    // party and site-section RPCs run as the caller (RLS applies).
     const definer = rows.filter((r) => r.security_definer).map((r) => r.name);
     expect(definer).toContain("public.get_guest_invitation");
     expect(definer).toContain("public.submit_guest_rsvp");
+    expect(definer).toContain("public.get_published_wedding_site");
+    expect(definer).toContain("public.publish_wedding_site");
     expect(definer).not.toContain("public.create_guest_invitation");
+    expect(definer).not.toContain("public.save_wedding_site_section");
   });
 
   it("no function takes a caller-supplied user id", async () => {
@@ -149,7 +179,10 @@ describe("schema guarantees", () => {
                            'is_wedding_member', 'has_wedding_role',
                            'initialize_wedding_checklist', 'set_wedding_display_name',
                            'create_guest_invitation', 'get_guest_invitation',
-                           'submit_guest_rsvp')
+                           'submit_guest_rsvp', 'save_wedding_site_section',
+                           'set_wedding_site_slug', 'publish_wedding_site',
+                           'unpublish_wedding_site', 'get_published_wedding_site',
+                           'get_guest_invitation_site_slug')
        order by 1`,
     );
     expect(rows).toEqual([
@@ -163,14 +196,23 @@ describe("schema guarantees", () => {
         args: "wedding_name text, wedding_date date, wedding_city text, wedding_time_zone text",
       },
       { name: "get_guest_invitation", args: "invitation_token_hash text" },
+      { name: "get_guest_invitation_site_slug", args: "invitation_token_hash text" },
+      { name: "get_published_wedding_site", args: "site_slug text" },
       { name: "has_wedding_role", args: "target_wedding_id uuid, allowed_roles wedding_role[]" },
       { name: "initialize_wedding_checklist", args: "target_wedding_id uuid" },
       { name: "is_wedding_member", args: "target_wedding_id uuid" },
+      { name: "publish_wedding_site", args: "target_wedding_id uuid" },
+      {
+        name: "save_wedding_site_section",
+        args: "target_wedding_id uuid, section_kind content_section_kind, section_title text, section_body text, section_visible boolean",
+      },
       {
         name: "set_wedding_display_name",
         args: "target_wedding_id uuid, new_display_name text",
       },
+      { name: "set_wedding_site_slug", args: "target_wedding_id uuid, new_slug text" },
       { name: "submit_guest_rsvp", args: "invitation_token_hash text, responses jsonb" },
+      { name: "unpublish_wedding_site", args: "target_wedding_id uuid" },
     ]);
   });
 

@@ -4,11 +4,15 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { Notice } from "@/components/ui/Notice";
-import { cardClass, secondaryButtonClass } from "@/components/ui/styles";
+import { cardClass, secondaryButtonClass, textLinkClass } from "@/components/ui/styles";
 import { getMessages } from "@/lib/i18n";
 import { GUEST_RSVP_COOKIE, GUEST_RSVP_PAGE_PATH } from "@/lib/rsvp/handoff";
-import { getGuestPartyByToken, type GuestParty } from "@/lib/rsvp/service";
+import { getGuestPartyByToken, getGuestPartySiteSlug, type GuestParty } from "@/lib/rsvp/service";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getPublishedWeddingSite } from "@/lib/wedding-site/public";
+import type { PublishedWeddingSite } from "@/lib/wedding-site/sections";
+import { publicSitePath } from "@/lib/wedding-site/slug";
+import { formatWeddingDate } from "@/lib/weddings/format";
 
 import { RsvpForm } from "./RsvpForm";
 
@@ -25,9 +29,12 @@ export const dynamic = "force-dynamic";
  * A guest party's RSVP page. No login and no account: the party is resolved
  * from the httpOnly handoff cookie (set by /rsvp/[token]) through the guest
  * token function, which also re-checks that the link is still usable. It
- * shows only the party's label and its own guests — no wedding details
- * (private until the couple publishes them), members, checklist or other
- * parties.
+ * shows the party's label and its own guests — no members, checklist or
+ * other parties. Wedding details stay private until the couple publishes
+ * the wedding website: only then does the page show the same public name,
+ * date and city anyone can read at /boda/<slug>, with a link to it. The
+ * token says WHICH wedding; publication alone decides whether its fields
+ * are shown. Unpublishing never affects the RSVP itself.
  *
  * Every unusable state — no cookie, malformed, unknown, revoked, expired,
  * rotated away, party deleted — renders the same generic page.
@@ -36,7 +43,8 @@ export default async function RsvpPage({ searchParams }: PageProps<"/rsvp">) {
   const copy = getMessages().rsvp;
   // Outside any try: reading cookies is what makes this render per-request.
   const token = (await cookies()).get(GUEST_RSVP_COOKIE)?.value ?? "";
-  const result = await getGuestPartyByToken(await createSupabaseServerClient(), token);
+  const supabase = await createSupabaseServerClient();
+  const result = await getGuestPartyByToken(supabase, token);
   const { saved } = await searchParams;
 
   if (!result.ok) {
@@ -58,10 +66,13 @@ export default async function RsvpPage({ searchParams }: PageProps<"/rsvp">) {
 
   const { party } = result;
   const allAnswered = party.guests.every((guest) => guest.attending !== null);
+  const siteSlug = await getGuestPartySiteSlug(supabase, token);
+  const site = siteSlug ? await getPublishedWeddingSite(supabase, siteSlug) : null;
 
   return (
     <Shell>
       <section className="space-y-6" aria-labelledby="rsvp-title">
+        {site?.ok ? <WeddingContext site={site.site} /> : null}
         <header className="space-y-2">
           <p className="text-muted text-sm font-semibold">{copy.partyLabel}</p>
           <h1 id="rsvp-title" className="text-2xl font-semibold tracking-tight break-words">
@@ -81,6 +92,26 @@ export default async function RsvpPage({ searchParams }: PageProps<"/rsvp">) {
         )}
       </section>
     </Shell>
+  );
+}
+
+/** Public fields of the published wedding website, never more. */
+function WeddingContext({ site }: { site: PublishedWeddingSite }) {
+  const copy = getMessages().rsvp;
+  const details = [site.weddingDate ? formatWeddingDate(site.weddingDate) : null, site.city].filter(
+    (detail): detail is string => detail !== null,
+  );
+  return (
+    <div className="space-y-1 border-b border-border pb-4" data-testid="rsvp-wedding-context">
+      <p className="text-muted text-sm font-semibold">{copy.weddingContextLabel}</p>
+      <p className="text-lg font-semibold break-words">{site.name}</p>
+      {details.length > 0 ? <p className="text-muted break-words">{details.join(" · ")}</p> : null}
+      <p className="pt-1">
+        <Link href={publicSitePath(site.slug)} className={`${textLinkClass} text-sm`}>
+          {copy.viewSite}
+        </Link>
+      </p>
+    </div>
   );
 }
 

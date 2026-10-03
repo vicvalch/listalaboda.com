@@ -84,6 +84,27 @@ export async function getGuestPartyByToken(
   }
 }
 
+/**
+ * The public address of the party's wedding website, or null. Two separate
+ * authorities meet here: the token must still be usable (it says WHICH
+ * wedding), and the wedding must be published (that alone makes its fields
+ * public). Holding a link never reveals an unpublished wedding; the page
+ * then reads the public fields through the public site boundary, exactly
+ * like any visitor. Errors and unusable links are simply null.
+ */
+export async function getGuestPartySiteSlug(supabase: Client, token: string): Promise<string | null> {
+  if (!isWellFormedCapabilityToken(token)) return null;
+  try {
+    const { data, error } = await supabase.rpc("get_guest_invitation_site_slug", {
+      invitation_token_hash: hashCapabilityToken(token),
+    });
+    if (error || typeof data !== "string") return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 export type SubmitRsvpResult =
   | Readonly<{ ok: true; party: GuestParty }>
   /**

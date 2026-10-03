@@ -68,6 +68,25 @@ isOneToOne: false
                   Relationships: [
 
                   ]
+                },"content_sections": {
+                  Row: {
+                    "body": string | null,"created_at": string,"id": string,"is_visible": boolean,"kind": Database["public"]['Enums']["content_section_kind"],"title": string | null,"updated_at": string,"wedding_id": string
+                  }
+                  Insert: {
+                    "body"?: string | null,"created_at"?: string,"id"?: string,"is_visible"?: boolean,"kind": Database["public"]['Enums']["content_section_kind"],"title"?: string | null,"updated_at"?: string,"wedding_id": string
+                  }
+                  Update: {
+                    "body"?: string | null,"created_at"?: string,"id"?: string,"is_visible"?: boolean,"kind"?: Database["public"]['Enums']["content_section_kind"],"title"?: string | null,"updated_at"?: string,"wedding_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "content_sections_wedding_id_fkey"
+      columns: ["wedding_id"]
+isOneToOne: false
+      referencedRelation: "weddings"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"guest_invitations": {
                   Row: {
                     "created_at": string,"created_by": string | null,"id": string,"label": string,"revoked_at": string | null,"token_hash": string,"token_issued_at": string,"updated_at": string,"wedding_id": string
@@ -188,6 +207,25 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"wedding_publications": {
+                  Row: {
+                    "created_at": string,"published_at": string | null,"slug": string,"updated_at": string,"wedding_id": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"published_at"?: string | null,"slug": string,"updated_at"?: string,"wedding_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"published_at"?: string | null,"slug"?: string,"updated_at"?: string,"wedding_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "wedding_publications_wedding_id_fkey"
+      columns: ["wedding_id"]
+isOneToOne: true
+      referencedRelation: "weddings"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"weddings": {
                   Row: {
                     "city": string | null,"created_at": string,"created_by": string | null,"id": string,"name": string,"time_zone": string | null,"updated_at": string,"wedding_date": string | null
@@ -237,22 +275,42 @@ isOneToOne: false
               "attending": boolean,"dietary_note": string,"guest_id": string,"guest_name": string,"party_label": string
             }[]
                            },
+"get_guest_invitation_site_slug":
+{ Args: { "invitation_token_hash": string }; Returns: string
+                           },
+"get_published_wedding_site":
+{ Args: { "site_slug": string }; Returns: {
+              "section_body": string,"section_kind": Database["public"]['Enums']["content_section_kind"],"section_title": string,"wedding_city": string,"wedding_date": string,"wedding_name": string
+            }[]
+                           },
 "initialize_wedding_checklist":
 { Args: { "target_wedding_id": string }; Returns: {
               "already_initialized": boolean,"item_count": number,"template_key": string,"template_version": number
             }[]
                            },
+"publish_wedding_site":
+{ Args: { "target_wedding_id": string }; Returns: string
+                           },
+"save_wedding_site_section":
+{ Args: { "section_body": string,"section_kind": Database["public"]['Enums']["content_section_kind"],"section_title": string,"section_visible": boolean,"target_wedding_id": string }; Returns: undefined
+                           },
 "set_wedding_display_name":
 { Args: { "new_display_name": string,"target_wedding_id": string }; Returns: string
+                           },
+"set_wedding_site_slug":
+{ Args: { "new_slug": string,"target_wedding_id": string }; Returns: string
                            },
 "submit_guest_rsvp":
 { Args: { "invitation_token_hash": string,"responses": Json }; Returns: {
               "attending": boolean,"dietary_note": string,"guest_id": string,"guest_name": string,"party_label": string
             }[]
+                           },
+"unpublish_wedding_site":
+{ Args: { "target_wedding_id": string }; Returns: undefined
                            }
           }
           Enums: {
-            "checklist_category": "first_steps"|"venue_and_date"|"vendors"|"attire"|"invitations"|"ceremony"|"reception"|"final_preparations"|"after_wedding","checklist_item_status": "pending"|"done"|"not_applicable","checklist_timing_mode": "none"|"relative_to_wedding"|"absolute","wedding_role": "owner"|"collaborator"
+            "checklist_category": "first_steps"|"venue_and_date"|"vendors"|"attire"|"invitations"|"ceremony"|"reception"|"final_preparations"|"after_wedding","checklist_item_status": "pending"|"done"|"not_applicable","checklist_timing_mode": "none"|"relative_to_wedding"|"absolute","content_section_kind": "intro"|"ceremony"|"reception"|"schedule"|"dress_code"|"faq"|"rsvp","wedding_role": "owner"|"collaborator"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -368,7 +426,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "checklist_category": ["first_steps", "venue_and_date", "vendors", "attire", "invitations", "ceremony", "reception", "final_preparations", "after_wedding"],"checklist_item_status": ["pending", "done", "not_applicable"],"checklist_timing_mode": ["none", "relative_to_wedding", "absolute"],"wedding_role": ["owner", "collaborator"]
+            "checklist_category": ["first_steps", "venue_and_date", "vendors", "attire", "invitations", "ceremony", "reception", "final_preparations", "after_wedding"],"checklist_item_status": ["pending", "done", "not_applicable"],"checklist_timing_mode": ["none", "relative_to_wedding", "absolute"],"content_section_kind": ["intro", "ceremony", "reception", "schedule", "dress_code", "faq", "rsvp"],"wedding_role": ["owner", "collaborator"]
           }
         }
 } as const

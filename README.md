@@ -68,13 +68,37 @@ guest-list content; only owners replace or revoke links, since that changes who 
 bearer link (enforced by the server and the database). A link expires 30 days after the *current* wedding date
 (365 days after it was generated if the wedding has no date). Opening the link moves the token into a
 short-lived httpOnly cookie and redirects to `/rsvp`, where the party answers for every guest at once,
-and can come back later to change it. Guests see only their party's label and guests: no wedding
-details, members, checklist or other parties. Guest reads and writes go through two narrow database
+and can come back later to change it. Guests see only their party's label and guests (plus the wedding's public
+details once its website is published, LB-10): no members, checklist or other parties. Guest reads and writes go through two narrow database
 functions keyed by the token hash. Anonymous clients have no table access, and RSVP is never open (no
 name search). A GuestInvitation is not a MembershipInvite and never creates an account or membership.
 
-Still deferred: invitation/confirmation emails and reminders (Resend), the published wedding website,
-activity history, and linking checklist items to guest work.
+**Published wedding website (LB-10, Phase 2).** Each wedding has a **Sitio web** page
+(`/app/weddings/[id]/site`), secondary to the checklist, where any member (owner or collaborator) writes the
+website's sections (ContentSections). The sections are fixed, one of each: introduction, ceremony,
+reception, schedule ("Programa"), dress code, FAQ and RSVP. Each has an optional title (blank uses a neutral
+default such as "Bienvenidos"), a plain-text body (line breaks kept; no HTML, Markdown, images or embeds) and a
+"Mostrar en el sitio" switch, off by default. A visible section needs text, except RSVP, which then shows fixed
+guidance to use the personal invitation link.
+
+**Nothing is public until an owner publishes it.** Only owners choose the site's address (`/boda/<slug>`:
+lowercase letters, digits and hyphens, 3–80 characters, globally unique, a few app words reserved; a suggestion
+from the wedding name is prefilled but never saved on its own), publish and unpublish. The service and the
+database enforce that (clients have no write privilege on `wedding_publications`; the owner-checked functions do
+the writes). Publishing needs an address and at least one visible section. A published site shows the wedding's
+name, date and city and its visible sections, through one narrow database function keyed by slug; anonymous
+clients still have no table access, and an unknown, unpublished or malformed address is the same 404. Saved
+edits appear on a published site immediately (there are no drafts). Unpublishing takes the site offline at once
+and keeps the content and address, so publishing again restores the same URL. Changing a published address
+(with confirmation) makes the old URL stop working; there are no redirects. Public pages are never cached and
+are marked `noindex, nofollow`: anyone with the address can read them, but they aren't offered to search engines.
+
+The public RSVP section is never an RSVP form: guests still answer only through their party's link
+(`/rsvp/<token>`). While the site is published, the RSVP page also shows the wedding's public name, date and city
+with a link to the site; unpublishing removes that context and never affects guest links.
+
+Still deferred: invitation/confirmation emails and reminders (Resend), activity history, and linking checklist
+items to guest work.
 
 ## Stack
 

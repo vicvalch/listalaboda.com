@@ -106,6 +106,9 @@ export default async function WeddingPage({
           <Link href={`/app/weddings/${wedding.id}/guests`} className={textLinkClass}>
             {getMessages().guests.navLink}
           </Link>
+          <Link href={`/app/weddings/${wedding.id}/site`} className={textLinkClass}>
+            {getMessages().site.navLink}
+          </Link>
           {isOwner ? (
             <Link href={`/app/weddings/${wedding.id}/settings`} className={textLinkClass}>
               {copy.settingsLink}

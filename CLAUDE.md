@@ -125,6 +125,30 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   Same-wedding composite FKs keep guests/RSVPs in their party's wedding. The checklist stays the home;
   Invitados is secondary.
 
+## Wedding website rules (LB-10)
+
+- Nothing is public unless an owner explicitly publishes the wedding website. A wedding, content, a slug
+  or a visible section existing is never enough: public = `wedding_publications.published_at` set AND the
+  section `is_visible` (default false). Wedding fields stay private outside that projection.
+- The public slug (`/boda/<slug>`) is a locator, never a capability or authorization input. Missing,
+  unpublished and malformed slugs look identical (404). Never put a wedding UUID in a public URL.
+- anon never reads `weddings`, `content_sections`, `wedding_publications`, memberships or guest tables. The only
+  public read is `get_published_wedding_site(slug)` via `@/lib/wedding-site/public`: name, date, city and visible
+  sections (kind, title, body). No ids, time zone, timestamps, members, checklist or guest data. Add a field
+  there only as an explicit product decision.
+- Owners and collaborators edit ContentSections (`@/lib/wedding-site/service`, keyed by wedding + kind, never a
+  browser-sent row id). Choosing/changing the slug, publishing and unpublishing are owner-only: service
+  `requireWeddingRole` + owner-checked SECURITY DEFINER RPCs; clients have no write grant on `wedding_publications`.
+- Section kinds are the fixed Constitution set (`intro, ceremony, reception, schedule, dress_code, faq, rsvp`),
+  one row per kind; no CMS, no reordering, no custom kinds.
+- User content is plain text only: render through React text with `whitespace-pre-line`; never
+  `dangerouslySetInnerHTML`, Markdown/HTML rendering, embeds or user-supplied URLs as media.
+- The public RSVP section never means open RSVP: no form, guest search or guest data; RSVP stays token-gated
+  (`/rsvp/<token>`). The RSVP page may show the published context (`get_guest_invitation_site_slug`) only while
+  the site is published; unpublishing never affects guest links.
+- Public site pages are dynamic/no-store and `noindex, nofollow` (public by address, not discoverable).
+  Saved edits to a published site are live immediately; there are no drafts or versions.
+
 ## Commands
 
 - `npm run verify`: lint, typecheck, unit tests, build (same as CI)
@@ -142,5 +166,6 @@ views, "Lo próximo", owner-only wedding settings (no schema change). LB-07 adds
 assignment, "Mis pendientes" and wedding-scoped member display names. LB-08 completes the MVP gaps: optional
 wedding city, IANA wedding time zone, derived overdue ("Atrasado") and owner-only member removal. LB-09
 starts Phase 2: GuestInvitation (household/party) → Guest → per-guest RSVP, token links without guest
-accounts and the couple's "Invitados" page (no emails, website or activity history yet). Don't implement
-ahead of the current prompt.
+accounts and the couple's "Invitados" page (no emails, website or activity history yet). LB-10 adds the
+published wedding website: ContentSection, the "Sitio web" editor, owner-only slug/publish/unpublish and the
+public `/boda/[slug]` page (no email or activity history yet). Don't implement ahead of the current prompt.

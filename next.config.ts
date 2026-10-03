@@ -32,6 +32,15 @@ const securityHeaders = [
  */
 const guestRsvpHeaders = [{ key: "Referrer-Policy", value: "no-referrer" }];
 
+/**
+ * Published wedding websites (LB-10). Public to anyone with the address,
+ * but not meant to be discovered through search engines (a separate privacy
+ * choice the couple hasn't made): the page's robots meta says noindex,
+ * nofollow, and this header says it for every response under /boda,
+ * including the not-found ones. The pages are dynamic and never cached.
+ */
+const publicSiteHeaders = [{ key: "X-Robots-Tag", value: "noindex, nofollow" }];
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   async headers() {
@@ -39,6 +48,7 @@ const nextConfig: NextConfig = {
       { source: "/:path*", headers: securityHeaders },
       { source: "/rsvp", headers: guestRsvpHeaders },
       { source: "/rsvp/:path*", headers: guestRsvpHeaders },
+      { source: "/boda/:path*", headers: publicSiteHeaders },
     ];
   },
 };

@@ -101,13 +101,17 @@ export default async function WeddingPage({
             </dd>
           </div>
         </dl>
-        {isOwner ? (
-          <p>
-            <Link href={`/app/weddings/${wedding.id}/settings`} className={`${textLinkClass} text-sm`}>
+        {/* Secondary areas: the checklist below stays the wedding's home. */}
+        <p className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          <Link href={`/app/weddings/${wedding.id}/guests`} className={textLinkClass}>
+            {getMessages().guests.navLink}
+          </Link>
+          {isOwner ? (
+            <Link href={`/app/weddings/${wedding.id}/settings`} className={textLinkClass}>
               {copy.settingsLink}
             </Link>
-          </p>
-        ) : null}
+          ) : null}
+        </p>
       </header>
 
       <ChecklistSection

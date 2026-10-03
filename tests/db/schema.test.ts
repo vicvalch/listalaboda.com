@@ -13,7 +13,13 @@ const TABLES = [
   "checklist_template_items",
   "wedding_checklist_template_applications",
   "checklist_items",
+  "guest_invitations",
+  "guests",
+  "rsvps",
 ];
+
+/** The guest capability: callable without an account, by token hash only. */
+const GUEST_TOKEN_FUNCTIONS = ["public.get_guest_invitation", "public.submit_guest_rsvp"];
 
 describe("schema guarantees", () => {
   it("RLS is enabled on every product table", async () => {
@@ -43,7 +49,7 @@ describe("schema guarantees", () => {
     expect(columns).toEqual([]);
   });
 
-  it("authenticated can INSERT only into membership invites and checklist items", async () => {
+  it("authenticated can INSERT only into membership invites, checklist items and the guest list", async () => {
     const rows = await sql<{ table_name: string }>(
       `select table_name from information_schema.column_privileges
        where grantee = 'authenticated' and privilege_type = 'INSERT'
@@ -51,10 +57,15 @@ describe("schema guarantees", () => {
        group by table_name`,
       [TABLES],
     );
-    expect(rows.map((r) => r.table_name).sort()).toEqual(["checklist_items", "membership_invites"]);
+    expect(rows.map((r) => r.table_name).sort()).toEqual([
+      "checklist_items",
+      "guest_invitations",
+      "guests",
+      "membership_invites",
+    ]);
   });
 
-  it("every function pins search_path and is not executable by anon/public", async () => {
+  it("every function pins search_path; only the guest token functions are executable by anon", async () => {
     const rows = await sql<{
       name: string;
       security_definer: boolean;
@@ -76,27 +87,35 @@ describe("schema guarantees", () => {
        where (p.pronamespace = 'private'::regnamespace)
           or (p.pronamespace = 'public'::regnamespace
               and p.proname in ('create_wedding', 'accept_membership_invite',
-                                'initialize_wedding_checklist', 'set_wedding_display_name'))
+                                'initialize_wedding_checklist', 'set_wedding_display_name',
+                                'create_guest_invitation', 'get_guest_invitation',
+                                'submit_guest_rsvp'))
        order by 1`,
     );
 
     expect(rows.map((r) => r.name)).toEqual([
       "private.assign_checklist_item_sort_order",
+      "private.enforce_guest_invitation_has_guest",
       "private.enforce_wedding_has_owner",
+      "private.guard_guest_invitation_link",
       "private.guard_membership_invite_state",
+      "private.guest_invitation_expires_at",
       "private.has_wedding_role",
       "private.is_wedding_member",
       "private.set_updated_at",
       "private.stamp_checklist_item_completion",
       "private.validate_wedding_time_zone",
       "public.accept_membership_invite",
+      "public.create_guest_invitation",
       "public.create_wedding",
+      "public.get_guest_invitation",
       "public.initialize_wedding_checklist",
       "public.set_wedding_display_name",
+      "public.submit_guest_rsvp",
     ]);
     for (const fn of rows) {
       expect(fn.config, fn.name).toEqual(['search_path=""']);
-      expect(fn.anon_exec, fn.name).toBe(false);
+      expect(fn.anon_exec, fn.name).toBe(GUEST_TOKEN_FUNCTIONS.includes(fn.name));
       expect(fn.public_exec, fn.name).toBe(false);
     }
 
@@ -105,10 +124,20 @@ describe("schema guarantees", () => {
       "private.has_wedding_role",
       "private.is_wedding_member",
       "public.accept_membership_invite",
+      "public.create_guest_invitation",
       "public.create_wedding",
+      "public.get_guest_invitation",
       "public.initialize_wedding_checklist",
       "public.set_wedding_display_name",
+      "public.submit_guest_rsvp",
     ]);
+
+    // SECURITY DEFINER only where a narrow boundary needs it. The organizer
+    // party RPC runs as the caller (RLS applies).
+    const definer = rows.filter((r) => r.security_definer).map((r) => r.name);
+    expect(definer).toContain("public.get_guest_invitation");
+    expect(definer).toContain("public.submit_guest_rsvp");
+    expect(definer).not.toContain("public.create_guest_invitation");
   });
 
   it("no function takes a caller-supplied user id", async () => {
@@ -118,15 +147,22 @@ describe("schema guarantees", () => {
        where p.pronamespace in ('private'::regnamespace, 'public'::regnamespace)
          and p.proname in ('create_wedding', 'accept_membership_invite',
                            'is_wedding_member', 'has_wedding_role',
-                           'initialize_wedding_checklist', 'set_wedding_display_name')
+                           'initialize_wedding_checklist', 'set_wedding_display_name',
+                           'create_guest_invitation', 'get_guest_invitation',
+                           'submit_guest_rsvp')
        order by 1`,
     );
     expect(rows).toEqual([
       { name: "accept_membership_invite", args: "invite_token_hash text" },
       {
+        name: "create_guest_invitation",
+        args: "target_wedding_id uuid, party_label text, invitation_token_hash text, guest_names text[]",
+      },
+      {
         name: "create_wedding",
         args: "wedding_name text, wedding_date date, wedding_city text, wedding_time_zone text",
       },
+      { name: "get_guest_invitation", args: "invitation_token_hash text" },
       { name: "has_wedding_role", args: "target_wedding_id uuid, allowed_roles wedding_role[]" },
       { name: "initialize_wedding_checklist", args: "target_wedding_id uuid" },
       { name: "is_wedding_member", args: "target_wedding_id uuid" },
@@ -134,6 +170,7 @@ describe("schema guarantees", () => {
         name: "set_wedding_display_name",
         args: "target_wedding_id uuid, new_display_name text",
       },
+      { name: "submit_guest_rsvp", args: "invitation_token_hash text, responses jsonb" },
     ]);
   });
 
@@ -207,6 +244,27 @@ describe("schema guarantees", () => {
        where table_schema = 'public'
          and (column_name ilike '%overdue%' or column_name ilike '%effective%'
               or column_name in ('late', 'is_late', 'late_status'))`,
+    );
+    expect(rows).toEqual([]);
+  });
+
+  it("no party size, plus-one or response counter is stored", async () => {
+    const rows = await sql(
+      `select 1 from information_schema.columns
+       where table_schema = 'public'
+         and table_name in ('weddings', 'guest_invitations', 'guests', 'rsvps')
+         and (column_name ilike '%party_size%' or column_name ilike '%plus_one%'
+              or column_name ilike '%count%' or column_name ilike '%max_guests%'
+              or column_name in ('email', 'phone', 'user_id', 'auth_user_id', 'membership_id'))`,
+    );
+    expect(rows).toEqual([]);
+  });
+
+  it("guest link expiry is derived, never stored", async () => {
+    const rows = await sql(
+      `select 1 from information_schema.columns
+       where table_schema = 'public' and table_name = 'guest_invitations'
+         and column_name ilike '%expire%'`,
     );
     expect(rows).toEqual([]);
   });

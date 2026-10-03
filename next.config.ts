@@ -23,10 +23,23 @@ const securityHeaders = [
   { key: "Strict-Transport-Security", value: "max-age=63072000" },
 ];
 
+/**
+ * Guest RSVP routes (LB-09). /rsvp/[token] hands the token off to an
+ * httpOnly cookie and redirects, and /rsvp never carries it in the URL;
+ * still, nothing on these routes should ever send a Referer. Listed after
+ * the global entry: for the same key, the last matching entry wins. Both
+ * routes are dynamic and send `no-store` themselves.
+ */
+const guestRsvpHeaders = [{ key: "Referrer-Policy", value: "no-referrer" }];
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      { source: "/rsvp", headers: guestRsvpHeaders },
+      { source: "/rsvp/:path*", headers: guestRsvpHeaders },
+    ];
   },
 };
 

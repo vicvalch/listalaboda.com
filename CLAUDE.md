@@ -96,6 +96,35 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   their other memberships or checklist items. Assigned items become unassigned via the FK. The generic removal
   flow never removes the caller (no "leave wedding"), and the final owner stays database-enforced.
 
+## Guest list and RSVP rules (LB-09)
+
+- MembershipInvite != GuestInvitation. A MembershipInvite makes an authenticated member; a
+  GuestInvitation (`guest_invitations`) is one household/party's RSVP capability. Never share a table,
+  service or token semantics between them (only the crypto primitive `@/lib/security/capability-token`).
+- Guests have no Supabase Auth account, no membership and no contact data; a guest token never grants
+  WeddingMembership. A party has one or more named Guests (non-empty, database-enforced); party size is
+  derived from `guests` rows, with no fixed maximum. No stored party size or counters; explicit invited
+  capacity / `max_guests` / plus-one semantics are not modeled yet (a future product decision).
+- Guest link tokens: CSPRNG (256 bits), plaintext only in the link returned once by create/rotate, the
+  `/rsvp/[token]` path and the httpOnly `lb_guest_rsvp` handoff cookie (path `/rsvp`). Only the SHA-256
+  hash is stored, and `token_hash` is never readable through the API. Never log a token or put it in a query string.
+- Link expiry is derived (`private.guest_invitation_expires_at`, mirrored by `@/lib/guests/link`) from the
+  current wedding date; never store it. Revoke = `revoked_at` (a revoked token stays dead); "Generar nuevo
+  enlace" = new hash on the same party.
+- A token unlocks exactly one Wedding + one GuestInvitation: guests read and write only through
+  `get_guest_invitation`/`submit_guest_rsvp` (token hash in, that party only, via `@/lib/rsvp/service`).
+  anon has no table privileges; no open RSVP (no name/email lookup); no service role. Unknown, revoked,
+  expired and deleted links all look the same.
+- The guest page shows only the party label and its guests. No wedding fields (private until explicit
+  publishing), members, checklist or other parties.
+- One current RSVP per Guest (`rsvps.guest_id` is the primary key): resubmitting updates, never duplicates.
+  A party answers every guest at once, each explicitly; unanswered is never "No". Organizers read RSVPs, never write them.
+- Owners and collaborators manage guest-list content (parties, guests, reading RSVPs) through
+  `@/lib/guests/service`; creating a party also issues its first link. Only owners rotate or revoke a
+  GuestInvitation link (service `requireWeddingRole` + the `guest_link_owner_only` trigger), never UI-only.
+  Same-wedding composite FKs keep guests/RSVPs in their party's wedding. The checklist stays the home;
+  Invitados is secondary.
+
 ## Commands
 
 - `npm run verify`: lint, typecheck, unit tests, build (same as CI)
@@ -111,5 +140,7 @@ flows (signup/login/logout, wedding creation, invites). LB-05 adds the checklist
 wedding checklist items, RLS) and the checklist-first wedding page. LB-06 refines it: List/Plan/category
 views, "Lo próximo", owner-only wedding settings (no schema change). LB-07 adds single-assignee checklist
 assignment, "Mis pendientes" and wedding-scoped member display names. LB-08 completes the MVP gaps: optional
-wedding city, IANA wedding time zone, derived overdue ("Atrasado") and owner-only member removal. Don't
-implement ahead of the current prompt.
+wedding city, IANA wedding time zone, derived overdue ("Atrasado") and owner-only member removal. LB-09
+starts Phase 2: GuestInvitation (household/party) → Guest → per-guest RSVP, token links without guest
+accounts and the couple's "Invitados" page (no emails, website or activity history yet). Don't implement
+ahead of the current prompt.

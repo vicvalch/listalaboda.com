@@ -68,6 +68,44 @@ isOneToOne: false
                   Relationships: [
 
                   ]
+                },"guest_invitations": {
+                  Row: {
+                    "created_at": string,"created_by": string | null,"id": string,"label": string,"revoked_at": string | null,"token_hash": string,"token_issued_at": string,"updated_at": string,"wedding_id": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"created_by"?: string | null,"id"?: string,"label": string,"revoked_at"?: string | null,"token_hash": string,"token_issued_at"?: string,"updated_at"?: string,"wedding_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"created_by"?: string | null,"id"?: string,"label"?: string,"revoked_at"?: string | null,"token_hash"?: string,"token_issued_at"?: string,"updated_at"?: string,"wedding_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "guest_invitations_wedding_id_fkey"
+      columns: ["wedding_id"]
+isOneToOne: false
+      referencedRelation: "weddings"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"guests": {
+                  Row: {
+                    "created_at": string,"guest_invitation_id": string,"id": string,"name": string,"updated_at": string,"wedding_id": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"guest_invitation_id": string,"id"?: string,"name": string,"updated_at"?: string,"wedding_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"guest_invitation_id"?: string,"id"?: string,"name"?: string,"updated_at"?: string,"wedding_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "guests_invitation_same_wedding"
+      columns: ["guest_invitation_id","wedding_id"]
+isOneToOne: false
+      referencedRelation: "guest_invitations"
+      referencedColumns: ["id","wedding_id"]
+    }
+                  ]
                 },"membership_invites": {
                   Row: {
                     "accepted_at": string | null,"accepted_by": string | null,"created_at": string,"created_by": string | null,"email": string | null,"expires_at": string,"id": string,"intended_role": Database["public"]['Enums']["wedding_role"],"revoked_at": string | null,"token_hash": string,"updated_at": string,"wedding_id": string
@@ -85,6 +123,25 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "weddings"
       referencedColumns: ["id"]
+    }
+                  ]
+                },"rsvps": {
+                  Row: {
+                    "attending": boolean,"created_at": string,"dietary_note": string | null,"guest_id": string,"updated_at": string,"wedding_id": string
+                  }
+                  Insert: {
+                    "attending": boolean,"created_at"?: string,"dietary_note"?: string | null,"guest_id": string,"updated_at"?: string,"wedding_id": string
+                  }
+                  Update: {
+                    "attending"?: boolean,"created_at"?: string,"dietary_note"?: string | null,"guest_id"?: string,"updated_at"?: string,"wedding_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "rsvps_guest_same_wedding"
+      columns: ["guest_id","wedding_id"]
+isOneToOne: false
+      referencedRelation: "guests"
+      referencedColumns: ["id","wedding_id"]
     }
                   ]
                 },"wedding_checklist_template_applications": {
@@ -155,6 +212,9 @@ isOneToOne: false
               "already_member": boolean,"role": Database["public"]['Enums']["wedding_role"],"wedding_id": string
             }[]
                            },
+"create_guest_invitation":
+{ Args: { "guest_names": (string)[],"invitation_token_hash": string,"party_label": string,"target_wedding_id": string }; Returns: string
+                           },
 "create_wedding":
 { Args: { "wedding_city"?: string,"wedding_date"?: string,"wedding_name": string,"wedding_time_zone"?: string }; Returns: {
               "city": string | null,
@@ -172,6 +232,11 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"get_guest_invitation":
+{ Args: { "invitation_token_hash": string }; Returns: {
+              "attending": boolean,"dietary_note": string,"guest_id": string,"guest_name": string,"party_label": string
+            }[]
+                           },
 "initialize_wedding_checklist":
 { Args: { "target_wedding_id": string }; Returns: {
               "already_initialized": boolean,"item_count": number,"template_key": string,"template_version": number
@@ -179,6 +244,11 @@ isOneToOne: false
                            },
 "set_wedding_display_name":
 { Args: { "new_display_name": string,"target_wedding_id": string }; Returns: string
+                           },
+"submit_guest_rsvp":
+{ Args: { "invitation_token_hash": string,"responses": Json }; Returns: {
+              "attending": boolean,"dietary_note": string,"guest_id": string,"guest_name": string,"party_label": string
+            }[]
                            }
           }
           Enums: {

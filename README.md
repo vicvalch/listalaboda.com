@@ -51,6 +51,31 @@ Plan view; "Lo próximo" lists only non-overdue pending items. Owners can **remo
 their account or other weddings; items assigned to them stay and become "Sin asignar". Nobody removes
 themselves through this flow, and the last owner can never be removed (database-enforced).
 
+**Guest list and RSVP foundation (LB-09, Phase 2).** Each wedding has an **Invitados** page
+(`/app/weddings/[id]/guests`), secondary to the checklist, that any member (owner or collaborator)
+manages. Guests are organized in **parties** (GuestInvitations: "Familia Pérez", "Ana y Carlos",
+"María") holding one or more named **guests**; party size is simply the number of guests (an explicit
+invited capacity, `max_guests` or plus-ones are not modeled yet). Guests have no account, membership,
+email or phone. Each guest
+has at most one current **RSVP** (attending yes/no plus an optional food note); no RSVP row means "Sin
+responder". Counts (total, attending, not attending, pending) are derived, never stored.
+
+Each party gets a **guest link** (`/rsvp/<token>`). The token is 256 bits from a CSPRNG; only its
+SHA-256 hash is stored, so the link is shown once when the party is created (by any member) or when
+"Generar nuevo enlace" replaces it (the old link stops working at once; guests and answers stay).
+"Revocar acceso" disables the link without deleting anything. Owners and collaborators manage the
+guest-list content; only owners replace or revoke links, since that changes who holds a working
+bearer link (enforced by the server and the database). A link expires 30 days after the *current* wedding date
+(365 days after it was generated if the wedding has no date). Opening the link moves the token into a
+short-lived httpOnly cookie and redirects to `/rsvp`, where the party answers for every guest at once,
+and can come back later to change it. Guests see only their party's label and guests: no wedding
+details, members, checklist or other parties. Guest reads and writes go through two narrow database
+functions keyed by the token hash. Anonymous clients have no table access, and RSVP is never open (no
+name search). A GuestInvitation is not a MembershipInvite and never creates an account or membership.
+
+Still deferred: invitation/confirmation emails and reminders (Resend), the published wedding website,
+activity history, and linking checklist items to guest work.
+
 ## Stack
 
 Next.js (App Router) · React · TypeScript (strict) · Tailwind CSS · Supabase (`@supabase/ssr`) ·

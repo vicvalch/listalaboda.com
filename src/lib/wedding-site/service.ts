@@ -101,6 +101,30 @@ export async function getWeddingSiteEditor(
   }
 }
 
+/**
+ * The public path of the wedding's website (`/boda/<slug>`) if — and only
+ * if — it is published right now, for members linking to it (the invitation
+ * email). Read from the database after a membership check; a slug from the
+ * browser is never used. Unpublished, no address yet, or a failed read →
+ * null (the link is simply left out).
+ */
+export async function getPublishedSitePath(
+  supabase: Client,
+  access: WeddingAccess,
+): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from("wedding_publications")
+      .select("slug, published_at")
+      .eq("wedding_id", access.weddingId)
+      .maybeSingle();
+    if (error || !data || !data.published_at || !isValidSlug(data.slug)) return null;
+    return `/boda/${data.slug}`;
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------- sections
 
 export type SaveSectionResult =

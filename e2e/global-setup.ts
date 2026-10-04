@@ -2,10 +2,12 @@ import pg from "pg";
 
 import { E2E_EMAIL_PATTERN } from "./support/identities";
 import { readLocalSupabase } from "./support/local-supabase";
+import { clearOutbox } from "./support/outbox";
 
 /**
  * Removes data left by earlier E2E runs on the LOCAL stack: weddings touched
- * by E2E accounts (memberships and invites cascade), then the accounts.
+ * by E2E accounts (memberships and invites cascade), then the accounts, and
+ * the local email outbox.
  * Each run uses fresh, unique fake identities, so tests never depend on
  * leftovers — this only keeps the local database from growing.
  *
@@ -13,6 +15,8 @@ import { readLocalSupabase } from "./support/local-supabase";
  * under test never uses it.
  */
 export default async function globalSetup() {
+  // Captured invitation emails of earlier runs (they contain guest links).
+  await clearOutbox();
   const { dbUrl } = readLocalSupabase();
   const db = new pg.Client({ connectionString: dbUrl });
   await db.connect();

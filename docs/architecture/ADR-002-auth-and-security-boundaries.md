@@ -107,6 +107,8 @@ Applies to two distinct token kinds:
 - Each use is isolated in a clearly named server-only module with a written
   justification (e.g. a scheduled job). Guest flows should not need it (§5).
 - Code review rejects new service-role usage without that justification.
+- Accepted exceptions: [ADR-004](ADR-004-invitation-delivery-recorder.md) (recording provider-accepted
+  invitation emails; LB-11).
 
 ### 7. Public / private boundary
 

@@ -5,14 +5,20 @@ import { execFileSync } from "node:child_process";
  * that isn't localhost, so E2E setup/cleanup can never touch a remote
  * project.
  */
-export type LocalSupabase = Readonly<{ apiUrl: string; dbUrl: string; publishableKey: string }>;
+export type LocalSupabase = Readonly<{
+  apiUrl: string;
+  dbUrl: string;
+  publishableKey: string;
+  /** The local stack's secret key: only for the app's delivery recorder (ADR-004). */
+  secretKey: string;
+}>;
 
 let cached: LocalSupabase | null = null;
 
 export function readLocalSupabase(): LocalSupabase {
   if (cached) return cached;
 
-  let status: { API_URL?: string; DB_URL?: string; PUBLISHABLE_KEY?: string };
+  let status: { API_URL?: string; DB_URL?: string; PUBLISHABLE_KEY?: string; SECRET_KEY?: string };
   try {
     status = JSON.parse(
       execFileSync("npx", ["supabase", "status", "-o", "json"], {
@@ -26,14 +32,14 @@ export function readLocalSupabase(): LocalSupabase {
     );
   }
 
-  const { API_URL, DB_URL, PUBLISHABLE_KEY } = status;
-  if (!API_URL || !DB_URL || !PUBLISHABLE_KEY) {
-    throw new Error("`supabase status` did not report API_URL, DB_URL and PUBLISHABLE_KEY.");
+  const { API_URL, DB_URL, PUBLISHABLE_KEY, SECRET_KEY } = status;
+  if (!API_URL || !DB_URL || !PUBLISHABLE_KEY || !SECRET_KEY) {
+    throw new Error("`supabase status` did not report API_URL, DB_URL, PUBLISHABLE_KEY and SECRET_KEY.");
   }
   assertLocal(API_URL);
   assertLocal(DB_URL);
 
-  cached = { apiUrl: API_URL, dbUrl: DB_URL, publishableKey: PUBLISHABLE_KEY };
+  cached = { apiUrl: API_URL, dbUrl: DB_URL, publishableKey: PUBLISHABLE_KEY, secretKey: SECRET_KEY };
   return cached;
 }
 

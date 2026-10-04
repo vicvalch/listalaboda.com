@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 import { assertLocal, readLocalSupabase } from "./e2e/support/local-supabase";
+import { OUTBOX_DIR } from "./e2e/support/outbox";
 
 const PORT = 3100;
 const baseURL = `http://localhost:${PORT}`;
@@ -21,6 +22,20 @@ function supabaseEnv() {
   };
 }
 
+// LB-11: invitation emails go to a local file outbox the tests read, never
+// to a provider. The app only accepts this transport with a localhost origin.
+// The delivery recorder (ADR-004) gets the LOCAL stack's secret key, the only
+// credential allowed to record a provider-accepted send.
+function emailEnv() {
+  return {
+    APP_ORIGIN: baseURL,
+    EMAIL_FROM: "ListaLaBoda Pruebas <invitaciones@example.com>",
+    EMAIL_TRANSPORT: "outbox",
+    EMAIL_OUTBOX_DIR: OUTBOX_DIR,
+    SUPABASE_SERVICE_ROLE_KEY: readLocalSupabase().secretKey,
+  };
+}
+
 export default defineConfig({
   testDir: "./e2e",
   globalSetup: "./e2e/global-setup.ts",
@@ -38,6 +53,6 @@ export default defineConfig({
     url: baseURL,
     reuseExistingServer: false,
     timeout: 300_000,
-    env: supabaseEnv(),
+    env: { ...supabaseEnv(), ...emailEnv() },
   },
 });

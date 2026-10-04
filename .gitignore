@@ -16,6 +16,8 @@
 /test-results/
 /blob-report/
 /playwright/.cache/
+# E2E email outbox (captured invitation emails contain guest links)
+/.e2e-outbox/
 
 # next.js
 /.next/

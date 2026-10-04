@@ -7,24 +7,29 @@ import { cardClass, textLinkClass } from "@/components/ui/styles";
 import { loginPath } from "@/lib/auth/redirect";
 import { requireUser } from "@/lib/auth/session";
 import { requireWeddingMembership } from "@/lib/authz/wedding";
+import { CONTACT_EMAIL_MAX_LENGTH } from "@/lib/guests/contact-email";
 import { guestLinkExpiresAt, guestLinkState } from "@/lib/guests/link";
 import { listGuestParties, type GuestListParty } from "@/lib/guests/service";
 import { guestResponseStatus, summarizeGuests, type GuestSummary } from "@/lib/guests/summary";
 import { GUEST_NAME_MAX_LENGTH, PARTY_LABEL_MAX_LENGTH } from "@/lib/guests/validation";
 import { formatDate, formatNumber, getMessages, interpolate } from "@/lib/i18n";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { formatWeddingTimestamp } from "@/lib/weddings/format";
 import { getWeddingDetail } from "@/lib/weddings/service";
 
 import {
   addGuestAction,
   deletePartyAction,
+  removeContactEmailAction,
   removeGuestAction,
   revokeLinkAction,
+  saveContactEmailAction,
   updateGuestNameAction,
   updatePartyLabelAction,
 } from "./actions";
 import { ConfirmButton } from "./ConfirmButton";
 import { NewPartyForm } from "./NewPartyForm";
+import { RotateAndSendButton } from "./RotateAndSendButton";
 import { RotateLinkButton } from "./RotateLinkButton";
 import { TextEditForm } from "./TextEditForm";
 
@@ -109,6 +114,7 @@ export default async function GuestsPage({
                 <PartyCard
                   weddingId={wedding.id}
                   weddingDate={wedding.weddingDate}
+                  weddingTimeZone={wedding.timeZone}
                   party={party}
                   now={now}
                   canAdministerLink={access.access.role === "owner"}
@@ -160,13 +166,21 @@ function SummarySection({ summary }: { summary: GuestSummary }) {
 type PartyCardProps = {
   weddingId: string;
   weddingDate: string | null;
+  weddingTimeZone: string | null;
   party: GuestListParty;
   now: Date;
   /** Owner: may replace or revoke the link. Cosmetic; the server re-checks. */
   canAdministerLink: boolean;
 };
 
-function PartyCard({ weddingId, weddingDate, party, now, canAdministerLink }: PartyCardProps) {
+function PartyCard({
+  weddingId,
+  weddingDate,
+  weddingTimeZone,
+  party,
+  now,
+  canAdministerLink,
+}: PartyCardProps) {
   const copy = getMessages().guests;
   const titleId = `party-${party.id}-title`;
   const linkState = guestLinkState(party, weddingDate, now);
@@ -290,6 +304,13 @@ function PartyCard({ weddingId, weddingDate, party, now, canAdministerLink }: Pa
         />
       </div>
 
+      <ContactEmailSection
+        weddingId={weddingId}
+        weddingTimeZone={weddingTimeZone}
+        party={party}
+        canAdministerLink={canAdministerLink}
+      />
+
       <div className="space-y-3 border-t border-border pt-4">
         <p className="text-muted text-sm">
           {canAdministerLink ? copy.link.notRecoverable : copy.link.notRecoverableCollaborator}
@@ -323,5 +344,95 @@ function PartyCard({ weddingId, weddingDate, party, now, canAdministerLink }: Pa
         </div>
       </div>
     </article>
+  );
+}
+
+type ContactEmailSectionProps = {
+  weddingId: string;
+  weddingTimeZone: string | null;
+  party: GuestListParty;
+  canAdministerLink: boolean;
+};
+
+/**
+ * The party's contact email (members only — this page) and its invitation
+ * email status. Any member adds, edits or removes the email. Emailing needs
+ * a link whose plaintext exists right now: a fresh one (shown after
+ * creating or replacing it, with its own send button) or, for an owner,
+ * "Generar nuevo enlace y enviar". A collaborator is told an owner must
+ * generate the new link; the server enforces it either way.
+ */
+function ContactEmailSection({ weddingId, weddingTimeZone, party, canAdministerLink }: ContactEmailSectionProps) {
+  const copy = getMessages().guests;
+  const partyKeys = { weddingId, guestInvitationId: party.id };
+  const sent = party.invitationEmail;
+  const linkChangedSince = sent !== null && new Date(party.tokenIssuedAt) > new Date(sent.sentAt);
+
+  return (
+    <div className="space-y-3 border-t border-border pt-4" data-testid="party-contact">
+      <div className="space-y-1 text-sm">
+        <p>
+          <span className="font-semibold">{copy.contactEmail.label}:</span>{" "}
+          <span className="break-all" data-testid="party-contact-email">
+            {party.contactEmail ?? copy.contactEmail.none}
+          </span>
+        </p>
+        <p>
+          <span className="font-semibold">{copy.invitationEmail.title}:</span>{" "}
+          <span data-testid="party-invitation-email-status">
+            {sent
+              ? interpolate(copy.invitationEmail.lastSent, {
+                  date: formatWeddingTimestamp(sent.sentAt, weddingTimeZone),
+                  email: sent.sentTo,
+                })
+              : copy.invitationEmail.never}
+          </span>
+        </p>
+        {linkChangedSince ? <p className="text-muted">{copy.invitationEmail.linkChangedSince}</p> : null}
+      </div>
+      <div className="flex flex-wrap items-start gap-2">
+        <TextEditForm
+          action={saveContactEmailAction}
+          hidden={partyKeys}
+          id={`contact-email-${party.id}`}
+          openLabel={party.contactEmail ? copy.contactEmail.edit : copy.contactEmail.add}
+          fieldLabel={copy.contactEmail.fieldLabel}
+          defaultValue={party.contactEmail ?? ""}
+          maxLength={CONTACT_EMAIL_MAX_LENGTH}
+          inputType="email"
+          submitLabel={copy.contactEmail.submit}
+          pendingLabel={copy.contactEmail.submitting}
+        />
+        {party.contactEmail ? (
+          <ConfirmButton
+            action={removeContactEmailAction}
+            hidden={partyKeys}
+            id={`remove-email-${party.id}`}
+            openLabel={copy.contactEmail.remove.open}
+            confirmTitle={interpolate(copy.contactEmail.remove.confirmTitle, { party: party.label })}
+            confirmBody={[copy.contactEmail.remove.confirmBody]}
+            confirmLabel={copy.contactEmail.remove.confirmButton}
+            cancelLabel={copy.contactEmail.remove.cancel}
+          />
+        ) : null}
+      </div>
+      {!party.contactEmail ? (
+        <p className="text-muted text-sm">{copy.invitationEmail.needsEmail}</p>
+      ) : canAdministerLink ? (
+        <div className="space-y-2">
+          <p className="text-muted text-sm">{copy.invitationEmail.includes}</p>
+          <RotateAndSendButton
+            weddingId={weddingId}
+            guestInvitationId={party.id}
+            partyLabel={party.label}
+            contactEmail={party.contactEmail}
+          />
+        </div>
+      ) : (
+        <p className="text-muted text-sm" data-testid="invitation-email-owner-required">
+          {copy.invitationEmail.ownerRequired}
+        </p>
+      )}
+    </div>
   );
 }

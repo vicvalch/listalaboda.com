@@ -342,6 +342,9 @@ describe("listGuestParties", () => {
               label: "Familia Pérez",
               token_issued_at: "2026-10-02T00:00:00Z",
               revoked_at: null,
+              contact_email: "familia@example.com",
+              invitation_email_sent_at: "2026-10-02T10:00:00Z",
+              invitation_email_sent_to: "familia@example.com",
               created_at: "2026-10-02T00:00:00Z",
               guests: [
                 { id: GUEST_2, name: "Carlos", created_at: "2026-10-02T00:00:02Z", rsvps: [] },
@@ -364,6 +367,8 @@ describe("listGuestParties", () => {
         label: "Familia Pérez",
         tokenIssuedAt: "2026-10-02T00:00:00Z",
         revokedAt: null,
+        contactEmail: "familia@example.com",
+        invitationEmail: { sentAt: "2026-10-02T10:00:00Z", sentTo: "familia@example.com" },
         guests: [
           { id: GUEST_ID, name: "Ana", rsvp: { attending: true, dietaryNote: "vegetariana" } },
           { id: GUEST_2, name: "Carlos", rsvp: null },
@@ -373,6 +378,8 @@ describe("listGuestParties", () => {
     const reads = requests.filter((r) => r.url.pathname.startsWith("/rest/v1/"));
     expect(reads).toHaveLength(1);
     expect(reads[0]?.url.searchParams.get("select")).not.toContain("token_hash");
+    // The provider's message id is operational data the page never needs.
+    expect(reads[0]?.url.searchParams.get("select")).not.toContain("provider_id");
     expect(reads[0]?.url.searchParams.get("wedding_id")).toBe(`eq.${WEDDING_ID}`);
   });
 

@@ -104,7 +104,8 @@ describe("schema guarantees", () => {
                                 'set_wedding_site_slug', 'publish_wedding_site',
                                 'unpublish_wedding_site', 'get_published_wedding_site',
                                 'get_guest_invitation_site_slug', 'guest_invitation_link_is_current',
-                                'record_guest_invitation_email'))
+                                'record_guest_invitation_email', 'get_rsvp_confirmation_email_context',
+                                'record_rsvp_confirmation_email'))
        order by 1`,
     );
 
@@ -127,10 +128,12 @@ describe("schema guarantees", () => {
       "public.get_guest_invitation",
       "public.get_guest_invitation_site_slug",
       "public.get_published_wedding_site",
+      "public.get_rsvp_confirmation_email_context",
       "public.guest_invitation_link_is_current",
       "public.initialize_wedding_checklist",
       "public.publish_wedding_site",
       "public.record_guest_invitation_email",
+      "public.record_rsvp_confirmation_email",
       "public.save_wedding_site_section",
       "public.set_wedding_display_name",
       "public.set_wedding_site_slug",
@@ -173,6 +176,9 @@ describe("schema guarantees", () => {
     // LB-11: token_hash and the send metadata aren't client-accessible.
     expect(definer).toContain("public.guest_invitation_link_is_current");
     expect(definer).toContain("public.record_guest_invitation_email");
+    // LB-12 (ADR-005): service_role-only, scoped to one party.
+    expect(definer).toContain("public.get_rsvp_confirmation_email_context");
+    expect(definer).toContain("public.record_rsvp_confirmation_email");
     expect(definer).not.toContain("public.create_guest_invitation");
     expect(definer).not.toContain("public.save_wedding_site_section");
   });
@@ -336,12 +342,16 @@ describe("schema guarantees", () => {
          and (column_name ilike '%email%' or column_name ilike '%phone%' or column_name ilike '%contact%')
        order by 1`,
     );
-    // The address itself, and the latest send's metadata (recipient included).
+    // The address itself, and the latest sends' metadata (recipient
+    // included): the invitation (LB-11) and the RSVP confirmation (LB-12).
     expect(rows.map((r) => r.column_name)).toEqual([
       "guest_invitations.contact_email",
       "guest_invitations.invitation_email_provider_id",
       "guest_invitations.invitation_email_sent_at",
       "guest_invitations.invitation_email_sent_to",
+      "guest_invitations.rsvp_confirmation_email_provider_id",
+      "guest_invitations.rsvp_confirmation_email_sent_at",
+      "guest_invitations.rsvp_confirmation_email_sent_to",
     ]);
   });
 
@@ -381,6 +391,24 @@ describe("schema guarantees", () => {
     expect(publicGrant).toEqual([]);
   });
 
+  it("only service_role can execute the RSVP confirmation functions (ADR-005)", async () => {
+    for (const signature of [
+      "public.get_rsvp_confirmation_email_context(text)",
+      "public.record_rsvp_confirmation_email(uuid, uuid, text, text, text)",
+    ]) {
+      const rows = await sql<{ role: string; can: boolean }>(
+        `select r.role, has_function_privilege(r.role, $1::regprocedure, 'execute') as can
+         from (values ('anon'), ('authenticated'), ('service_role')) as r (role) order by r.role`,
+        [signature],
+      );
+      expect(rows, signature).toEqual([
+        { role: "anon", can: false },
+        { role: "authenticated", can: false },
+        { role: "service_role", can: true },
+      ]);
+    }
+  });
+
   it("guest_invitations: clients read and write the contact email, never the hash or the send metadata", async () => {
     const rows = await sql<{ grantee: string; privilege_type: string; column_name: string }>(
       `select grantee, privilege_type, column_name from information_schema.column_privileges
@@ -393,7 +421,13 @@ describe("schema guarantees", () => {
     expect(rows.filter((r) => r.grantee === "anon")).toEqual([]);
     expect(columns("SELECT")).not.toContain("token_hash");
     expect(columns("SELECT")).toEqual(
-      expect.arrayContaining(["contact_email", "invitation_email_sent_at", "invitation_email_sent_to"]),
+      expect.arrayContaining([
+        "contact_email",
+        "invitation_email_sent_at",
+        "invitation_email_sent_to",
+        "rsvp_confirmation_email_sent_at",
+        "rsvp_confirmation_email_sent_to",
+      ]),
     );
     expect(columns("INSERT")).toEqual(["contact_email", "label", "token_hash", "wedding_id"]);
     expect(columns("UPDATE")).toEqual(["contact_email", "label", "revoked_at", "token_hash"]);

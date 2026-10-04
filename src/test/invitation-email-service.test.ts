@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { createClient, type SupportedStorage } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 
-import type { DeliveryRecord, DeliveryRecordResult } from "@/lib/email/delivery-recorder";
+import type { DeliveryRecord, DeliveryRecordResult, DeliveryRecorder } from "@/lib/email/delivery-recorder";
 import type { EmailSendResult, EmailSender, OutgoingEmail } from "@/lib/email/provider";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -137,13 +137,19 @@ function fakeSender(
       return result;
     },
   };
-  const recorder = {
-    async record(entry: DeliveryRecord) {
+  const notInvitation = async () => {
+    order.push("WRONG_OPERATION");
+    return { ok: false } as const;
+  };
+  const recorder: DeliveryRecorder = {
+    async recordInvitation(entry: DeliveryRecord) {
       records.push(entry);
       order.push("RECORD");
       if (recordResult === "throw") throw new Error("network down");
       return recordResult;
     },
+    readRsvpConfirmationContext: notInvitation,
+    recordRsvpConfirmation: notInvitation,
   };
   return { sender, sent, records, order, delivery: { sender, appOrigin: APP_ORIGIN, recorder } };
 }

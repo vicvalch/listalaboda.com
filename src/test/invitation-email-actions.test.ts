@@ -12,7 +12,7 @@ const record = vi.hoisted(() => vi.fn());
 const delivery = vi.hoisted(() => ({
   sender: { send: vi.fn() },
   appOrigin: "https://bodas.example.com",
-  recorder: { record },
+  recorder: { recordInvitation: record },
 }));
 vi.mock("@/lib/email/delivery", () => ({ getEmailDelivery: () => delivery }));
 

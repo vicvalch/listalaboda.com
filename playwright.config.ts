@@ -22,7 +22,7 @@ function supabaseEnv() {
   };
 }
 
-// LB-11: invitation emails go to a local file outbox the tests read, never
+// LB-11/LB-12: invitation and RSVP confirmation emails go to a local file outbox the tests read, never
 // to a provider. The app only accepts this transport with a localhost origin.
 // The delivery recorder (ADR-004) gets the LOCAL stack's secret key, the only
 // credential allowed to record a provider-accepted send.

@@ -131,6 +131,10 @@ describe("guest list schema", () => {
       "invitation_email_sent_at",
       "invitation_email_sent_to",
       "invitation_email_provider_id",
+      // LB-12: its latest RSVP confirmation email (separate from the invitation).
+      "rsvp_confirmation_email_sent_at",
+      "rsvp_confirmation_email_sent_to",
+      "rsvp_confirmation_email_provider_id",
     ]);
     expect(columns("guests")).toEqual([
       "id",

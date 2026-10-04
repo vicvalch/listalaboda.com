@@ -89,13 +89,13 @@ isOneToOne: false
                   ]
                 },"guest_invitations": {
                   Row: {
-                    "contact_email": string | null,"created_at": string,"created_by": string | null,"id": string,"invitation_email_provider_id": string | null,"invitation_email_sent_at": string | null,"invitation_email_sent_to": string | null,"label": string,"revoked_at": string | null,"token_hash": string,"token_issued_at": string,"updated_at": string,"wedding_id": string
+                    "contact_email": string | null,"created_at": string,"created_by": string | null,"id": string,"invitation_email_provider_id": string | null,"invitation_email_sent_at": string | null,"invitation_email_sent_to": string | null,"label": string,"revoked_at": string | null,"rsvp_confirmation_email_provider_id": string | null,"rsvp_confirmation_email_sent_at": string | null,"rsvp_confirmation_email_sent_to": string | null,"token_hash": string,"token_issued_at": string,"updated_at": string,"wedding_id": string
                   }
                   Insert: {
-                    "contact_email"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"invitation_email_provider_id"?: string | null,"invitation_email_sent_at"?: string | null,"invitation_email_sent_to"?: string | null,"label": string,"revoked_at"?: string | null,"token_hash": string,"token_issued_at"?: string,"updated_at"?: string,"wedding_id": string
+                    "contact_email"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"invitation_email_provider_id"?: string | null,"invitation_email_sent_at"?: string | null,"invitation_email_sent_to"?: string | null,"label": string,"revoked_at"?: string | null,"rsvp_confirmation_email_provider_id"?: string | null,"rsvp_confirmation_email_sent_at"?: string | null,"rsvp_confirmation_email_sent_to"?: string | null,"token_hash": string,"token_issued_at"?: string,"updated_at"?: string,"wedding_id": string
                   }
                   Update: {
-                    "contact_email"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"invitation_email_provider_id"?: string | null,"invitation_email_sent_at"?: string | null,"invitation_email_sent_to"?: string | null,"label"?: string,"revoked_at"?: string | null,"token_hash"?: string,"token_issued_at"?: string,"updated_at"?: string,"wedding_id"?: string
+                    "contact_email"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"invitation_email_provider_id"?: string | null,"invitation_email_sent_at"?: string | null,"invitation_email_sent_to"?: string | null,"label"?: string,"revoked_at"?: string | null,"rsvp_confirmation_email_provider_id"?: string | null,"rsvp_confirmation_email_sent_at"?: string | null,"rsvp_confirmation_email_sent_to"?: string | null,"token_hash"?: string,"token_issued_at"?: string,"updated_at"?: string,"wedding_id"?: string
                   }
                   Relationships: [
                     {
@@ -283,6 +283,11 @@ isOneToOne: true
               "section_body": string,"section_kind": Database["public"]['Enums']["content_section_kind"],"section_title": string,"wedding_city": string,"wedding_date": string,"wedding_name": string
             }[]
                            },
+"get_rsvp_confirmation_email_context":
+{ Args: { "invitation_token_hash": string }; Returns: {
+              "contact_email": string,"guest_invitation_id": string,"wedding_city": string,"wedding_date": string,"wedding_id": string,"wedding_name": string
+            }[]
+                           },
 "guest_invitation_link_is_current":
 { Args: { "invitation_token_hash": string,"target_invitation_id": string,"target_wedding_id": string }; Returns: boolean
                            },
@@ -295,6 +300,9 @@ isOneToOne: true
 { Args: { "target_wedding_id": string }; Returns: string
                            },
 "record_guest_invitation_email":
+{ Args: { "invitation_token_hash": string,"provider_message_id": string,"recipient": string,"target_invitation_id": string,"target_wedding_id": string }; Returns: string
+                           },
+"record_rsvp_confirmation_email":
 { Args: { "invitation_token_hash": string,"provider_message_id": string,"recipient": string,"target_invitation_id": string,"target_wedding_id": string }; Returns: string
                            },
 "save_wedding_site_section":

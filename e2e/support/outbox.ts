@@ -6,10 +6,10 @@ import { expect } from "@playwright/test";
 /**
  * The E2E email "outbox": the app under test runs with
  * EMAIL_TRANSPORT=outbox (see playwright.config.ts), so each invitation
- * email is written here as a JSON file instead of being sent. No provider,
- * no network, no public endpoint. Git-ignored; cleared before each run.
- * Messages contain guest links (bearer credentials): assertions on them are
- * redacted.
+ * and RSVP confirmation email is written here as a JSON file instead of
+ * being sent. No provider, no network, no public endpoint. Git-ignored;
+ * cleared before each run. Invitations contain guest links (bearer
+ * credentials): assertions on them are redacted.
  */
 export const OUTBOX_DIR = resolve(process.cwd(), ".e2e-outbox");
 

@@ -10,7 +10,8 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - `docs/architecture/ADR-001-product-domain-and-tenancy.md`
 - `docs/architecture/ADR-002-auth-and-security-boundaries.md`
 - `docs/architecture/ADR-003-donor-extraction-policy.md`
-- `docs/architecture/ADR-004-invitation-delivery-recorder.md` (the only service-role exception)
+- `docs/architecture/ADR-004-invitation-delivery-recorder.md` and `docs/architecture/ADR-005-rsvp-confirmation-email.md`
+  (the only service-role exceptions, one module)
 
 ## Product rules
 
@@ -24,10 +25,11 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 
 - Strict TypeScript. No `@ts-ignore`, no `any` to silence errors.
 - RLS enabled in the same migration that creates any table.
-- The service-role key is never normal persistence. Its only use is the ADR-004 exception
-  (`src/lib/email/delivery-recorder.ts`, recording provider-accepted invitation emails); there is no
-  generic service-role client. Any other use needs its own `server-only` module plus a written
-  justification (ADR-002 §6). ESLint blocks `process.env.SUPABASE_SERVICE_ROLE_KEY` everywhere else.
+- The service-role key is never normal persistence. Its only use is the ADR-004/ADR-005 exception
+  (`src/lib/email/delivery-recorder.ts`: recording provider-accepted invitation and RSVP confirmation emails,
+  and reading a party's confirmation context by its link's hash); there is no generic service-role client.
+  Any other use needs its own `server-only` module plus a written justification (ADR-002 §6).
+  ESLint blocks `process.env.SUPABASE_SERVICE_ROLE_KEY` everywhere else.
 - Browser code reads env only through `src/lib/env/public.ts` (`NEXT_PUBLIC_*` only).
 - Modules that touch cookies or secrets start with `import "server-only"`.
 - Migrations live in `supabase/migrations/`, named `YYYYMMDDHHMMSS_lb_<slug>.sql`; applied
@@ -179,7 +181,32 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   `EmailDelivery` parameter; tests inject fakes and never reach a real provider (E2E: the localhost-only file outbox).
 - Email content: catalog copy only (`es.invitationEmail`), text + HTML, every user value escaped at render, one-line
   subject. Include the website link only while it is published (`getPublishedSitePath`).
-- Sending never implies open RSVP. RSVP confirmation emails and reminders are deferred (no cron, queue or jobs).
+- Sending never implies open RSVP. Reminders are deferred (no cron, queue or jobs); confirmations: LB-12 below.
+
+## RSVP confirmation email rules (LB-12)
+
+- RSVP persistence is PRIMARY; the confirmation email is SECONDARY. Order (`@/lib/rsvp/confirmation`):
+  `submit_guest_rsvp` (anon + token hash, unchanged) commits → only then email config → privileged context →
+  site slug (existing guest helper) → render → ONE provider call → privileged record. Never send before the RSVP
+  is saved; a failed RSVP never reaches config, provider or recorder.
+- No email outcome (no contact email, not configured, provider failure, recorder failure, no provider id) ever
+  rolls back, hides or fails a saved RSVP. Keep the two results separate (`rsvp` vs `confirmation`); never one boolean.
+  Provider accepted + not recorded is `sent_but_unrecorded`, never "not sent", never retried.
+- Every successful submission/update sends one fresh confirmation (no dedup) from the database's post-save state,
+  never the form. Recipient = the party's CURRENT `contact_email`, from the database only.
+- The confirmation contains NO GuestInvitation capability: no `/rsvp/<token>`, no token, no hash. It also leaves out
+  food notes, the contact email, ids and provider data. The website is linked only while published. Plaintext tokens
+  are still never stored or rebuilt.
+- Confirmation metadata (`rsvp_confirmation_email_sent_at/_sent_to/_provider_id`, latest only, on the party,
+  separate from `invitation_email_*`) is written only by `record_rsvp_confirmation_email`. That function and
+  `get_rsvp_confirmation_email_context` are service_role-only (ADR-005) and reached only through the recorder module.
+  The app never uses the service role to submit, update or authorize an RSVP. (`service_role` itself is globally
+  privileged in Supabase; the guarantee is the app boundary: the key is used only in that module, which exposes
+  no client or generic query/RPC helper.)
+- The guest page shows RSVP success first and at most one secondary sentence about the email (`?email=sent|failed`,
+  fixed words); it never reveals the address. Organizers see the last confirmation's date and recipient,
+  distinct from the invitation status and from the current contact email.
+- Still deferred: RSVP reminders, cron/queues/jobs, provider webhooks and activity history.
 
 ## Commands
 
@@ -202,4 +229,6 @@ accounts and the couple's "Invitados" page (no emails, website or activity histo
 published wedding website: ContentSection, the "Sitio web" editor, owner-only slug/publish/unpublish and the
 public `/boda/[slug]` page (no email or activity history yet). LB-11 adds the party's optional contact email and
 the GuestInvitation email through Resend (fresh-link send for any member, owner-only "new link and send", latest-send
-status; no confirmation emails, reminders or activity history yet). Don't implement ahead of the current prompt.
+status; no confirmation emails, reminders or activity history yet). LB-12 adds the RSVP confirmation email (sent after
+every successful RSVP save to the party's contact email, without the RSVP link; latest-confirmation status for
+organizers; ADR-005; no reminders, scheduling or activity history yet). Don't implement ahead of the current prompt.

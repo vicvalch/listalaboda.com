@@ -25,6 +25,7 @@ describe("server-only boundary", () => {
     "@/lib/email/resend",
     "@/lib/email/outbox",
     "@/lib/guests/invitation-email",
+    "@/lib/rsvp/confirmation",
   ])("refuses to load %s outside a server runtime", async (specifier) => {
     await expect(import(/* @vite-ignore */ specifier)).rejects.toThrow(
       /cannot be imported from a Client Component/,

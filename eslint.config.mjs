@@ -27,8 +27,8 @@ const eslintConfig = defineConfig([
     },
   },
   {
-    // ADR-004: the one sanctioned service-role use — recording provider-accepted
-    // invitation emails. Nowhere else.
+    // ADR-004/ADR-005: the one sanctioned service-role use — email delivery
+    // metadata (invitation and RSVP confirmation emails). Nowhere else.
     files: ["src/lib/email/delivery-recorder.ts"],
     rules: { "no-restricted-syntax": "off" },
   },

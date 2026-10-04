@@ -136,7 +136,25 @@ accepts but the status can't be saved, the page says the email went out and asks
 configuration sending fails safely and nothing else is affected. Tests never reach Resend: unit and database tests
 inject a fake sender, and the E2E suite runs the app with a local file outbox (see `.env.example`).
 
-Still deferred: RSVP confirmation emails and reminders, activity history, and linking checklist items to guest work.
+**RSVP confirmation email (LB-12, Phase 2).** When a party saves or changes its RSVP through its link and the party
+has a contact email, the server emails a confirmation of the party's **current** answers ("Confirmación de
+asistencia — {boda}"): the party label, the wedding's name, date and city, each guest with "Asistirá" / "No
+asistirá" and, only while the site is published, a link to the wedding website. It is rendered from what the
+database saved, never from the form, and it deliberately leaves out food notes, the contact email and ids. **It does not
+carry the RSVP link or token**: it confirms the answer, and forwarding it never hands anyone the party's
+capability. To change the answer, the party uses the link it received with the invitation.
+
+The RSVP is primary and the email secondary. The answers are saved first, and only then is an email attempted
+(one provider call, no automatic retries). A party without a contact email, missing email configuration, a
+provider failure or a failure to record the send never affects the saved RSVP. The guest always sees "Guardamos
+tu respuesta", plus at most one calm sentence about the email. That sentence never shows the address, which the RSVP
+page never reveals. Organizers see "Confirmación de asistencia por correo: Última confirmación enviada el … a …" on the
+party card, separate from the invitation status. Only the latest successful confirmation is kept, and its
+recipient can differ from the current contact email. The guest has no account, so reading the party's private contact
+email for the send, and recording it, go through the same server-only recorder module, by the link's hash only
+([ADR-005](docs/architecture/ADR-005-rsvp-confirmation-email.md)). The RSVP itself never uses the service role.
+
+Still deferred: RSVP reminders (no schedule, cron or queue), activity history, and linking checklist items to guest work.
 
 ## Stack
 
@@ -153,9 +171,10 @@ npm run dev                  # http://localhost:3000
 ```
 
 Email (optional locally): set `APP_ORIGIN`, `EMAIL_FROM`, `RESEND_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY` (the
-local `SECRET_KEY` from `npx supabase status`; used only to record sends, ADR-004) to send real invitation emails,
+local `SECRET_KEY` from `npx supabase status`; used only for email delivery metadata, ADR-004/ADR-005) to send real
+invitation and RSVP confirmation emails,
 or `EMAIL_TRANSPORT=outbox` with an absolute `EMAIL_OUTBOX_DIR` (localhost `APP_ORIGIN` only) to write them to files.
-Without them, everything works except sending.
+Without them, everything works except sending (RSVPs are still saved; they just get no confirmation email).
 
 Local Supabase (requires Docker): `npx supabase start`. Then copy the API URL and publishable key
 from `npx supabase status` into `.env.local`. The project is not linked to any remote Supabase project.
@@ -206,6 +225,7 @@ one later.
 - [ADR-002 — Auth and security boundaries](docs/architecture/ADR-002-auth-and-security-boundaries.md)
 - [ADR-003 — Donor extraction policy](docs/architecture/ADR-003-donor-extraction-policy.md)
 - [ADR-004 — Service-role exception: recording invitation-email delivery](docs/architecture/ADR-004-invitation-delivery-recorder.md)
+- [ADR-005 — Service-role exception: RSVP confirmation email](docs/architecture/ADR-005-rsvp-confirmation-email.md)
 
 Database migrations live in `supabase/migrations/` and are named `YYYYMMDDHHMMSS_lb_<slug>.sql`.
 After changing the schema, run `npm run db:reset && npm run db:types` and commit the regenerated types.

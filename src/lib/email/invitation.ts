@@ -56,13 +56,19 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-export function invitationSubject(weddingName: string): string {
-  const subject = toSingleLine(
-    interpolate(es.invitationEmail.subject, { wedding: toSingleLine(weddingName) }),
-  );
+/**
+ * A catalog subject with the wedding's name: one plain line (no CR/LF,
+ * control characters or U+2028/U+2029), bounded. Shared by every email.
+ */
+export function boundedSubject(template: string, weddingName: string): string {
+  const subject = toSingleLine(interpolate(template, { wedding: toSingleLine(weddingName) }));
   return [...subject].length > SUBJECT_MAX_LENGTH
     ? `${[...subject].slice(0, SUBJECT_MAX_LENGTH - 1).join("")}…`
     : subject;
+}
+
+export function invitationSubject(weddingName: string): string {
+  return boundedSubject(es.invitationEmail.subject, weddingName);
 }
 
 type Details = ReadonlyArray<Readonly<{ label: string; value: string }>>;

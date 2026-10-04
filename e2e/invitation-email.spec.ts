@@ -83,6 +83,11 @@ async function expectUnavailable(page: Page, link: string) {
   await expect(page.getByRole("group")).toHaveCount(0);
 }
 
+/** Invitation emails only: since LB-12, answering also sends a confirmation. */
+async function invitationsTo(to: string) {
+  return (await emailsTo(to)).filter((m) => m.subject.startsWith("Tu invitación a"));
+}
+
 async function answerAll(page: Page, names: string[]) {
   for (const name of names) {
     await page.getByRole("group", { name, exact: true }).getByRole("radio", { name: rsvp.yes }).check();
@@ -201,7 +206,7 @@ test.describe("guest invitation email", () => {
     await Promise.all([collab.context.close(), guest.context.close(), outsider.context.close()]);
   });
 
-  test("C, D, E, G, K, O: a new party's fresh link is emailed and works; RSVP sends nothing", async ({
+  test("C, D, E, G, K, O: a new party's fresh link is emailed and works; RSVP sends only a confirmation", async ({
     page,
     browser,
   }) => {
@@ -245,10 +250,13 @@ test.describe("guest invitation email", () => {
     // E: the emailed link works for the guest, without an account.
     const guest = await freshPage(browser);
     await expectGuestPage(guest.page, rsvpLinkOf(email), "Familia Correo");
-    // O: answering sends no confirmation email.
+    // O (LB-12): answering sends one RSVP confirmation — a different email,
+    // without the link — and never another invitation.
     await answerAll(guest.page, ["Ana Correo", "Luis Correo"]);
-    await guest.page.waitForTimeout(500);
-    expect(await emailsTo(recipient)).toHaveLength(1);
+    const confirmation = await expectEmailCount(recipient, 2);
+    expect(confirmation?.subject).toBe("Confirmación de asistencia — Boda de prueba Correo");
+    expect(confirmation?.text.includes("/rsvp/"), "no RSVP link in the confirmation").toBe(false);
+    expect(await invitationsTo(recipient)).toHaveLength(1);
     await guest.context.close();
   });
 
@@ -324,7 +332,7 @@ test.describe("guest invitation email", () => {
       await card.getByRole("button", { name: mail.rotateSend.confirmButton }).click();
     });
     expect(await replayAction(collab.page, forged)).toContain(mail.ownerRequired);
-    expect(await emailsTo(recipient)).toEqual([]);
+    expect(await invitationsTo(recipient)).toEqual([]);
     await expectGuestPage(guest.page, oldLink, "Familia Rotar");
 
     // H: the owner confirms explicitly (the warning names the address).
@@ -336,8 +344,10 @@ test.describe("guest invitation email", () => {
     // The new link is still shown for manual sharing.
     const shown = await readLink(card);
 
-    const email = await expectEmailCount(recipient, 1);
+    // The party's answer earlier sent its RSVP confirmation (LB-12); this is the invitation.
+    const email = await expectEmailCount(recipient, 2);
     if (!email) throw new Error("no email captured");
+    expect(await invitationsTo(recipient)).toHaveLength(1);
     const newLink = rsvpLinkOf(email);
     expect(newLink === shown, "emailed link is the shown link (value redacted)").toBe(true);
     expect(newLink !== oldLink, "a new link was generated (value redacted)").toBe(true);

@@ -550,6 +550,12 @@ export const es = {
           "Generamos un enlace nuevo (el anterior ya no funciona), pero no pudimos enviar el correo. Copia el enlace para compartirlo o vuelve a intentar el envío.",
       },
     },
+    rsvpConfirmationEmail: {
+      title: "Confirmación de asistencia por correo",
+      never: "Nunca enviada",
+      lastSent: "Última confirmación enviada el {date} a {email}.",
+      hint: "Cuando el grupo guarda o cambia su respuesta, le enviamos automáticamente una confirmación a su correo de contacto (sin el enlace personal).",
+    },
     addGuest: {
       open: "Agregar invitado",
       label: "Nombre del invitado",
@@ -640,6 +646,21 @@ export const es = {
     siteIntro: "Más información sobre la boda:",
     siteLink: "Ver sitio de la boda",
     footer: "Te escribimos desde listalaboda.com a pedido de quienes organizan {wedding}.",
+  },
+  rsvpConfirmationEmail: {
+    subject: "Confirmación de asistencia — {wedding}",
+    preheader: "Guardamos la respuesta de tu invitación.",
+    eyebrow: "Confirmación de asistencia",
+    greeting: "Hola, {party}:",
+    intro: "Guardamos la respuesta de tu invitación a {wedding}.",
+    dateLabel: "Fecha:",
+    cityLabel: "Ciudad:",
+    summaryTitle: "Respuesta guardada",
+    changeNote:
+      "Si necesitas cambiarla, abre el enlace personal que recibiste con tu invitación. Por seguridad, este correo no lo incluye.",
+    siteIntro: "Más información sobre la boda:",
+    siteLink: "Ver sitio de la boda",
+    footer: "Te escribimos desde listalaboda.com porque se guardó una respuesta para tu invitación a {wedding}.",
   },
   site: {
     title: "Sitio web de la boda",
@@ -775,6 +796,11 @@ export const es = {
     submitChanges: "Guardar cambios",
     submitting: "Guardando…",
     saved: "Gracias. Guardamos tu respuesta.",
+    /** Secondary to `saved`: the RSVP is saved whatever happens to the email. */
+    confirmation: {
+      sent: "También enviamos un correo de confirmación.",
+      failed: "Tu respuesta quedó guardada, pero no pudimos enviar el correo de confirmación.",
+    },
     summaryTitle: "Tu respuesta",
     change: "Cambiar respuesta",
     status: {

@@ -167,7 +167,7 @@ async function deliver(
   const unrecorded = { outcome: "sent_but_unrecorded", recipient: party.recipient } as const;
   if (!sent.messageId) return unrecorded;
   try {
-    const recorded = await delivery.recorder.record({
+    const recorded = await delivery.recorder.recordInvitation({
       weddingId: access.weddingId,
       guestInvitationId: party.id,
       tokenHash: hashCapabilityToken(token),

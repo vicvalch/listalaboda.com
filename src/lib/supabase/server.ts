@@ -10,8 +10,10 @@ import type { Database } from "@/lib/supabase/database.types";
  * Supabase client for Server Components, Server Actions and Route Handlers.
  *
  * Acts as the current user via the request's session cookies, with the
- * publishable key — RLS applies. This is NOT a privileged client: there is
- * intentionally no service-role client in the codebase (ADR-002 §6).
+ * publishable key — RLS applies. This is NOT a privileged client, and it is
+ * what every authorization check uses. The codebase's only service-role use
+ * is the narrow, non-exported recorder of provider-accepted invitation
+ * emails (ADR-004, `@/lib/email/delivery-recorder`).
  *
  * Create one per request; do not share instances across requests.
  */

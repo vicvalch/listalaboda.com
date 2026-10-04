@@ -108,7 +108,7 @@ async function setWeddingDate(weddingId: string, date: string | null) {
 // ---------------------------------------------------------------- schema
 
 describe("guest list schema", () => {
-  it("guests and RSVPs hold no account, contact or counter data", async () => {
+  it("guests and RSVPs hold no account, contact or counter data (the party may hold one contact email)", async () => {
     const rows = await sql<{ table_name: string; column_name: string }>(
       `select table_name, column_name from information_schema.columns
        where table_schema = 'public' and table_name in ('guest_invitations', 'guests', 'rsvps')
@@ -126,6 +126,11 @@ describe("guest list schema", () => {
       "created_by",
       "created_at",
       "updated_at",
+      // LB-11: the party's optional contact email and its latest send.
+      "contact_email",
+      "invitation_email_sent_at",
+      "invitation_email_sent_to",
+      "invitation_email_provider_id",
     ]);
     expect(columns("guests")).toEqual([
       "id",

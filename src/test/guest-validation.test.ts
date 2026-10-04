@@ -51,7 +51,7 @@ describe("party label and guest names", () => {
     });
     expect(parseNewParty({ label: "Ana y Carlos", guestNames: "Ana\nCarlos" })).toEqual({
       ok: true,
-      input: { label: "Ana y Carlos", guestNames: ["Ana", "Carlos"] },
+      input: { label: "Ana y Carlos", guestNames: ["Ana", "Carlos"], contactEmail: null },
     });
   });
 });

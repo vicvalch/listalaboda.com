@@ -12,7 +12,7 @@ import type { TextEditState } from "./actions";
 const summaryClass = `${secondaryButtonClass} min-h-9 cursor-pointer list-none px-3 py-1.5 [&::-webkit-details-marker]:hidden`;
 
 type Props = {
-  /** Server Action: add a guest, rename a guest, or rename a party. */
+  /** Server Action: add a guest, rename a guest, rename a party, or save its email. */
   action: (prev: TextEditState, formData: FormData) => Promise<TextEditState>;
   /** Lookup keys only (wedding, party or guest id); the server re-derives authority. */
   hidden: Readonly<Record<string, string>>;
@@ -24,13 +24,15 @@ type Props = {
   fieldLabel: string;
   defaultValue?: string;
   maxLength: number;
+  /** "email" for the contact email (mobile keyboard); text otherwise. */
+  inputType?: "text" | "email";
   submitLabel: string;
   pendingLabel: string;
 };
 
 /**
  * One text field behind a disclosure ("Agregar invitado", "Editar grupo",
- * "Editar"): works without JavaScript (native <details>), keeps typed text on
+ * "Editar", "Agregar/Editar correo"): works without JavaScript (native <details>), keeps typed text on
  * errors, and announces success in a status region.
  */
 export function TextEditForm({
@@ -42,6 +44,7 @@ export function TextEditForm({
   fieldLabel,
   defaultValue = "",
   maxLength,
+  inputType = "text",
   submitLabel,
   pendingLabel,
 }: Props) {
@@ -68,7 +71,7 @@ export function TextEditForm({
           <FormField
             id={`${id}-text`}
             name="text"
-            type="text"
+            type={inputType}
             label={fieldLabel}
             maxLength={maxLength}
             autoComplete="off"

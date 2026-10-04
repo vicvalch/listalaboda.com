@@ -26,6 +26,12 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  {
+    // ADR-004: the one sanctioned service-role use — recording provider-accepted
+    // invitation emails. Nowhere else.
+    files: ["src/lib/email/delivery-recorder.ts"],
+    rules: { "no-restricted-syntax": "off" },
+  },
   globalIgnores([
     ".next/**",
     "out/**",

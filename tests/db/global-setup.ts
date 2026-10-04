@@ -16,7 +16,7 @@ import {
 // Supabase stack. Not a credential for anything real.
 const LOCAL_TEST_PASSWORD = "local-only-fixture-password";
 
-type SupabaseStatus = { API_URL?: string; DB_URL?: string; PUBLISHABLE_KEY?: string };
+type SupabaseStatus = { API_URL?: string; DB_URL?: string; PUBLISHABLE_KEY?: string; SECRET_KEY?: string };
 
 function readLocalStatus(): Required<SupabaseStatus> {
   let status: SupabaseStatus;
@@ -32,9 +32,9 @@ function readLocalStatus(): Required<SupabaseStatus> {
       "Local Supabase is not running. Start it with `npm run db:start` (requires Docker).",
     );
   }
-  const { API_URL, DB_URL, PUBLISHABLE_KEY } = status;
-  if (!API_URL || !DB_URL || !PUBLISHABLE_KEY) {
-    throw new Error("`supabase status` did not report API_URL, DB_URL and PUBLISHABLE_KEY.");
+  const { API_URL, DB_URL, PUBLISHABLE_KEY, SECRET_KEY } = status;
+  if (!API_URL || !DB_URL || !PUBLISHABLE_KEY || !SECRET_KEY) {
+    throw new Error("`supabase status` did not report API_URL, DB_URL, PUBLISHABLE_KEY and SECRET_KEY.");
   }
   for (const url of [API_URL, DB_URL]) {
     const host = new URL(url).hostname;
@@ -42,7 +42,7 @@ function readLocalStatus(): Required<SupabaseStatus> {
       throw new Error(`Refusing to run DB tests against a non-local host: ${host}`);
     }
   }
-  return { API_URL, DB_URL, PUBLISHABLE_KEY };
+  return { API_URL, DB_URL, PUBLISHABLE_KEY, SECRET_KEY };
 }
 
 /** Signs in a fake local user, creating it through normal sign-up if needed. */
@@ -107,6 +107,7 @@ export default async function setup(project: TestProject) {
     apiUrl: status.API_URL,
     dbUrl: status.DB_URL,
     publishableKey: status.PUBLISHABLE_KEY,
+    secretKey: status.SECRET_KEY,
     users,
   };
   project.provide("db", context);

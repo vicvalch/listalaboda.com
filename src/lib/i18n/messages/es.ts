@@ -486,9 +486,69 @@ export const es = {
       labelHint: "Por ejemplo: «Familia Pérez» o «Ana y Carlos».",
       namesLabel: "Invitados del grupo",
       namesHint: "Escribe un nombre por línea.",
+      emailLabel: "Correo de contacto (opcional)",
+      emailHint: "Solo para enviarle la invitación al grupo. Lo ven únicamente quienes organizan la boda.",
       submit: "Crear grupo",
       submitting: "Creando grupo…",
       created: "Creamos el grupo «{party}».",
+    },
+    contactEmail: {
+      label: "Correo de contacto",
+      none: "No hay correo",
+      add: "Agregar correo",
+      edit: "Editar correo",
+      fieldLabel: "Correo de contacto",
+      submit: "Guardar correo",
+      submitting: "Guardando…",
+      saved: "Guardamos el correo.",
+      remove: {
+        open: "Quitar correo",
+        confirmTitle: "¿Quitar el correo de «{party}»?",
+        confirmBody: "El enlace del grupo, sus invitados y sus respuestas no cambian.",
+        confirmButton: "Quitar correo",
+        cancel: "Cancelar",
+      },
+      validation: {
+        required: "Escribe un correo. Para no usar ninguno, elige «Quitar correo».",
+        invalid: "Escribe un correo válido.",
+        tooLong: "El correo es demasiado largo (máximo 254 caracteres).",
+      },
+    },
+    invitationEmail: {
+      title: "Invitación por correo",
+      never: "Nunca enviada",
+      lastSent: "Última invitación enviada el {date} a {email}.",
+      linkChangedSince: "Después se generó un enlace nuevo: el enlace de ese correo ya no funciona.",
+      includes:
+        "El correo incluye el nombre del grupo, el nombre, la fecha y la ciudad de la boda, el enlace para confirmar asistencia y, si está publicado, el sitio web de la boda.",
+      needsEmail: "Agrega un correo de contacto para poder enviar la invitación por correo.",
+      ownerRequired:
+        "Para enviarla por correo hace falta un enlace nuevo. Una persona con el papel «Organiza la boda» debe generar un enlace nuevo antes de enviarlo.",
+      sendFresh: "Enviar invitación por correo",
+      sendFreshHint: "Enviaremos este enlace al correo de contacto del grupo.",
+      sending: "Enviando…",
+      sent: "Enviamos la invitación a {email}.",
+      rotateSend: {
+        open: "Generar nuevo enlace y enviar",
+        confirmTitle: "¿Generar un nuevo enlace para «{party}» y enviarlo por correo?",
+        confirmBody:
+          "El enlace anterior dejará de funcionar y el nuevo se enviará a {email}. Las personas del grupo y sus respuestas no cambian.",
+        confirmButton: "Generar y enviar",
+        cancel: "Cancelar",
+      },
+      errors: {
+        missingEmail: "Este grupo no tiene correo de contacto. Agrégalo y vuelve a intentarlo.",
+        linkUnavailable:
+          "Ese enlace ya no es el vigente del grupo, así que no lo enviamos. Hace falta un enlace nuevo.",
+        notConfigured: "El envío de correos no está configurado todavía. Comparte el enlace manualmente.",
+        providerFailed:
+          "No pudimos enviar el correo. Inténtalo de nuevo en unos minutos o comparte el enlace manualmente.",
+        recipientRejected: "El servicio de correo rechazó esta dirección. Revisa el correo de contacto.",
+        sentUnrecorded:
+          "El correo se envió, pero no pudimos actualizar el estado. No lo envíes otra vez todavía.",
+        rotatedNotSent:
+          "Generamos un enlace nuevo (el anterior ya no funciona), pero no pudimos enviar el correo. Copia el enlace para compartirlo o vuelve a intentar el envío.",
+      },
     },
     addGuest: {
       open: "Agregar invitado",
@@ -563,6 +623,23 @@ export const es = {
       nameInvalid: "El nombre tiene caracteres no válidos.",
       namesRequired: "Escribe al menos un invitado.",
     },
+  },
+  invitationEmail: {
+    subject: "Tu invitación a {wedding}",
+    preheader: "Confirma tu asistencia con el enlace personal de esta invitación.",
+    eyebrow: "Invitación",
+    greeting: "Hola, {party}:",
+    intro: "Tienes una invitación a {wedding}.",
+    dateLabel: "Fecha:",
+    cityLabel: "Ciudad:",
+    rsvpIntro:
+      "Confirma la asistencia desde el enlace personal de esta invitación. Puedes responder por cada persona de la invitación y cambiar la respuesta más adelante.",
+    cta: "Confirmar asistencia",
+    fallback: "Si el botón no funciona, abre este enlace:",
+    personalNote: "Este enlace es solo para esta invitación. Por favor, no lo compartas con otras personas.",
+    siteIntro: "Más información sobre la boda:",
+    siteLink: "Ver sitio de la boda",
+    footer: "Te escribimos desde listalaboda.com a pedido de quienes organizan {wedding}.",
   },
   site: {
     title: "Sitio web de la boda",

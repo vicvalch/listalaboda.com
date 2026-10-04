@@ -22,6 +22,12 @@ export type DbTestContext = {
   apiUrl: string;
   dbUrl: string;
   publishableKey: string;
+  /**
+   * The LOCAL stack's secret (service_role) key. Only for exercising the
+   * server-only delivery recorder (ADR-004) and its service_role-only RPC;
+   * never used to arrange fixtures or to perform an action under test as a user.
+   */
+  secretKey: string;
   users: Record<TestUserKey, TestUser>;
 };
 

@@ -20,6 +20,14 @@ export function clientAs(user: TestUser | null): DbClient {
   });
 }
 
+/**
+ * service_role on the LOCAL stack, for the ADR-004 grant tests only: the one
+ * role allowed to execute record_guest_invitation_email.
+ */
+export const serviceRole = createClient<Database>(ctx.apiUrl, ctx.secretKey, {
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+});
+
 export const as = {
   anon: clientAs(null),
   ...(Object.fromEntries(

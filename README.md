@@ -97,8 +97,46 @@ The public RSVP section is never an RSVP form: guests still answer only through 
 (`/rsvp/<token>`). While the site is published, the RSVP page also shows the wedding's public name, date and city
 with a link to the site; unpublishing removes that context and never affects guest links.
 
-Still deferred: invitation/confirmation emails and reminders (Resend), activity history, and linking checklist
-items to guest work.
+**Guest invitation email (LB-11, Phase 2).** A party can have one optional **contact email** ("Correo de
+contacto"), set when it is created or later, by any member (owner or collaborator), and changed or removed at any
+time. It belongs to the party, not to individual guests (guests still have no contact data), isn't unique (one
+address may receive several invitations), and is private wedding data: only members see it, on the Invitados page;
+it never appears on the public website, the RSVP page, a URL, a log or any guest/public database function. It is
+stored normalized (trimmed, domain lowercased, conservative syntax, ≤ 254 characters), checked by the server and
+the database alike. Changing or removing it never touches the link, the guests or their answers, and sends nothing.
+
+The invitation email goes out through **Resend**, only when an organizer asks, and carries the party's RSVP link
+(`/rsvp/<token>`). Because only the link's hash is stored, an email can only carry a link whose plaintext exists
+right now:
+
+- **Fresh link, any member.** Right after creating a party (or replacing its link), the panel that shows the link
+  also offers "Enviar invitación por correo". The browser sends that token back in the form body (never a URL); the
+  database confirms it is still the party's current, usable link before anything is sent.
+- **Existing party, owner only.** After a reload the link can't be recovered, so emailing needs a new one:
+  "Generar nuevo enlace y enviar" (with a confirmation naming the address) replaces the link — the old one stops
+  working; guests and answers stay — and emails the new one. Collaborators are told an owner must do it; the
+  service and the database refuse it anyway. Nothing is ever rotated silently.
+
+The email (fresh Spanish copy; plain text and HTML, every user value escaped, a one-line subject) includes the
+party's name, the wedding's name, date and city when set, a "Confirmar asistencia" button with the raw link as a
+fallback, a note that the link is personal, and a "Ver sitio de la boda" link only while the website is published.
+Absolute links use the configured `APP_ORIGIN`, never the request's host. Each party shows "Nunca enviada" or
+"Última invitación enviada el … a …" (the latest successful send only: when, to which address, and the provider's
+message id). Clients can't write that status, not even through an RPC: a user's session can't prove what the
+provider answered, so it is recorded by one narrow database function executable only by `service_role`, called by a
+dedicated server-only recorder right after the provider accepted the message. That is the app's single, documented
+service-role exception ([ADR-004](docs/architecture/ADR-004-invitation-delivery-recorder.md)); all authorization
+still uses the user's own session, and the key is never a general-purpose client. Copying
+the link by hand keeps working everywhere.
+
+Sending is one provider call per click, never retried automatically and never claimed to be exactly-once. If the
+provider fails nothing is recorded and every link stays valid; if "Generar nuevo enlace y enviar" fails after
+replacing the link, the replacement is not rolled back: the new link is shown to copy or retry. If the provider
+accepts but the status can't be saved, the page says the email went out and asks not to resend yet. Without email
+configuration sending fails safely and nothing else is affected. Tests never reach Resend: unit and database tests
+inject a fake sender, and the E2E suite runs the app with a local file outbox (see `.env.example`).
+
+Still deferred: RSVP confirmation emails and reminders, activity history, and linking checklist items to guest work.
 
 ## Stack
 
@@ -113,6 +151,11 @@ npm ci
 cp .env.example .env.local   # fill in values; see comments in the file
 npm run dev                  # http://localhost:3000
 ```
+
+Email (optional locally): set `APP_ORIGIN`, `EMAIL_FROM`, `RESEND_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY` (the
+local `SECRET_KEY` from `npx supabase status`; used only to record sends, ADR-004) to send real invitation emails,
+or `EMAIL_TRANSPORT=outbox` with an absolute `EMAIL_OUTBOX_DIR` (localhost `APP_ORIGIN` only) to write them to files.
+Without them, everything works except sending.
 
 Local Supabase (requires Docker): `npx supabase start`. Then copy the API URL and publishable key
 from `npx supabase status` into `.env.local`. The project is not linked to any remote Supabase project.
@@ -162,6 +205,7 @@ one later.
 - [ADR-001 — Product domain and tenancy](docs/architecture/ADR-001-product-domain-and-tenancy.md)
 - [ADR-002 — Auth and security boundaries](docs/architecture/ADR-002-auth-and-security-boundaries.md)
 - [ADR-003 — Donor extraction policy](docs/architecture/ADR-003-donor-extraction-policy.md)
+- [ADR-004 — Service-role exception: recording invitation-email delivery](docs/architecture/ADR-004-invitation-delivery-recorder.md)
 
 Database migrations live in `supabase/migrations/` and are named `YYYYMMDDHHMMSS_lb_<slug>.sql`.
 After changing the schema, run `npm run db:reset && npm run db:types` and commit the regenerated types.

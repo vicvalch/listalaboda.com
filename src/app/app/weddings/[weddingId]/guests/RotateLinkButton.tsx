@@ -5,8 +5,8 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { secondaryButtonClass } from "@/components/ui/styles";
 import { getMessages, interpolate } from "@/lib/i18n";
 
-import { CopyLink } from "../CopyLink";
 import { rotateLinkAction, type RotateLinkState } from "./actions";
+import { FreshLinkPanel } from "./FreshLinkPanel";
 
 const smallButtonClass = `${secondaryButtonClass} min-h-9 px-3 py-1.5`;
 
@@ -75,17 +75,15 @@ export function RotateLinkButton({ weddingId, guestInvitationId, partyLabel }: P
         </button>
       )}
       {created ? (
-        <div className="space-y-3 rounded-xl border border-success/40 bg-success-soft p-4">
-          <p role="status" className="text-success text-sm font-semibold">
-            {copy.link.created}
-          </p>
-          <CopyLink
-            url={created.link}
-            label={interpolate(copy.link.copyLabel, { party: partyLabel })}
-            id={`guest-link-${guestInvitationId}`}
-            testId="guest-link"
-          />
-        </div>
+        <FreshLinkPanel
+          key={created.nonce}
+          weddingId={weddingId}
+          fresh={created}
+          partyLabel={partyLabel}
+          id={`guest-link-${guestInvitationId}`}
+          status={copy.link.created}
+          canSend
+        />
       ) : null}
     </div>
   );

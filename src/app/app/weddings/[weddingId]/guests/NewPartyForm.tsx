@@ -6,16 +6,19 @@ import { FormField } from "@/components/ui/FormField";
 import { Notice } from "@/components/ui/Notice";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { inputClass } from "@/components/ui/styles";
+import { CONTACT_EMAIL_MAX_LENGTH } from "@/lib/guests/contact-email";
 import { PARTY_LABEL_MAX_LENGTH } from "@/lib/guests/validation";
 import { getMessages, interpolate } from "@/lib/i18n";
 
-import { CopyLink } from "../CopyLink";
 import { createPartyAction, type CreatePartyState } from "./actions";
+import { FreshLinkPanel } from "./FreshLinkPanel";
 
 /**
- * "Nuevo grupo": the party's name and its first guests (one per line) in one
- * step — a party is never created empty. On success the party's link is
- * shown once, to copy and share.
+ * "Nuevo grupo": the party's name, its first guests (one per line) and an
+ * optional contact email in one step — a party is never created empty. On
+ * success the party's link is shown once, to copy and share, and it can be
+ * emailed to the contact address from there. Creating never sends anything
+ * by itself.
  */
 export function NewPartyForm({ weddingId }: { weddingId: string }) {
   const [state, formAction] = useActionState<CreatePartyState, FormData>(createPartyAction, null);
@@ -68,20 +71,29 @@ export function NewPartyForm({ weddingId }: { weddingId: string }) {
             </p>
           ) : null}
         </div>
+        <FormField
+          id="new-party-email"
+          name="contactEmail"
+          type="email"
+          label={copy.newParty.emailLabel}
+          hint={copy.newParty.emailHint}
+          maxLength={CONTACT_EMAIL_MAX_LENGTH}
+          autoComplete="off"
+          defaultValue={failure?.values?.contactEmail}
+          error={failure?.fieldErrors?.contactEmail}
+        />
         <SubmitButton label={copy.newParty.submit} pendingLabel={copy.newParty.submitting} />
       </form>
       {state?.ok ? (
-        <div className="space-y-3 rounded-xl border border-success/40 bg-success-soft p-4">
-          <p role="status" className="text-success text-sm font-semibold">
-            {interpolate(copy.newParty.created, { party: state.data.label })} {copy.link.created}
-          </p>
-          <CopyLink
-            url={state.data.link}
-            label={interpolate(copy.link.copyLabel, { party: state.data.label })}
-            id="new-party-link"
-            testId="guest-link"
-          />
-        </div>
+        <FreshLinkPanel
+          key={state.data.nonce}
+          weddingId={weddingId}
+          fresh={state.data}
+          partyLabel={state.data.label}
+          id="new-party-link"
+          status={`${interpolate(copy.newParty.created, { party: state.data.label })} ${copy.link.created}`}
+          canSend
+        />
       ) : null}
     </div>
   );

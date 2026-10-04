@@ -1,3 +1,4 @@
+import { parseContactEmail } from "@/lib/guests/contact-email";
 import { es } from "@/lib/i18n/messages/es";
 
 /**
@@ -73,25 +74,39 @@ export function parseGuestNames(raw: string): GuestNamesResult {
   return { ok: true, names: lines };
 }
 
-export type NewPartyField = "label" | "guestNames";
+export type NewPartyField = "label" | "guestNames" | "contactEmail";
 
-export type NewPartyInput = Readonly<{ label: string; guestNames: readonly string[] }>;
+export type NewPartyInput = Readonly<{
+  label: string;
+  guestNames: readonly string[];
+  /** Optional; normalized (see `@/lib/guests/contact-email`). Absent = none. */
+  contactEmail?: string | null;
+}>;
 
 export type NewPartyResult =
   | Readonly<{ ok: true; input: NewPartyInput }>
   | Readonly<{ ok: false; fieldErrors: Partial<Record<NewPartyField, string>> }>;
 
-export function parseNewParty(raw: { label: string; guestNames: string }): NewPartyResult {
+export function parseNewParty(raw: {
+  label: string;
+  guestNames: string;
+  contactEmail?: string;
+}): NewPartyResult {
   const label = parsePartyLabel(raw.label);
   const names = parseGuestNames(raw.guestNames);
-  if (!label.ok || !names.ok) {
+  const email = parseContactEmail(raw.contactEmail ?? "");
+  if (!label.ok || !names.ok || !email.ok) {
     return {
       ok: false,
       fieldErrors: {
         ...(label.ok ? {} : { label: label.error }),
         ...(names.ok ? {} : { guestNames: names.error }),
+        ...(email.ok ? {} : { contactEmail: email.error }),
       },
     };
   }
-  return { ok: true, input: { label: label.value, guestNames: names.names } };
+  return {
+    ok: true,
+    input: { label: label.value, guestNames: names.names, contactEmail: email.value },
+  };
 }

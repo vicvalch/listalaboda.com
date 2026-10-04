@@ -103,7 +103,8 @@ describe("schema guarantees", () => {
                                 'submit_guest_rsvp', 'save_wedding_site_section',
                                 'set_wedding_site_slug', 'publish_wedding_site',
                                 'unpublish_wedding_site', 'get_published_wedding_site',
-                                'get_guest_invitation_site_slug'))
+                                'get_guest_invitation_site_slug', 'guest_invitation_link_is_current',
+                                'record_guest_invitation_email'))
        order by 1`,
     );
 
@@ -126,8 +127,10 @@ describe("schema guarantees", () => {
       "public.get_guest_invitation",
       "public.get_guest_invitation_site_slug",
       "public.get_published_wedding_site",
+      "public.guest_invitation_link_is_current",
       "public.initialize_wedding_checklist",
       "public.publish_wedding_site",
+      "public.record_guest_invitation_email",
       "public.save_wedding_site_section",
       "public.set_wedding_display_name",
       "public.set_wedding_site_slug",
@@ -150,6 +153,7 @@ describe("schema guarantees", () => {
       "public.get_guest_invitation",
       "public.get_guest_invitation_site_slug",
       "public.get_published_wedding_site",
+      "public.guest_invitation_link_is_current",
       "public.initialize_wedding_checklist",
       "public.publish_wedding_site",
       "public.save_wedding_site_section",
@@ -166,6 +170,9 @@ describe("schema guarantees", () => {
     expect(definer).toContain("public.submit_guest_rsvp");
     expect(definer).toContain("public.get_published_wedding_site");
     expect(definer).toContain("public.publish_wedding_site");
+    // LB-11: token_hash and the send metadata aren't client-accessible.
+    expect(definer).toContain("public.guest_invitation_link_is_current");
+    expect(definer).toContain("public.record_guest_invitation_email");
     expect(definer).not.toContain("public.create_guest_invitation");
     expect(definer).not.toContain("public.save_wedding_site_section");
   });
@@ -182,14 +189,15 @@ describe("schema guarantees", () => {
                            'submit_guest_rsvp', 'save_wedding_site_section',
                            'set_wedding_site_slug', 'publish_wedding_site',
                            'unpublish_wedding_site', 'get_published_wedding_site',
-                           'get_guest_invitation_site_slug')
+                           'get_guest_invitation_site_slug', 'guest_invitation_link_is_current',
+                           'record_guest_invitation_email')
        order by 1`,
     );
     expect(rows).toEqual([
       { name: "accept_membership_invite", args: "invite_token_hash text" },
       {
         name: "create_guest_invitation",
-        args: "target_wedding_id uuid, party_label text, invitation_token_hash text, guest_names text[]",
+        args: "target_wedding_id uuid, party_label text, invitation_token_hash text, guest_names text[], party_contact_email text",
       },
       {
         name: "create_wedding",
@@ -198,10 +206,18 @@ describe("schema guarantees", () => {
       { name: "get_guest_invitation", args: "invitation_token_hash text" },
       { name: "get_guest_invitation_site_slug", args: "invitation_token_hash text" },
       { name: "get_published_wedding_site", args: "site_slug text" },
+      {
+        name: "guest_invitation_link_is_current",
+        args: "target_wedding_id uuid, target_invitation_id uuid, invitation_token_hash text",
+      },
       { name: "has_wedding_role", args: "target_wedding_id uuid, allowed_roles wedding_role[]" },
       { name: "initialize_wedding_checklist", args: "target_wedding_id uuid" },
       { name: "is_wedding_member", args: "target_wedding_id uuid" },
       { name: "publish_wedding_site", args: "target_wedding_id uuid" },
+      {
+        name: "record_guest_invitation_email",
+        args: "target_wedding_id uuid, target_invitation_id uuid, invitation_token_hash text, recipient text, provider_message_id text",
+      },
       {
         name: "save_wedding_site_section",
         args: "target_wedding_id uuid, section_kind content_section_kind, section_title text, section_body text, section_visible boolean",
@@ -309,5 +325,77 @@ describe("schema guarantees", () => {
          and column_name ilike '%expire%'`,
     );
     expect(rows).toEqual([]);
+  });
+
+  it("contact data lives only on the party: one optional contact email, nothing on guests or RSVPs", async () => {
+    const rows = await sql<{ column_name: string }>(
+      `select table_name || '.' || column_name as column_name from information_schema.columns
+       where table_schema = 'public'
+         and table_name in ('weddings', 'guest_invitations', 'guests', 'rsvps',
+                            'content_sections', 'wedding_publications')
+         and (column_name ilike '%email%' or column_name ilike '%phone%' or column_name ilike '%contact%')
+       order by 1`,
+    );
+    // The address itself, and the latest send's metadata (recipient included).
+    expect(rows.map((r) => r.column_name)).toEqual([
+      "guest_invitations.contact_email",
+      "guest_invitations.invitation_email_provider_id",
+      "guest_invitations.invitation_email_sent_at",
+      "guest_invitations.invitation_email_sent_to",
+    ]);
+  });
+
+  it("no plaintext token is stored anywhere: token columns are hashes or timestamps only", async () => {
+    const rows = await sql<{ column_name: string }>(
+      `select table_name || '.' || column_name as column_name from information_schema.columns
+       where table_schema = 'public' and (column_name ilike '%token%' or column_name ilike '%link%'
+                                          or column_name ilike '%url%' or column_name ilike '%secret%')
+       order by 1`,
+    );
+    expect(rows.map((r) => r.column_name)).toEqual([
+      "guest_invitations.token_hash",
+      "guest_invitations.token_issued_at",
+      "membership_invites.token_hash",
+    ]);
+  });
+
+  it("only service_role can execute record_guest_invitation_email (ADR-004)", async () => {
+    const rows = await sql<{ role: string; can: boolean }>(
+      `select r.role, has_function_privilege(r.role, p.oid, 'execute') as can
+       from pg_proc p
+       cross join (values ('anon'), ('authenticated'), ('service_role')) as r (role)
+       where p.oid = 'public.record_guest_invitation_email(uuid, uuid, text, text, text)'::regprocedure
+       order by r.role`,
+    );
+    expect(rows).toEqual([
+      { role: "anon", can: false },
+      { role: "authenticated", can: false },
+      { role: "service_role", can: true },
+    ]);
+    // No PUBLIC grant either.
+    const publicGrant = await sql(
+      `select 1 from pg_proc p, aclexplode(p.proacl) a
+       where p.oid = 'public.record_guest_invitation_email(uuid, uuid, text, text, text)'::regprocedure
+         and a.grantee = 0`,
+    );
+    expect(publicGrant).toEqual([]);
+  });
+
+  it("guest_invitations: clients read and write the contact email, never the hash or the send metadata", async () => {
+    const rows = await sql<{ grantee: string; privilege_type: string; column_name: string }>(
+      `select grantee, privilege_type, column_name from information_schema.column_privileges
+       where table_schema = 'public' and table_name = 'guest_invitations'
+         and grantee in ('anon', 'authenticated')
+       order by grantee, privilege_type, column_name`,
+    );
+    const columns = (privilege: string) =>
+      rows.filter((r) => r.grantee === "authenticated" && r.privilege_type === privilege).map((r) => r.column_name);
+    expect(rows.filter((r) => r.grantee === "anon")).toEqual([]);
+    expect(columns("SELECT")).not.toContain("token_hash");
+    expect(columns("SELECT")).toEqual(
+      expect.arrayContaining(["contact_email", "invitation_email_sent_at", "invitation_email_sent_to"]),
+    );
+    expect(columns("INSERT")).toEqual(["contact_email", "label", "token_hash", "wedding_id"]);
+    expect(columns("UPDATE")).toEqual(["contact_email", "label", "revoked_at", "token_hash"]);
   });
 });

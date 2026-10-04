@@ -10,6 +10,7 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - `docs/architecture/ADR-001-product-domain-and-tenancy.md`
 - `docs/architecture/ADR-002-auth-and-security-boundaries.md`
 - `docs/architecture/ADR-003-donor-extraction-policy.md`
+- `docs/architecture/ADR-004-invitation-delivery-recorder.md` (the only service-role exception)
 
 ## Product rules
 
@@ -23,9 +24,10 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 
 - Strict TypeScript. No `@ts-ignore`, no `any` to silence errors.
 - RLS enabled in the same migration that creates any table.
-- The service-role key is never normal persistence. There is no service-role client;
-  adding one needs a dedicated `server-only` module plus a written justification (ADR-002 §6).
-  ESLint blocks `process.env.SUPABASE_SERVICE_ROLE_KEY` by default.
+- The service-role key is never normal persistence. Its only use is the ADR-004 exception
+  (`src/lib/email/delivery-recorder.ts`, recording provider-accepted invitation emails); there is no
+  generic service-role client. Any other use needs its own `server-only` module plus a written
+  justification (ADR-002 §6). ESLint blocks `process.env.SUPABASE_SERVICE_ROLE_KEY` everywhere else.
 - Browser code reads env only through `src/lib/env/public.ts` (`NEXT_PUBLIC_*` only).
 - Modules that touch cookies or secrets start with `import "server-only"`.
 - Migrations live in `supabase/migrations/`, named `YYYYMMDDHHMMSS_lb_<slug>.sql`; applied
@@ -106,7 +108,8 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   derived from `guests` rows, with no fixed maximum. No stored party size or counters; explicit invited
   capacity / `max_guests` / plus-one semantics are not modeled yet (a future product decision).
 - Guest link tokens: CSPRNG (256 bits), plaintext only in the link returned once by create/rotate, the
-  `/rsvp/[token]` path and the httpOnly `lb_guest_rsvp` handoff cookie (path `/rsvp`). Only the SHA-256
+  `/rsvp/[token]` path and the httpOnly `lb_guest_rsvp` handoff cookie (path `/rsvp`) — and, since LB-11, the
+  invitation email body and the fresh-link send form's POST body. Only the SHA-256
   hash is stored, and `token_hash` is never readable through the API. Never log a token or put it in a query string.
 - Link expiry is derived (`private.guest_invitation_expires_at`, mirrored by `@/lib/guests/link`) from the
   current wedding date; never store it. Revoke = `revoked_at` (a revoked token stays dead); "Generar nuevo
@@ -149,6 +152,35 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - Public site pages are dynamic/no-store and `noindex, nofollow` (public by address, not discoverable).
   Saved edits to a published site are live immediately; there are no drafts or versions.
 
+## Guest invitation email rules (LB-11)
+
+- The contact email belongs to the GuestInvitation (party): `guest_invitations.contact_email`, optional, not unique,
+  never on Guests/RSVPs. It is PRIVATE wedding data: members only (`@/lib/guests/service`); never in public/guest
+  functions, `/boda`, `/rsvp`, URLs, logs or client storage. Normalize/validate through `@/lib/guests/contact-email`
+  (mirrors the DB CHECK). Owners and collaborators set/edit/remove it; that never rotates, revokes, resends or
+  touches RSVPs.
+- The plaintext token is still never persisted. An email may only carry a link whose plaintext exists right now:
+  a fresh create/rotate result (any member; the token returns in the send form's POST body, never a URL, and must
+  pass `guest_invitation_link_is_current`) or the owner-only "Generar nuevo enlace y enviar"
+  (`@/lib/guests/invitation-email`). Never rotate silently; never let a collaborator rotate through email.
+- Order: authorize → validate → config → party/recipient → current link → content → [rotate] → one provider call →
+  privileged record. The provider is never called before every check passes; the recorder never before the provider
+  accepted. Provider ids come only from the provider response. No automatic retries; no exactly-once claims.
+- A failed send never rolls back a rotation: return the new link. Provider success + record failure is
+  `sent_but_unrecorded` ("no lo envíes otra vez todavía"), never "not sent".
+- Send metadata (`invitation_email_sent_at/_sent_to/_provider_id`) is the latest successful send only, written only
+  by `record_guest_invitation_email` (database clock), executable ONLY by `service_role` and called only through
+  the server-only recorder after the provider accepted (ADR-004): a user JWT can't prove a provider result, so no
+  client role may execute it. The recorder never authorizes; the user's session does, first. Not an activity
+  history; no provider payloads, counters or tracking.
+- The provider is server-only behind `EmailSender` (`@/lib/email/provider`); Resend lives only in `@/lib/email/resend`.
+  Email env is read only in `@/lib/email/config` (`APP_ORIGIN`, `EMAIL_FROM`, `RESEND_API_KEY`, never
+  `NEXT_PUBLIC_*`). Absolute email links use `APP_ORIGIN`, never request headers. Services take an
+  `EmailDelivery` parameter; tests inject fakes and never reach a real provider (E2E: the localhost-only file outbox).
+- Email content: catalog copy only (`es.invitationEmail`), text + HTML, every user value escaped at render, one-line
+  subject. Include the website link only while it is published (`getPublishedSitePath`).
+- Sending never implies open RSVP. RSVP confirmation emails and reminders are deferred (no cron, queue or jobs).
+
 ## Commands
 
 - `npm run verify`: lint, typecheck, unit tests, build (same as CI)
@@ -168,4 +200,6 @@ wedding city, IANA wedding time zone, derived overdue ("Atrasado") and owner-onl
 starts Phase 2: GuestInvitation (household/party) → Guest → per-guest RSVP, token links without guest
 accounts and the couple's "Invitados" page (no emails, website or activity history yet). LB-10 adds the
 published wedding website: ContentSection, the "Sitio web" editor, owner-only slug/publish/unpublish and the
-public `/boda/[slug]` page (no email or activity history yet). Don't implement ahead of the current prompt.
+public `/boda/[slug]` page (no email or activity history yet). LB-11 adds the party's optional contact email and
+the GuestInvitation email through Resend (fresh-link send for any member, owner-only "new link and send", latest-send
+status; no confirmation emails, reminders or activity history yet). Don't implement ahead of the current prompt.

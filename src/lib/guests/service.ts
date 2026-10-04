@@ -33,6 +33,11 @@ import type { Database } from "@/lib/supabase/database.types";
  * A guest link's plaintext token exists only in the return value of
  * create/rotate (the one link shown to the organizer) and is never logged,
  * stored or echoed in errors. Organizers never write RSVPs.
+ *
+ * LB-11: a party may have a contact email (PRIVATE, members only), managed
+ * like any guest-list content. Setting, changing or removing it never
+ * touches the link or the RSVPs. Sending the invitation email lives in
+ * `@/lib/guests/invitation-email`.
  */
 
 type Client = SupabaseClient<Database>;
@@ -67,11 +72,17 @@ export type GuestListGuest = Readonly<{
   rsvp: (NonNullable<GuestResponse> & Readonly<{ dietaryNote: string | null }>) | null;
 }>;
 
+/** The latest successful invitation email; null = never sent. */
+export type InvitationEmailStatus = Readonly<{ sentAt: string; sentTo: string }> | null;
+
 export type GuestListParty = Readonly<{
   id: string;
   label: string;
   tokenIssuedAt: string;
   revokedAt: string | null;
+  /** PRIVATE: shown only to members, on this page. */
+  contactEmail: string | null;
+  invitationEmail: InvitationEmailStatus;
   guests: readonly GuestListGuest[];
 }>;
 
@@ -90,7 +101,7 @@ export async function listGuestParties(
     const { data, error } = await supabase
       .from("guest_invitations")
       .select(
-        "id, label, token_issued_at, revoked_at, created_at, guests(id, name, created_at, rsvps(attending, dietary_note))",
+        "id, label, token_issued_at, revoked_at, contact_email, invitation_email_sent_at, invitation_email_sent_to, created_at, guests(id, name, created_at, rsvps(attending, dietary_note))",
       )
       .eq("wedding_id", access.weddingId)
       .order("created_at", { ascending: true })
@@ -102,6 +113,11 @@ export async function listGuestParties(
       label: party.label,
       tokenIssuedAt: party.token_issued_at,
       revokedAt: party.revoked_at,
+      contactEmail: party.contact_email,
+      invitationEmail:
+        party.invitation_email_sent_at && party.invitation_email_sent_to
+          ? { sentAt: party.invitation_email_sent_at, sentTo: party.invitation_email_sent_to }
+          : null,
       guests: [...party.guests]
         .sort((a, b) =>
           a.created_at === b.created_at ? (a.id < b.id ? -1 : 1) : a.created_at < b.created_at ? -1 : 1,
@@ -122,14 +138,22 @@ export async function listGuestParties(
 
 // ------------------------------------------------------------ create party
 
+/**
+ * A link just created or rotated: `link` to show and copy; `token` (the
+ * same secret) only so the organizer's screen can ask for this exact link
+ * to be emailed. Neither is ever stored or logged.
+ */
+export type FreshLink = Readonly<{ link: string; token: string }>;
+
 export type CreatePartyResult =
-  | Readonly<{ ok: true; guestInvitationId: string; link: string }>
+  | Readonly<{ ok: true; guestInvitationId: string } & FreshLink>
   | Readonly<{ ok: false; reason: AccessDenial | "invalid" }>;
 
 /**
- * Creates a party with its first guests (never empty) and its first link,
- * atomically, through `create_guest_invitation` (runs as the caller, RLS
- * applies). Returns the link — the only time its plaintext exists.
+ * Creates a party with its first guests (never empty), its optional contact
+ * email and its first link, atomically, through `create_guest_invitation`
+ * (runs as the caller, RLS applies). Returns the link — the only time its
+ * plaintext exists. Never sends anything by itself.
  */
 export async function createGuestParty(
   supabase: Client,
@@ -147,6 +171,7 @@ export async function createGuestParty(
       party_label: input.label,
       invitation_token_hash: tokenHash,
       guest_names: [...input.guestNames],
+      ...(input.contactEmail ? { party_contact_email: input.contactEmail } : {}),
     });
     if (error) {
       if (error.code === "23514") return { ok: false, reason: "invalid" };
@@ -154,7 +179,7 @@ export async function createGuestParty(
       return { ok: false, reason: "error" };
     }
     if (!data || !UUID_PATTERN.test(data)) return { ok: false, reason: "error" };
-    return { ok: true, guestInvitationId: data, link: linkUrl(token, origin) };
+    return { ok: true, guestInvitationId: data, link: linkUrl(token, origin), token };
   } catch {
     return { ok: false, reason: "error" };
   }
@@ -220,13 +245,44 @@ export async function deleteGuestParty(
   }
 }
 
+/**
+ * Sets, changes (`email` normalized) or removes (`null`) a party's contact
+ * email — any member. The link, guests and RSVPs are untouched, nothing is
+ * sent, and the last-sent status stays as it was (it records where that
+ * email went).
+ */
+export async function updateGuestPartyContactEmail(
+  supabase: Client,
+  weddingId: string,
+  guestInvitationId: string,
+  email: string | null,
+): Promise<PartyWriteResult> {
+  const access = await requireWeddingMembership(supabase, weddingId);
+  if (!access.ok) return { ok: false, reason: accessDenial(access.reason) };
+  if (!UUID_PATTERN.test(guestInvitationId)) return { ok: false, reason: "invalid_target" };
+
+  try {
+    const { data, error } = await supabase
+      .from("guest_invitations")
+      .update({ contact_email: email })
+      .eq("id", guestInvitationId)
+      .eq("wedding_id", access.access.weddingId)
+      .select("id");
+    if (error) return { ok: false, reason: error.code === "23514" ? "invalid" : "error" };
+    if (!data || data.length === 0) return { ok: false, reason: "invalid_target" };
+    return { ok: true };
+  } catch {
+    return { ok: false, reason: "error" };
+  }
+}
+
 // ------------------------------------------------------------------ links
 
 /** Link administration (rotate/revoke) is owner-only: a collaborator gets `forbidden`. */
 type LinkAdminDenial = AccessDenial | "forbidden" | "invalid_target";
 
 export type RotateLinkResult =
-  | Readonly<{ ok: true; link: string }>
+  | Readonly<{ ok: true } & FreshLink>
   | Readonly<{ ok: false; reason: LinkAdminDenial }>;
 
 export type RevokeLinkResult = Readonly<{ ok: true }> | Readonly<{ ok: false; reason: LinkAdminDenial }>;
@@ -251,18 +307,32 @@ export async function rotateGuestPartyLink(
   const access = await requireWeddingRole(supabase, weddingId, ["owner"]);
   if (!access.ok) return { ok: false, reason: access.reason };
   if (!UUID_PATTERN.test(guestInvitationId)) return { ok: false, reason: "invalid_target" };
+  return replaceGuestPartyLink(supabase, access.access, guestInvitationId, origin);
+}
 
+/**
+ * The rotation write itself, for callers that already hold an OWNER's
+ * `WeddingAccess` (this function and the owner-only "new link and send").
+ * The database re-checks the role (link guard trigger).
+ */
+export async function replaceGuestPartyLink(
+  supabase: Client,
+  access: WeddingAccess,
+  guestInvitationId: string,
+  origin: string,
+): Promise<RotateLinkResult> {
+  if (access.role !== "owner") return { ok: false, reason: "forbidden" };
   const { token, tokenHash } = generateCapabilityToken();
   try {
     const { data, error } = await supabase
       .from("guest_invitations")
       .update({ token_hash: tokenHash })
       .eq("id", guestInvitationId)
-      .eq("wedding_id", access.access.weddingId)
+      .eq("wedding_id", access.weddingId)
       .select("id");
     if (error) return { ok: false, reason: linkAdminWriteError(error) };
     if (!data || data.length === 0) return { ok: false, reason: "invalid_target" };
-    return { ok: true, link: linkUrl(token, origin) };
+    return { ok: true, link: linkUrl(token, origin), token };
   } catch {
     return { ok: false, reason: "error" };
   }

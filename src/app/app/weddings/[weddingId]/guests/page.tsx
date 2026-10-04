@@ -355,8 +355,11 @@ type ContactEmailSectionProps = {
 };
 
 /**
- * The party's contact email (members only — this page) and its invitation
- * email status. Any member adds, edits or removes the email. Emailing needs
+ * The party's contact email (members only — this page), its invitation
+ * email status and, separately, its latest RSVP confirmation email (LB-12;
+ * sent automatically when the party answers, so there is no button). The
+ * recipients shown are where each email actually went, which may differ
+ * from the current contact email. Any member adds, edits or removes the email. Emailing needs
  * a link whose plaintext exists right now: a fresh one (shown after
  * creating or replacing it, with its own send button) or, for an owner,
  * "Generar nuevo enlace y enviar". A collaborator is told an owner must
@@ -366,6 +369,7 @@ function ContactEmailSection({ weddingId, weddingTimeZone, party, canAdministerL
   const copy = getMessages().guests;
   const partyKeys = { weddingId, guestInvitationId: party.id };
   const sent = party.invitationEmail;
+  const confirmed = party.rsvpConfirmationEmail;
   const linkChangedSince = sent !== null && new Date(party.tokenIssuedAt) > new Date(sent.sentAt);
 
   return (
@@ -389,6 +393,17 @@ function ContactEmailSection({ weddingId, weddingTimeZone, party, canAdministerL
           </span>
         </p>
         {linkChangedSince ? <p className="text-muted">{copy.invitationEmail.linkChangedSince}</p> : null}
+        <p>
+          <span className="font-semibold">{copy.rsvpConfirmationEmail.title}:</span>{" "}
+          <span data-testid="party-rsvp-confirmation-status">
+            {confirmed
+              ? interpolate(copy.rsvpConfirmationEmail.lastSent, {
+                  date: formatWeddingTimestamp(confirmed.sentAt, weddingTimeZone),
+                  email: confirmed.sentTo,
+                })
+              : copy.rsvpConfirmationEmail.never}
+          </span>
+        </p>
       </div>
       <div className="flex flex-wrap items-start gap-2">
         <TextEditForm
@@ -416,6 +431,7 @@ function ContactEmailSection({ weddingId, weddingTimeZone, party, canAdministerL
           />
         ) : null}
       </div>
+      {party.contactEmail ? <p className="text-muted text-sm">{copy.rsvpConfirmationEmail.hint}</p> : null}
       {!party.contactEmail ? (
         <p className="text-muted text-sm">{copy.invitationEmail.needsEmail}</p>
       ) : canAdministerLink ? (

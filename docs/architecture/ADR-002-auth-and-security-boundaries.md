@@ -108,7 +108,9 @@ Applies to two distinct token kinds:
   justification (e.g. a scheduled job). Guest flows should not need it (§5).
 - Code review rejects new service-role usage without that justification.
 - Accepted exceptions: [ADR-004](ADR-004-invitation-delivery-recorder.md) (recording provider-accepted
-  invitation emails; LB-11).
+  invitation emails; LB-11) and [ADR-005](ADR-005-rsvp-confirmation-email.md) (reading a party's private
+  confirmation context by its link's hash and recording provider-accepted RSVP confirmations; LB-12). Both
+  are in the same single server-only module.
 
 ### 7. Public / private boundary
 

@@ -75,6 +75,12 @@ export type GuestListGuest = Readonly<{
 /** The latest successful invitation email; null = never sent. */
 export type InvitationEmailStatus = Readonly<{ sentAt: string; sentTo: string }> | null;
 
+/**
+ * The latest successful RSVP confirmation email (LB-12); null = never sent.
+ * Separate from the invitation: different email, different moment.
+ */
+export type RsvpConfirmationEmailStatus = Readonly<{ sentAt: string; sentTo: string }> | null;
+
 export type GuestListParty = Readonly<{
   id: string;
   label: string;
@@ -83,6 +89,7 @@ export type GuestListParty = Readonly<{
   /** PRIVATE: shown only to members, on this page. */
   contactEmail: string | null;
   invitationEmail: InvitationEmailStatus;
+  rsvpConfirmationEmail: RsvpConfirmationEmailStatus;
   guests: readonly GuestListGuest[];
 }>;
 
@@ -101,7 +108,7 @@ export async function listGuestParties(
     const { data, error } = await supabase
       .from("guest_invitations")
       .select(
-        "id, label, token_issued_at, revoked_at, contact_email, invitation_email_sent_at, invitation_email_sent_to, created_at, guests(id, name, created_at, rsvps(attending, dietary_note))",
+        "id, label, token_issued_at, revoked_at, contact_email, invitation_email_sent_at, invitation_email_sent_to, rsvp_confirmation_email_sent_at, rsvp_confirmation_email_sent_to, created_at, guests(id, name, created_at, rsvps(attending, dietary_note))",
       )
       .eq("wedding_id", access.weddingId)
       .order("created_at", { ascending: true })
@@ -117,6 +124,10 @@ export async function listGuestParties(
       invitationEmail:
         party.invitation_email_sent_at && party.invitation_email_sent_to
           ? { sentAt: party.invitation_email_sent_at, sentTo: party.invitation_email_sent_to }
+          : null,
+      rsvpConfirmationEmail:
+        party.rsvp_confirmation_email_sent_at && party.rsvp_confirmation_email_sent_to
+          ? { sentAt: party.rsvp_confirmation_email_sent_at, sentTo: party.rsvp_confirmation_email_sent_to }
           : null,
       guests: [...party.guests]
         .sort((a, b) =>

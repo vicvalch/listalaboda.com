@@ -11,10 +11,6 @@ import type { TestUserKey } from "./context";
 import { addMember, createWedding as createFixtureWedding, ctx, sql, users } from "./support";
 
 vi.mock("server-only", () => ({}));
-// Proves RSVP submission never reaches email delivery (no confirmation
-// email in LB-11): any call to the delivery factory is recorded here.
-const deliveryFactory = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/email/delivery", () => ({ getEmailDelivery: deliveryFactory }));
 
 const { createGuestParty, updateGuestPartyContactEmail, listGuestParties } = await import(
   "@/lib/guests/service"
@@ -23,6 +19,7 @@ const { sendGuestInvitationEmail, rotateLinkAndSendInvitation } = await import(
   "@/lib/guests/invitation-email"
 );
 const { getGuestPartyByToken, submitGuestRsvp } = await import("@/lib/rsvp/service");
+const { submitRsvpWithConfirmation } = await import("@/lib/rsvp/confirmation");
 const { publishWeddingSite, saveContentSection, setWeddingSiteSlug, unpublishWeddingSite } = await import(
   "@/lib/wedding-site/service"
 );
@@ -56,10 +53,12 @@ function countingRecorder() {
   const real = createDeliveryRecorder({ supabaseUrl: ctx.apiUrl, serviceRoleKey: ctx.secretKey });
   const calls: string[] = [];
   const recorder: DeliveryRecorder = {
-    async record(entry) {
+    async recordInvitation(entry) {
       calls.push(entry.providerMessageId);
-      return real.record(entry);
+      return real.recordInvitation(entry);
     },
+    readRsvpConfirmationContext: real.readRsvpConfirmationContext,
+    recordRsvpConfirmation: real.recordRsvpConfirmation,
   };
   return { recorder, calls };
 }
@@ -472,24 +471,24 @@ describe("contact email and RSVP regressions", () => {
     expect(party?.invitationEmail?.sentTo).toBe("lista@example.com");
   });
 
-  it("submitting an RSVP never sends an email (no confirmation email yet)", async () => {
+  it("an RSVP confirmation (LB-12) never touches the invitation-email status", async () => {
     const created = await newParty("ownerA", weddingA, "Sin confirmación", "confirma@example.com");
     const sender = fakeSender();
-    deliveryFactory.mockClear();
-    deliveryFactory.mockReturnValue(deliveryWith(sender));
     const guestIds = (await sql<{ id: string }>(
       "select id from public.guests where guest_invitation_id = $1 order by created_at",
       [created.guestInvitationId],
     )).map((g) => g.id);
 
-    const result = await submitGuestRsvp(
+    const result = await submitRsvpWithConfirmation(
       anonClient(),
       created.token,
       guestIds.map((guestId) => ({ guestId, attending: true, dietaryNote: null })),
+      () => deliveryWith(sender),
     );
-    expect(result.ok).toBe(true);
-    expect(deliveryFactory).not.toHaveBeenCalled();
-    expect(sender.sent).toHaveLength(0);
+    expect(result).toMatchObject({ rsvp: "saved", confirmation: "sent" });
+    expect(sender.sent).toHaveLength(1);
+    // The confirmation is a different email: never the invitation's link.
+    expect(sender.sent[0]!.text).not.toContain("/rsvp/");
     expect((await metadata(created.guestInvitationId)).sent_at).toBeNull();
   });
 });

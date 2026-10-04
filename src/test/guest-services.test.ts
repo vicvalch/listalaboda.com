@@ -345,6 +345,8 @@ describe("listGuestParties", () => {
               contact_email: "familia@example.com",
               invitation_email_sent_at: "2026-10-02T10:00:00Z",
               invitation_email_sent_to: "familia@example.com",
+              rsvp_confirmation_email_sent_at: "2026-10-03T09:00:00Z",
+              rsvp_confirmation_email_sent_to: "anterior@example.com",
               created_at: "2026-10-02T00:00:00Z",
               guests: [
                 { id: GUEST_2, name: "Carlos", created_at: "2026-10-02T00:00:02Z", rsvps: [] },
@@ -369,6 +371,8 @@ describe("listGuestParties", () => {
         revokedAt: null,
         contactEmail: "familia@example.com",
         invitationEmail: { sentAt: "2026-10-02T10:00:00Z", sentTo: "familia@example.com" },
+        // Where the last confirmation went, which may differ from the current email.
+        rsvpConfirmationEmail: { sentAt: "2026-10-03T09:00:00Z", sentTo: "anterior@example.com" },
         guests: [
           { id: GUEST_ID, name: "Ana", rsvp: { attending: true, dietaryNote: "vegetariana" } },
           { id: GUEST_2, name: "Carlos", rsvp: null },

@@ -1,7 +1,11 @@
 # ADR-004 — Service-role exception: recording invitation-email delivery
 
 Status: Accepted (LB-11) · Date: 2026-10-03
-Related: [ADR-002 §6 — Service-role policy](ADR-002-auth-and-security-boundaries.md), [Product Constitution §8](../product/PRODUCT-CONSTITUTION.md)
+Related: [ADR-002 §6 — Service-role policy](ADR-002-auth-and-security-boundaries.md), [Product Constitution §8](../product/PRODUCT-CONSTITUTION.md), [ADR-005](ADR-005-rsvp-confirmation-email.md)
+
+> Later note (LB-12): this decision is unchanged. [ADR-005](ADR-005-rsvp-confirmation-email.md) separately
+> accepts two more named operations in the same module, for RSVP confirmation emails. Since then, this ADR's
+> `record(...)` is named `recordInvitation(...)`.
 
 ## Context
 

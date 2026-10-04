@@ -7,32 +7,42 @@ import { isStorableMessageId } from "@/lib/email/provider";
 import type { Database } from "@/lib/supabase/database.types";
 
 /**
- * The application's ONLY service-role use (ADR-004, ADR-002 §6): recording
- * that the email provider accepted an invitation email.
+ * The application's ONLY service-role use (ADR-002 §6), for email delivery
+ * metadata and nothing else. Three named operations, each one fixed RPC:
  *
- * Why it exists: the database can't authenticate a provider result coming
- * from a normal user session. A Server Action talks to Postgres with the
- * user's own JWT and the public publishable key — the very request the
- * user's browser can make itself — so a member-executable "record" RPC
- * would let any member fabricate a send. The send metadata is therefore
- * written only by `record_guest_invitation_email`, executable by
- * service_role alone, through this module, which is reached only after:
- *   1. the user was authorized with their OWN session (never here),
- *   2. the party, recipient and link were checked with that session,
- *   3. the provider accepted the message (its id comes from the provider
+ * - `recordInvitation` (ADR-004): the provider accepted an invitation email.
+ * - `readRsvpConfirmationContext` (ADR-005): after a party's RSVP was saved
+ *   through its link, the private bits its confirmation needs (the party's
+ *   ids, its contact email, the wedding's name/date/city), by that link's
+ *   hash. The guest has no account and guest functions must never reveal
+ *   the contact email, so only a credential the browser never holds can
+ *   read it.
+ * - `recordRsvpConfirmation` (ADR-005): the provider accepted an RSVP
+ *   confirmation email.
+ *
+ * Why recording is privileged: the database can't authenticate a provider
+ * result coming from a client credential. A Server Action talks to Postgres
+ * with the user's own JWT (or, for a guest, anon) and the public
+ * publishable key — the very request the browser can make itself — so a
+ * client-executable "record" RPC would let anyone fabricate a send. The
+ * metadata is therefore written only by service_role-only functions,
+ * through this module, reached only after:
+ *   1. the caller was authorized with their OWN credential (a member's
+ *      session, or the guest's link as anon) — never here,
+ *   2. the provider accepted the message (its id comes from the provider
  *      response, never from the browser).
  *
- * Scope, deliberately tiny: one function, one RPC, one party per call.
+ * Scope, deliberately tiny: three functions, three RPCs, one party per call.
  * The privileged client is created inside and never returned or exported;
- * there is no generic service-role client to reuse. No reads, no
- * authorization, no other writes. The key is read only here, never logged,
- * returned or echoed; missing or wrong configuration fails closed.
+ * there is no generic service-role client to reuse, no `from()`, no
+ * arbitrary RPC name. No authorization. The key is read only here, never
+ * logged, returned or echoed; missing or wrong configuration fails closed.
  */
 
 export type DeliveryRecord = Readonly<{
   weddingId: string;
   guestInvitationId: string;
-  /** SHA-256 of the link that was emailed (must still be the party's current one). */
+  /** SHA-256 of the party's link (must still be its current one). */
   tokenHash: string;
   /** The party's contact email the provider accepted (must still be current). */
   recipient: string;
@@ -40,10 +50,32 @@ export type DeliveryRecord = Readonly<{
   providerMessageId: string;
 }>;
 
+/** Same scope as an invitation record: the link whose RSVP was confirmed. */
+export type RsvpConfirmationRecord = DeliveryRecord;
+
 export type DeliveryRecordResult = Readonly<{ ok: true; sentAt: string }> | Readonly<{ ok: false }>;
 
+/** What an RSVP confirmation needs that the guest capability doesn't return. */
+export type RsvpConfirmationContext = Readonly<{
+  weddingId: string;
+  guestInvitationId: string;
+  /** The party's CURRENT contact email; null = none, nothing to send. */
+  recipient: string | null;
+  weddingName: string;
+  /** Postgres date (`YYYY-MM-DD`) or null. */
+  weddingDate: string | null;
+  weddingCity: string | null;
+}>;
+
+/** `ok: false` = unreadable, or the link is no longer usable. */
+export type RsvpConfirmationContextResult =
+  | Readonly<{ ok: true; context: RsvpConfirmationContext }>
+  | Readonly<{ ok: false }>;
+
 export interface DeliveryRecorder {
-  record(entry: DeliveryRecord): Promise<DeliveryRecordResult>;
+  recordInvitation(entry: DeliveryRecord): Promise<DeliveryRecordResult>;
+  readRsvpConfirmationContext(tokenHash: string): Promise<RsvpConfirmationContextResult>;
+  recordRsvpConfirmation(entry: RsvpConfirmationRecord): Promise<DeliveryRecordResult>;
 }
 
 type RecorderSettings = Readonly<{ supabaseUrl: string; serviceRoleKey: string }>;
@@ -84,24 +116,74 @@ export function parseRecorderSettings(source: EnvSource): RecorderSettings | nul
   return isSecret ? { supabaseUrl, serviceRoleKey } : null;
 }
 
+const TOKEN_HASH_PATTERN = /^[0-9a-f]{64}$/;
+
+type RecordArgs = Readonly<{
+  target_wedding_id: string;
+  target_invitation_id: string;
+  invitation_token_hash: string;
+  recipient: string;
+  provider_message_id: string;
+}>;
+
+function recordArgs(entry: DeliveryRecord): RecordArgs {
+  return {
+    target_wedding_id: entry.weddingId,
+    target_invitation_id: entry.guestInvitationId,
+    invitation_token_hash: entry.tokenHash,
+    recipient: entry.recipient,
+    provider_message_id: entry.providerMessageId,
+  };
+}
+
 /** Builds the recorder from explicit settings (the factory below, and DB tests). */
 export function createDeliveryRecorder({ supabaseUrl, serviceRoleKey }: RecorderSettings): DeliveryRecorder {
   const privileged = createClient<Database>(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
+
+  /** One of the two fixed record RPCs; never a caller-chosen name. */
+  async function record(
+    rpc: "record_guest_invitation_email" | "record_rsvp_confirmation_email",
+    entry: DeliveryRecord,
+  ): Promise<DeliveryRecordResult> {
+    if (!isStorableMessageId(entry.providerMessageId)) return { ok: false };
+    try {
+      const { data, error } = await privileged.rpc(rpc, recordArgs(entry));
+      if (error || typeof data !== "string") return { ok: false };
+      return { ok: true, sentAt: data };
+    } catch {
+      return { ok: false };
+    }
+  }
+
   return {
-    async record(entry) {
-      if (!isStorableMessageId(entry.providerMessageId)) return { ok: false };
+    recordInvitation: (entry) => record("record_guest_invitation_email", entry),
+    recordRsvpConfirmation: (entry) => record("record_rsvp_confirmation_email", entry),
+    async readRsvpConfirmationContext(tokenHash) {
+      if (!TOKEN_HASH_PATTERN.test(tokenHash)) return { ok: false };
       try {
-        const { data, error } = await privileged.rpc("record_guest_invitation_email", {
-          target_wedding_id: entry.weddingId,
-          target_invitation_id: entry.guestInvitationId,
-          invitation_token_hash: entry.tokenHash,
-          recipient: entry.recipient,
-          provider_message_id: entry.providerMessageId,
+        const { data, error } = await privileged.rpc("get_rsvp_confirmation_email_context", {
+          invitation_token_hash: tokenHash,
         });
-        if (error || typeof data !== "string") return { ok: false };
-        return { ok: true, sentAt: data };
+        const row = data?.[0];
+        if (error || !row || data.length !== 1) return { ok: false };
+        // The generated return type marks every column non-null; the contact
+        // email, date and city can be null.
+        const contactEmail: string | null = row.contact_email;
+        const weddingDate: string | null = row.wedding_date;
+        const weddingCity: string | null = row.wedding_city;
+        return {
+          ok: true,
+          context: {
+            weddingId: row.wedding_id,
+            guestInvitationId: row.guest_invitation_id,
+            recipient: contactEmail,
+            weddingName: row.wedding_name,
+            weddingDate,
+            weddingCity,
+          },
+        };
       } catch {
         return { ok: false };
       }
@@ -119,7 +201,7 @@ export function getDeliveryRecorder(): DeliveryRecorder | null {
   }
   const settings = parseRecorderSettings({
     NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
-    // ADR-004: the one sanctioned read of this key (eslint allows it in this file only).
+    // ADR-004/ADR-005: the one sanctioned read of this key (eslint allows it in this file only).
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
   });
   return settings ? createDeliveryRecorder(settings) : null;

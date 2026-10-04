@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { Notice } from "@/components/ui/Notice";
 import { cardClass, secondaryButtonClass, textLinkClass } from "@/components/ui/styles";
 import { getMessages } from "@/lib/i18n";
+import { parseConfirmationNotice, type ConfirmationNotice } from "@/lib/rsvp/confirmation-notice";
 import { GUEST_RSVP_COOKIE, GUEST_RSVP_PAGE_PATH } from "@/lib/rsvp/handoff";
 import { getGuestPartyByToken, getGuestPartySiteSlug, type GuestParty } from "@/lib/rsvp/service";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -45,7 +46,7 @@ export default async function RsvpPage({ searchParams }: PageProps<"/rsvp">) {
   const token = (await cookies()).get(GUEST_RSVP_COOKIE)?.value ?? "";
   const supabase = await createSupabaseServerClient();
   const result = await getGuestPartyByToken(supabase, token);
-  const { saved } = await searchParams;
+  const { saved, email } = await searchParams;
 
   if (!result.ok) {
     return (
@@ -80,7 +81,7 @@ export default async function RsvpPage({ searchParams }: PageProps<"/rsvp">) {
           </h1>
         </header>
         {saved === "1" && allAnswered ? (
-          <Saved party={party} />
+          <Saved party={party} notice={parseConfirmationNotice(email)} />
         ) : (
           <>
             <div className="space-y-1">
@@ -115,11 +116,20 @@ function WeddingContext({ site }: { site: PublishedWeddingSite }) {
   );
 }
 
-function Saved({ party }: { party: GuestParty }) {
+/**
+ * The RSVP is saved: that is always the headline. The confirmation email
+ * (LB-12) only adds a secondary sentence — never the address it went to.
+ */
+function Saved({ party, notice }: { party: GuestParty; notice: ConfirmationNotice | null }) {
   const copy = getMessages().rsvp;
   return (
     <div className="space-y-4">
       <Notice tone="success">{copy.saved}</Notice>
+      {notice ? (
+        <p className="text-muted text-sm" data-testid="rsvp-confirmation-note">
+          {copy.confirmation[notice]}
+        </p>
+      ) : null}
       <section aria-labelledby="rsvp-summary-title" className="space-y-2">
         <h2 id="rsvp-summary-title" className="text-lg font-semibold">
           {copy.summaryTitle}

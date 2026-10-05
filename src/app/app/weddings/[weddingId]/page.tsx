@@ -10,6 +10,7 @@ import { requireWeddingMembership } from "@/lib/authz/wedding";
 import { parseStatusFilter } from "@/lib/checklist/filters";
 import { getWeddingChecklist } from "@/lib/checklist/service";
 import { parseChecklistView } from "@/lib/checklist/views";
+import { listGuestPartyOptions } from "@/lib/guests/service";
 import { formatNumber, getMessages } from "@/lib/i18n";
 import { listMembershipInvites } from "@/lib/membership-invites/service";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -53,11 +54,13 @@ export default async function WeddingPage({
 
   const isOwner = access.access.role === "owner";
   // Loaded once per page (no per-item lookups), only after the membership
-  // check; labels are derived in memory.
-  const [checklist, invites, memberRows] = await Promise.all([
+  // check; labels (members, and each item's linked guest party) are derived
+  // in memory.
+  const [checklist, invites, memberRows, guestParties] = await Promise.all([
     getWeddingChecklist(supabase, access.access),
     isOwner ? listMembershipInvites(supabase, wedding.id) : Promise.resolve(null),
     listWeddingMembers(supabase, access.access),
+    listGuestPartyOptions(supabase, access.access),
   ]);
   const members = memberRows ? labelMembers(memberRows) : null;
   const me = members?.find((member) => member.isCurrentUser) ?? null;
@@ -131,6 +134,7 @@ export default async function WeddingPage({
         basePath={`/app/weddings/${wedding.id}`}
         currentMembershipId={access.access.membershipId}
         members={members}
+        guestParties={guestParties}
       />
 
       <section aria-labelledby="people-title" className="space-y-6 border-t border-border pt-8">

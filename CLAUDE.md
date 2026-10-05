@@ -14,6 +14,7 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   and `docs/architecture/ADR-007-manual-rsvp-reminder-delivery.md` (the only service-role exceptions, one module)
 - `docs/architecture/ADR-006-recoverable-rsvp-capability.md` (recoverable RSVP link encryption)
 - `docs/architecture/ADR-008-basic-activity-history.md` (append-only wedding activity history)
+- `docs/architecture/ADR-009-checklist-guest-work.md` (checklist item → guest party link)
 
 ## Product rules
 
@@ -292,6 +293,27 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - Activity can answer "was a reminder recorded for this party?" but it is not a scheduler, dedupe key or lock;
   automatic reminders remain deferred.
 
+## Checklist ↔ guest work rules (LB-16, ADR-009)
+
+- An item may be about zero or one guest party: `checklist_items.guest_invitation_id`, a GuestInvitation of the SAME
+  wedding (composite FK `(guest_invitation_id, wedding_id)`, `ON DELETE SET NULL (guest_invitation_id)`). Null = no
+  guest work. Never a stored href/url/route, JSON payload, polymorphic `(entity_type, entity_id)` or link table.
+- Same-wedding is database-enforced for every role; never rely on app checks alone. A forged or unknown party id is
+  `invalid_guest_party`, indistinguishably.
+- Existing authorization wins: linking is a checklist edit (owners and collaborators, `setChecklistItemGuestParty`
+  in `@/lib/checklist/service`, column grant + member RLS). The link grants nothing on the party; guest-link rules
+  (owner-only rotate/revoke) are unchanged. Items are created unlinked (no INSERT grant on the column).
+- No RSVP capability material and no copied guest PII: never store or project tokens, hashes, envelopes, RSVP URLs,
+  party label snapshots, guest names, contact emails, answers or notes through the relation. Render the party's
+  CURRENT label (`listGuestPartyOptions`: id + label) and the item's id/title/status on the guest side.
+- Linking/unlinking writes only that column: it never changes status, timing, order or assignee, and never touches
+  the party, guests, RSVPs, link, email metadata or activity history. Guest events never complete or create items.
+- Deleting the party unlinks (the item survives with its status); deleting the item leaves the party untouched.
+  A link whose party is gone renders as unlinked, never as a broken link.
+- Routes come from `@/lib/checklist/guest-work` (ids + app paths + `#item-`/`#party-` anchors); no query strings.
+  Reads stay batched: party options in one query, related items nested in `listGuestParties`' single select.
+- No activity events for link/unlink. Scheduling (automatic reminders, cron, queues, jobs) remains deferred.
+
 ## Commands
 
 - `npm run verify`: lint, typecheck, unit tests, build (same as CI)
@@ -321,4 +343,7 @@ no reminders or delivery yet). LB-14 adds manual RSVP reminders with that same l
 party's contact email (latest-reminder status; ADR-007) and a WhatsApp-ready text to copy (no API, no phone numbers;
 no scheduling or activity history yet). LB-15 adds the basic wedding activity history: an append-only, member-only
 "Actividad" page of GuestInvitation/RSVP facts, each written in the same transaction as the fact (owner-only revoke RPC,
-member-attributed recorder events; ADR-008; no backfill, no scheduler yet). Don't implement ahead of the current prompt.
+member-attributed recorder events; ADR-008; no backfill, no scheduler yet). LB-16 links checklist items to guest work:
+zero or one same-wedding party per item (composite FK, `ON DELETE SET NULL`), "Relacionado con / Ver grupo" on the
+checklist and "Pendientes relacionados" on the party card (ADR-009; no status automation, no scheduler yet). Don't
+implement ahead of the current prompt.

@@ -184,6 +184,9 @@ overwritten, revocation times say nothing about who), so inventing them would be
 
 ### 12. Future scheduler (LB-16) compatibility — and what this is not
 
+*Later note (LB-16):* LB-16 became checklist ↔ guest work ([ADR-009](ADR-009-checklist-guest-work.md)), which adds
+no events. The scheduler below is still deferred, to a later prompt.
+
 History gives a future scheduler durable, successful-only facts such as "an `rsvp_reminder_email_sent` row exists
 for this party after time T" (indexable by party). It is **not** the scheduler: no policy, no due calculation, no
 scheduler identity (a `system` or dedicated actor would need its own authority decision; ADR-007 §7), no

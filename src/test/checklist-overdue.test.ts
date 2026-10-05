@@ -28,6 +28,7 @@ function item(
     timing,
     sortOrder,
     assigneeMembershipId: null,
+    guestInvitationId: null,
   };
 }
 

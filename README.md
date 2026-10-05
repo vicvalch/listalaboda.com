@@ -223,8 +223,29 @@ link, or the system) and when, in the wedding's time zone.
 
 See [ADR-008](docs/architecture/ADR-008-basic-activity-history.md).
 
-Still deferred: automatic or scheduled reminders (no cron, queue, policies or retries), messaging APIs and phone
-numbers, and linking checklist items to guest work.
+**Checklist ↔ guest work (LB-16).** A checklist item can be about one guest party of the same wedding (e.g.
+"Confirmar el transporte" → "Familia Pérez"). On the checklist, "Vincular con invitados" picks the party from the
+wedding's groups; a linked item shows "Relacionado con: Familia Pérez · Ver grupo", and "Cambiar vínculo" / "Quitar
+vínculo" change or remove it. On **Invitados**, each party card lists its "Pendientes relacionados" (title and
+status), each linking back to the item on the checklist.
+
+- **One typed relation.** `checklist_items.guest_invitation_id`: zero or one party per item (a party may have many
+  items). No stored URLs, routes, JSON or polymorphic links; routes are derived from the ids.
+- **Same wedding, enforced by the database.** A composite foreign key `(guest_invitation_id, wedding_id)` makes a
+  party of another wedding (or a made-up id) impossible to link, for every role.
+- **Same permission as checklist editing.** Owners and collaborators link, change and unlink; outsiders, guests and
+  anonymous visitors can't. The link grants no access to the party.
+- **Linking never changes status.** Done stays done, pending stays pending; RSVPs, emails and reminders never
+  complete an item. Linking also never touches the party, its guests, answers, link, emails or history.
+- **No copied guest data.** The checklist stores only the party id and shows the party's current name; no guest
+  names, contact email, answers, notes, tokens or RSVP links are copied.
+- **Deleting.** Deleting the party keeps the item (status included) and just unlinks it; deleting the item leaves
+  the party untouched.
+
+See [ADR-009](docs/architecture/ADR-009-checklist-guest-work.md).
+
+Still deferred: automatic or scheduled reminders (no cron, queue, jobs, policies or retries), and messaging APIs
+and phone numbers.
 
 ## Stack
 
@@ -305,6 +326,7 @@ one later.
 - [ADR-006 — Recoverable RSVP capability encryption](docs/architecture/ADR-006-recoverable-rsvp-capability.md)
 - [ADR-007 — Manual RSVP reminder delivery](docs/architecture/ADR-007-manual-rsvp-reminder-delivery.md)
 - [ADR-008 — Basic wedding activity history](docs/architecture/ADR-008-basic-activity-history.md)
+- [ADR-009 — Checklist ↔ guest work](docs/architecture/ADR-009-checklist-guest-work.md)
 
 Database migrations live in `supabase/migrations/` and are named `YYYYMMDDHHMMSS_lb_<slug>.sql`.
 After changing the schema, run `npm run db:reset && npm run db:types` and commit the regenerated types.

@@ -7,6 +7,7 @@ import { cardClass, textLinkClass } from "@/components/ui/styles";
 import { loginPath } from "@/lib/auth/redirect";
 import { requireUser } from "@/lib/auth/session";
 import { requireWeddingMembership } from "@/lib/authz/wedding";
+import { checklistItemHref, guestPartyAnchor } from "@/lib/checklist/guest-work";
 import { CONTACT_EMAIL_MAX_LENGTH } from "@/lib/guests/contact-email";
 import { guestLinkExpiresAt, guestLinkState } from "@/lib/guests/link";
 import { listGuestParties, type GuestListParty } from "@/lib/guests/service";
@@ -186,6 +187,7 @@ function PartyCard({
   canAdministerLink,
 }: PartyCardProps) {
   const copy = getMessages().guests;
+  const checklistStatus = getMessages().checklist.status;
   const titleId = `party-${party.id}-title`;
   const linkState = guestLinkState(party, weddingDate, now);
   const expiresAt = guestLinkExpiresAt(party.tokenIssuedAt, weddingDate);
@@ -194,8 +196,9 @@ function PartyCard({
 
   return (
     <article
+      id={guestPartyAnchor(party.id)}
       aria-labelledby={titleId}
-      className="space-y-4 rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-6"
+      className="scroll-mt-4 space-y-4 rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-6"
       data-testid="guest-party"
     >
       <header className="space-y-1">
@@ -224,6 +227,30 @@ function PartyCard({
           ) : null}
         </p>
       </header>
+
+      {/* LB-16: the checklist items about this party, linking back to the
+          list. Title and status only; editing stays on the checklist. */}
+      {party.relatedChecklistItems.length > 0 ? (
+        <section
+          aria-labelledby={`${titleId}-related`}
+          className="space-y-1.5 rounded-xl bg-accent-soft p-3"
+          data-testid="party-related-items"
+        >
+          <h4 id={`${titleId}-related`} className="text-sm font-semibold">
+            {copy.relatedItems.title}
+          </h4>
+          <ul className="space-y-1 text-sm">
+            {party.relatedChecklistItems.map((item) => (
+              <li key={item.id} className="break-words">
+                <Link href={checklistItemHref(weddingId, item.id)} className={textLinkClass}>
+                  {item.title}
+                </Link>
+                <span className="text-muted"> · {checklistStatus[item.status]}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <ul className="divide-y divide-border" aria-label={party.label}>
         {party.guests.map((guest) => {

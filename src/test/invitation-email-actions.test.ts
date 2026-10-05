@@ -44,6 +44,9 @@ function forgedForm(fields: Record<string, string>): FormData {
     recipient: "intruso@example.com",
     role: "owner",
     isOwner: "true",
+    // LB-13: the link-encryption key comes from the server environment only.
+    encryption: "Zm9yZ2VkLWtleQ",
+    RSVP_CAPABILITY_ENCRYPTION_KEY: "Zm9yZ2VkLWtleQ",
   })) {
     form.append(key, value);
   }
@@ -65,7 +68,8 @@ describe("invitation email actions", () => {
 
   it("rotate + send: only wedding and party reach the service; a claimed role changes nothing", async () => {
     const state = await rotateAndSendAction(null, forgedForm({ weddingId: "w-1", guestInvitationId: "p-1" }));
-    expect(rotateLinkAndSendInvitation).toHaveBeenCalledWith(userClient, "w-1", "p-1", delivery);
+    // No key in this test environment: null, never a value from the form.
+    expect(rotateLinkAndSendInvitation).toHaveBeenCalledWith(userClient, "w-1", "p-1", delivery, null);
     expect(state).toMatchObject({ tone: "error", canRetry: false });
     expect(record).not.toHaveBeenCalled();
   });

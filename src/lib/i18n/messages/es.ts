@@ -473,12 +473,27 @@ export const es = {
       revoked: "Acceso revocado",
       expired: "Enlace vencido",
       validUntil: "Funciona hasta el {date}.",
-      notRecoverable:
-        "Por seguridad no guardamos el enlace. Si lo perdiste, genera uno nuevo.",
-      notRecoverableCollaborator:
-        "Por seguridad no guardamos el enlace. Si se perdió, quien organiza la boda puede generar uno nuevo o revocar el acceso.",
       copyLabel: "Enlace para {party}",
-      created: "Enlace listo. Cópialo y compártelo con el grupo; no podremos mostrártelo de nuevo.",
+      created:
+        "Enlace listo. Cópialo y compártelo con el grupo. Más adelante puedes volver a verlo con «Mostrar enlace».",
+    },
+    personalLink: {
+      title: "Enlace personal de RSVP",
+      hint: "Es el mismo enlace que tiene el grupo. Muéstralo solo cuando necesites compartirlo de nuevo.",
+      show: "Mostrar enlace",
+      showing: "Buscando el enlace…",
+      hide: "Ocultar",
+      copyLabel: "Enlace personal de {party}",
+      legacy: "Este enlace se creó antes de que pudiéramos recuperarlo de forma segura. Sigue funcionando para el grupo.",
+      unrecoverable: "No pudimos recuperar este enlace. Sigue funcionando para el grupo.",
+      regenerateOwner:
+        "Si necesitas compartirlo de nuevo, usa «Generar nuevo enlace» (el enlace anterior dejará de funcionar).",
+      regenerateCollaborator: "Una persona con el papel «Organiza la boda» debe generar un nuevo enlace.",
+      unavailable: "Este enlace ya no funciona (se revocó o venció), así que no lo mostramos.",
+      notConfigured: "Ahora mismo no podemos mostrar enlaces personales. Inténtalo de nuevo más tarde.",
+      inactive: "El enlace no está activo. Para compartir uno, hace falta generar un nuevo enlace.",
+      inactiveCollaborator:
+        "El enlace no está activo. Una persona con el papel «Organiza la boda» puede generar un nuevo enlace.",
     },
     newParty: {
       title: "Nuevo grupo",
@@ -618,6 +633,8 @@ export const es = {
     errors: {
       notFound: "Ese grupo o invitado ya no está en la lista. Recarga la página.",
       linkOwnerOnly: "Solo quienes organizan la boda pueden generar un enlace nuevo o revocar el acceso.",
+      linkNotConfigured:
+        "Ahora mismo no podemos crear enlaces personales, así que no cambiamos nada. Inténtalo de nuevo más tarde.",
       failed: "No pudimos guardar el cambio. Recarga la página e inténtalo de nuevo.",
     },
     validation: {

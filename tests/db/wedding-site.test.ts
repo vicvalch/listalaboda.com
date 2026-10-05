@@ -9,6 +9,7 @@ import {
   as,
   createWedding as createFixtureWedding,
   sql,
+  shapedEnvelope,
 } from "./support";
 
 // LB-10: the wedding website — ContentSection, explicit owner-only
@@ -626,6 +627,7 @@ describe("guest link → published site", () => {
       target_wedding_id: weddingId,
       party_label: "Grupo con sitio",
       invitation_token_hash: hash,
+      invitation_token_ciphertext: shapedEnvelope(),
       guest_names: ["Invitada"],
     });
     if (error || !data) throw new Error(`create_guest_invitation failed: ${error?.message}`);

@@ -4,6 +4,7 @@ import { createClient, type SupportedStorage } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 
 import type { Database } from "@/lib/supabase/database.types";
+import { TEST_RSVP_CAPABILITY_KEY } from "@/test/fixtures/rsvp-capability-key";
 
 vi.mock("server-only", () => ({}));
 
@@ -19,6 +20,7 @@ const {
   updateGuestPartyLabel,
 } = await import("@/lib/guests/service");
 const { getGuestPartyByToken, submitGuestRsvp } = await import("@/lib/rsvp/service");
+const { decryptRsvpCapability } = await import("@/lib/security/rsvp-capability-encryption");
 
 // Application-layer tests: a real supabase-js client against a fake HTTP
 // backend, asserting exactly what is sent and how failures are normalized.
@@ -35,6 +37,8 @@ const GUEST_ID = "55555555-5555-4555-8555-555555555555";
 const GUEST_2 = "66666666-6666-4666-8666-666666666666";
 const TOKEN = "A".repeat(43);
 const TOKEN_HASH = createHash("sha256").update(TOKEN).digest("hex");
+/** LB-13: the server's (fake, test-only) link-encryption key. */
+const ENCRYPTION = { key: TEST_RSVP_CAPABILITY_KEY };
 
 type Recorded = { method: string; url: URL; body: unknown };
 type Reply = { status: number; body: unknown };
@@ -116,7 +120,7 @@ const pgError = (code: string, message: string): Reply => ({ status: 400, body: 
 // ------------------------------------------------------------ organizer
 
 describe("createGuestParty", () => {
-  it("sends the label, names and only the token HASH; returns the link once", async () => {
+  it("sends the label, names, the token HASH and its envelope (never the token); returns the link", async () => {
     const { supabase, requests } = clientFor({
       role: "collaborator",
       replies: { "POST /rest/v1/rpc/create_guest_invitation": { status: 200, body: PARTY_ID } },
@@ -126,6 +130,7 @@ describe("createGuestParty", () => {
       WEDDING_ID,
       { label: "Familia Pérez", guestNames: ["Ana", "Carlos"] },
       ORIGIN,
+      ENCRYPTION,
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -134,13 +139,32 @@ describe("createGuestParty", () => {
     expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
 
     const [rpc] = writes(requests);
-    expect(rpc?.body).toEqual({
+    const tokenHash = createHash("sha256").update(token).digest("hex");
+    const body = rpc?.body as Record<string, unknown>;
+    expect(body).toEqual({
       target_wedding_id: WEDDING_ID,
       party_label: "Familia Pérez",
-      invitation_token_hash: createHash("sha256").update(token).digest("hex"),
+      invitation_token_hash: tokenHash,
+      invitation_token_ciphertext: expect.stringMatching(/^v1\./),
       guest_names: ["Ana", "Carlos"],
     });
+    // The envelope opens to THIS token, bound to THIS hash, with the server key.
+    expect(
+      decryptRsvpCapability({
+        envelope: body.invitation_token_ciphertext as string,
+        expectedTokenHash: tokenHash,
+        key: ENCRYPTION.key,
+      }),
+    ).toBe(token);
     expect(JSON.stringify(requests.map((r) => [r.url.toString(), r.body]))).not.toContain(token);
+  });
+
+  it("without the link-encryption key nothing is written (no hash-only links)", async () => {
+    const { supabase, requests } = clientFor({ role: "owner" });
+    await expect(
+      createGuestParty(supabase, WEDDING_ID, { label: "X", guestNames: ["X"] }, ORIGIN, null),
+    ).resolves.toEqual({ ok: false, reason: "configuration_error" });
+    expect(writes(requests)).toEqual([]);
   });
 
   it("non-members and signed-out callers are stopped before any write", async () => {
@@ -150,13 +174,13 @@ describe("createGuestParty", () => {
     ] as const) {
       const { supabase, requests } = clientFor(backend);
       await expect(
-        createGuestParty(supabase, WEDDING_ID, { label: "X", guestNames: ["X"] }, ORIGIN),
+        createGuestParty(supabase, WEDDING_ID, { label: "X", guestNames: ["X"] }, ORIGIN, ENCRYPTION),
       ).resolves.toEqual({ ok: false, reason });
       expect(writes(requests)).toEqual([]);
     }
     const { supabase } = clientFor({ role: "owner" });
     await expect(
-      createGuestParty(supabase, "not-a-uuid", { label: "X", guestNames: ["X"] }, ORIGIN),
+      createGuestParty(supabase, "not-a-uuid", { label: "X", guestNames: ["X"] }, ORIGIN, ENCRYPTION),
     ).resolves.toEqual({ ok: false, reason: "not_found" });
   });
 
@@ -174,7 +198,7 @@ describe("createGuestParty", () => {
         ...(reply === "network" ? { networkDown: key } : { replies: { [key]: reply } }),
       });
       await expect(
-        createGuestParty(supabase, WEDDING_ID, { label: "X", guestNames: ["X"] }, ORIGIN),
+        createGuestParty(supabase, WEDDING_ID, { label: "X", guestNames: ["X"] }, ORIGIN, ENCRYPTION),
       ).resolves.toEqual({ ok: false, reason });
     }
   });
@@ -225,7 +249,7 @@ describe("party and guest writes", () => {
     expect(await deleteGuestParty(content.supabase, WEDDING_ID, PARTY_ID)).toEqual({ ok: true });
 
     const links = clientFor({ role: "collaborator" });
-    expect(await rotateGuestPartyLink(links.supabase, WEDDING_ID, PARTY_ID, ORIGIN)).toEqual({
+    expect(await rotateGuestPartyLink(links.supabase, WEDDING_ID, PARTY_ID, ORIGIN, ENCRYPTION)).toEqual({
       ok: false,
       reason: "forbidden",
     });
@@ -239,9 +263,12 @@ describe("party and guest writes", () => {
   it("a role lost between the check and the write is still refused by the database", async () => {
     const { supabase } = clientFor({
       role: "owner",
-      replies: { "PATCH /rest/v1/guest_invitations": pgError("42501", "guest_link_owner_only") },
+      replies: {
+        "POST /rest/v1/rpc/rotate_guest_invitation_link": pgError("42501", "guest_link_owner_only"),
+        "PATCH /rest/v1/guest_invitations": pgError("42501", "guest_link_owner_only"),
+      },
     });
-    expect(await rotateGuestPartyLink(supabase, WEDDING_ID, PARTY_ID, ORIGIN)).toEqual({
+    expect(await rotateGuestPartyLink(supabase, WEDDING_ID, PARTY_ID, ORIGIN, ENCRYPTION)).toEqual({
       ok: false,
       reason: "forbidden",
     });
@@ -251,18 +278,52 @@ describe("party and guest writes", () => {
     });
   });
 
-  it("rotation sends only a new hash and returns the new link", async () => {
+  it("rotation sends a new hash and its envelope in ONE call and returns the new link", async () => {
     const { supabase, requests } = clientFor({
       role: "owner",
-      replies: { "PATCH /rest/v1/guest_invitations": { status: 200, body: [{ id: PARTY_ID }] } },
+      replies: { "POST /rest/v1/rpc/rotate_guest_invitation_link": { status: 200, body: true } },
     });
-    const result = await rotateGuestPartyLink(supabase, WEDDING_ID, PARTY_ID, ORIGIN);
+    const result = await rotateGuestPartyLink(supabase, WEDDING_ID, PARTY_ID, ORIGIN, ENCRYPTION);
     if (!result.ok) throw new Error(result.reason);
     const token = new URL(result.link).pathname.split("/")[2] ?? "";
-    const [patch] = writes(requests);
-    expect(patch?.body).toEqual({ token_hash: createHash("sha256").update(token).digest("hex") });
-    expect(patch?.url.searchParams.get("id")).toBe(`eq.${PARTY_ID}`);
-    expect(patch?.url.searchParams.get("wedding_id")).toBe(`eq.${WEDDING_ID}`);
+    const tokenHash = createHash("sha256").update(token).digest("hex");
+    const all = writes(requests);
+    expect(all).toHaveLength(1);
+    const body = all[0]?.body as Record<string, unknown>;
+    expect(body).toEqual({
+      target_wedding_id: WEDDING_ID,
+      target_invitation_id: PARTY_ID,
+      invitation_token_hash: tokenHash,
+      invitation_token_ciphertext: expect.stringMatching(/^v1\./),
+    });
+    expect(
+      decryptRsvpCapability({
+        envelope: body.invitation_token_ciphertext as string,
+        expectedTokenHash: tokenHash,
+        key: ENCRYPTION.key,
+      }),
+    ).toBe(token);
+    expect(JSON.stringify(all)).not.toContain(token);
+  });
+
+  it("rotation without the link-encryption key changes nothing", async () => {
+    const { supabase, requests } = clientFor({ role: "owner" });
+    expect(await rotateGuestPartyLink(supabase, WEDDING_ID, PARTY_ID, ORIGIN, null)).toEqual({
+      ok: false,
+      reason: "configuration_error",
+    });
+    expect(writes(requests)).toEqual([]);
+  });
+
+  it("rotation of a party that isn't this wedding's is invalid_target", async () => {
+    const { supabase } = clientFor({
+      role: "owner",
+      replies: { "POST /rest/v1/rpc/rotate_guest_invitation_link": { status: 200, body: false } },
+    });
+    expect(await rotateGuestPartyLink(supabase, WEDDING_ID, PARTY_ID, ORIGIN, ENCRYPTION)).toEqual({
+      ok: false,
+      reason: "invalid_target",
+    });
   });
 
   it("ids are lookup keys: malformed or unmatched ids are invalid_target", async () => {

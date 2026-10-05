@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { DeliveryRecord, DeliveryRecordResult, DeliveryRecorder } from "@/lib/email/delivery-recorder";
 import type { EmailSendResult, EmailSender, OutgoingEmail } from "@/lib/email/provider";
 import type { Database } from "@/lib/supabase/database.types";
+import { TEST_RSVP_CAPABILITY_KEY } from "@/test/fixtures/rsvp-capability-key";
 
 vi.mock("server-only", () => ({}));
 
@@ -29,6 +30,9 @@ const PARTY_ID = "44444444-4444-4444-8444-444444444444";
 const TOKEN = "T".repeat(43);
 const TOKEN_HASH = createHash("sha256").update(TOKEN).digest("hex");
 const SENT_AT = "2026-10-03T12:00:00+00:00";
+/** LB-13: the server's (fake, test-only) link-encryption key. */
+const ENCRYPTION = { key: TEST_RSVP_CAPABILITY_KEY };
+const ROTATE_RPC = "POST /rest/v1/rpc/rotate_guest_invitation_link";
 
 type Recorded = { method: string; url: URL; body: unknown };
 type Reply = { status: number; body: unknown };
@@ -76,7 +80,7 @@ function happyReplies(overrides: Record<string, Reply> = {}): Record<string, Rep
       body: [{ id: WEDDING_ID, name: "Boda Prueba", wedding_date: null, city: null, time_zone: null }],
     },
     "GET /rest/v1/wedding_publications": { status: 200, body: [] },
-    "PATCH /rest/v1/guest_invitations": { status: 200, body: [{ id: PARTY_ID }] },
+    [ROTATE_RPC]: { status: 200, body: true },
     // The user's session can't execute record_guest_invitation_email (only
     // service_role can); any attempt would hit "unexpected request" here.
     ...overrides,
@@ -171,6 +175,7 @@ describe("sendGuestInvitationEmail", () => {
     const calls = dataCalls(requests);
     // Never a rotation from this path, and the user's session never writes
     // send metadata: the privileged recorder does, once, after the send.
+    expect(calls).not.toContain(ROTATE_RPC);
     expect(calls).not.toContain("PATCH /rest/v1/guest_invitations");
     expect(calls).not.toContain(RECORD_RPC);
     expect(fake.order).toEqual(["SEND", "RECORD"]);
@@ -344,7 +349,7 @@ describe("rotateLinkAndSendInvitation", () => {
   it("owner: rotates, then sends the NEW link, then records; returns the new link", async () => {
     const { supabase, requests } = clientFor({ role: "owner", replies: happyReplies() });
     const fake = fakeSender();
-    const outcome = await rotateLinkAndSendInvitation(supabase, WEDDING_ID, PARTY_ID, fake.delivery);
+    const outcome = await rotateLinkAndSendInvitation(supabase, WEDDING_ID, PARTY_ID, fake.delivery, ENCRYPTION);
 
     expect(outcome).toMatchObject({ outcome: "sent", recipient: "familia@example.com" });
     const fresh = outcome.link;
@@ -353,19 +358,21 @@ describe("rotateLinkAndSendInvitation", () => {
     expect(fake.sent[0]!.text).toContain(fresh.link);
 
     // Rotation (user's session) → send → record (privileged), in that order.
-    expect(dataCalls(requests).at(-1)).toBe("PATCH /rest/v1/guest_invitations");
+    expect(dataCalls(requests).at(-1)).toBe(ROTATE_RPC);
     expect(fake.order).toEqual(["SEND", "RECORD"]);
-    // The rotation sends only the new hash; the record names that same link.
-    const patch = requests.find((r) => r.method === "PATCH");
+    // The rotation sends the new hash and its envelope (never the token);
+    // the record names that same link.
+    const rotation = requests.find((r) => `${r.method} ${r.url.pathname}` === ROTATE_RPC);
     const newHash = createHash("sha256").update(fresh.token).digest("hex");
-    expect(patch?.body).toEqual({ token_hash: newHash });
+    expect(rotation?.body).toMatchObject({ invitation_token_hash: newHash });
+    expect(JSON.stringify(rotation?.body)).not.toContain(fresh.token);
     expect(fake.records).toEqual([expect.objectContaining({ tokenHash: newHash, providerMessageId: "msg_1" })]);
   });
 
   it("collaborator: forbidden before any read, rotation or send", async () => {
     const { supabase, requests } = clientFor({ role: "collaborator", replies: happyReplies() });
     const fake = fakeSender();
-    expect(await rotateLinkAndSendInvitation(supabase, WEDDING_ID, PARTY_ID, fake.delivery)).toEqual({
+    expect(await rotateLinkAndSendInvitation(supabase, WEDDING_ID, PARTY_ID, fake.delivery, ENCRYPTION)).toEqual({
       outcome: "failed",
       reason: "forbidden",
     });
@@ -387,21 +394,33 @@ describe("rotateLinkAndSendInvitation", () => {
       WEDDING_ID,
       PARTY_ID,
       configured ? fake.delivery : null,
+      ENCRYPTION,
     );
     expect(outcome).toEqual({ outcome: "failed", reason });
-    expect(dataCalls(requests)).not.toContain("PATCH /rest/v1/guest_invitations");
+    expect(dataCalls(requests)).not.toContain(ROTATE_RPC);
+    expect(fake.sent).toHaveLength(0);
+  });
+
+  it("never rotates without the link-encryption key (LB-13): the old link stays", async () => {
+    const { supabase, requests } = clientFor({ role: "owner", replies: happyReplies() });
+    const fake = fakeSender();
+    expect(await rotateLinkAndSendInvitation(supabase, WEDDING_ID, PARTY_ID, fake.delivery, null)).toEqual({
+      outcome: "failed",
+      reason: "link_configuration_error",
+    });
+    expect(dataCalls(requests)).not.toContain(ROTATE_RPC);
     expect(fake.sent).toHaveLength(0);
   });
 
   it("provider failure after rotating: the rotation stands and the new link is returned", async () => {
     const { supabase, requests } = clientFor({ role: "owner", replies: happyReplies() });
     const fake = fakeSender({ ok: false, reason: "provider_failure" });
-    const outcome = await rotateLinkAndSendInvitation(supabase, WEDDING_ID, PARTY_ID, fake.delivery);
+    const outcome = await rotateLinkAndSendInvitation(supabase, WEDDING_ID, PARTY_ID, fake.delivery, ENCRYPTION);
     expect(outcome).toMatchObject({ outcome: "failed", reason: "provider_failed" });
     expect(outcome.link?.link).toMatch(/^https:\/\/bodas\.example\.com\/rsvp\/[A-Za-z0-9_-]{43}$/);
     // No rollback attempt: exactly one PATCH (the rotation), no record.
     const calls = dataCalls(requests);
-    expect(calls.filter((c) => c === "PATCH /rest/v1/guest_invitations")).toHaveLength(1);
+    expect(calls.filter((c) => c === ROTATE_RPC)).toHaveLength(1);
     expect(calls).not.toContain(RECORD_RPC);
     expect(fake.records).toHaveLength(0);
   });
@@ -410,14 +429,14 @@ describe("rotateLinkAndSendInvitation", () => {
     const { supabase } = clientFor({
       role: "owner",
       replies: happyReplies({
-        "PATCH /rest/v1/guest_invitations": {
+        [ROTATE_RPC]: {
           status: 403,
           body: { code: "42501", message: "guest_link_owner_only" },
         },
       }),
     });
     const fake = fakeSender();
-    expect(await rotateLinkAndSendInvitation(supabase, WEDDING_ID, PARTY_ID, fake.delivery)).toEqual({
+    expect(await rotateLinkAndSendInvitation(supabase, WEDDING_ID, PARTY_ID, fake.delivery, ENCRYPTION)).toEqual({
       outcome: "failed",
       reason: "forbidden",
     });

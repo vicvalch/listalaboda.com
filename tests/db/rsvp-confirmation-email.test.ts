@@ -10,6 +10,7 @@ import {
   createWedding as createFixtureWedding,
   serviceRole,
   sql,
+  shapedEnvelope,
 } from "./support";
 
 // LB-12: the RSVP confirmation's database boundary (ADR-005), exercised as
@@ -48,6 +49,7 @@ async function createParty(actor: TestUserKey, weddingId: string, label: string,
     target_wedding_id: weddingId,
     party_label: label,
     invitation_token_hash: hash,
+    invitation_token_ciphertext: shapedEnvelope(),
     guest_names: ["Invitada Uno", "Invitado Dos"],
     ...(contactEmail ? { party_contact_email: contactEmail } : {}),
   });

@@ -10,16 +10,19 @@ import {
 import type { EmailDelivery } from "@/lib/email/delivery";
 import { renderInvitationEmail } from "@/lib/email/invitation";
 import { isStoredContactEmail } from "@/lib/guests/contact-email";
-import { guestRsvpPath } from "@/lib/guests/link";
+import { guestRsvpUrl } from "@/lib/guests/link";
 import { replaceGuestPartyLink, type FreshLink } from "@/lib/guests/service";
 import { hashCapabilityToken, isWellFormedCapabilityToken } from "@/lib/security/capability-token";
+import type { RsvpCapabilityEncryptionSettings } from "@/lib/security/rsvp-capability-encryption";
 import type { Database } from "@/lib/supabase/database.types";
 import { getPublishedSitePath } from "@/lib/wedding-site/service";
 import { getWeddingDetail } from "@/lib/weddings/service";
 
 /**
- * Sending a party's invitation by email (LB-11). Two entry points, because
- * the stored link can't be reconstructed (only its hash exists):
+ * Sending a party's invitation by email (LB-11). Two entry points, both
+ * carrying a link whose plaintext the server holds right now (LB-13 made
+ * links recoverable for sharing, ADR-006, but emailing a recovered link is
+ * reminder delivery, which is still deferred):
  *
  * - `sendGuestInvitationEmail` — any member, with a FRESH link they were
  *   just shown (party created, or link rotated): the browser sends the
@@ -63,6 +66,8 @@ export type SendInvitationFailure =
   | "missing_email"
   | "invalid_email"
   | "configuration_error"
+  /** New links can't be made recoverable (LB-13 key missing): nothing rotated. */
+  | "link_configuration_error"
   | "recipient_rejected"
   | "provider_failed"
   | "error";
@@ -145,7 +150,7 @@ async function deliver(
     weddingName: context.weddingName,
     weddingDate: context.weddingDate,
     weddingCity: context.weddingCity,
-    rsvpUrl: new URL(guestRsvpPath(token), delivery.appOrigin).toString(),
+    rsvpUrl: guestRsvpUrl(token, delivery.appOrigin),
     siteUrl: context.siteUrl,
   });
 
@@ -221,29 +226,34 @@ export async function sendGuestInvitationEmail(
 
 /**
  * "Generar nuevo enlace y enviar" — owner only, explicit. Everything that
- * could stop the email (role, party, recipient, configuration, wedding
- * data) is checked BEFORE the link is replaced, so a doomed send never
- * kills a working link. After the rotation the new link is always
- * returned, whatever happens to the email.
+ * could stop the email (role, party, recipient, configuration — email and
+ * link encryption alike —, wedding data) is checked BEFORE the link is
+ * replaced, so a doomed send never kills a working link. After the
+ * rotation the new link (recoverable, LB-13) is always returned, whatever
+ * happens to the email.
  */
 export async function rotateLinkAndSendInvitation(
   supabase: Client,
   weddingId: string,
   guestInvitationId: string,
   delivery: EmailDelivery | null,
+  encryption: RsvpCapabilityEncryptionSettings | null,
 ): Promise<RotateAndSendOutcome> {
   const access = await requireWeddingRole(supabase, weddingId, ["owner"]);
   if (!access.ok) return failed(access.reason);
   if (!UUID_PATTERN.test(guestInvitationId)) return failed("invalid_target");
   if (!delivery) return failed("configuration_error");
+  if (!encryption) return failed("link_configuration_error");
 
   const party = await loadParty(supabase, access.access, guestInvitationId);
   if (typeof party === "string") return failed(party);
   const context = await loadContext(supabase, access.access, delivery.appOrigin);
   if (!context) return failed("error");
 
-  const rotated = await replaceGuestPartyLink(supabase, access.access, party.id, delivery.appOrigin);
-  if (!rotated.ok) return failed(rotated.reason);
+  const rotated = await replaceGuestPartyLink(supabase, access.access, party.id, delivery.appOrigin, encryption);
+  if (!rotated.ok) {
+    return failed(rotated.reason === "configuration_error" ? "link_configuration_error" : rotated.reason);
+  }
   const link: FreshLink = { link: rotated.link, token: rotated.token };
 
   const outcome = await deliver(supabase, access.access, party, rotated.token, context, delivery);

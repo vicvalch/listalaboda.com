@@ -251,7 +251,7 @@ isOneToOne: true
             }[]
                            },
 "create_guest_invitation":
-{ Args: { "guest_names": (string)[],"invitation_token_hash": string,"party_contact_email"?: string,"party_label": string,"target_wedding_id": string }; Returns: string
+{ Args: { "guest_names": (string)[],"invitation_token_ciphertext": string,"invitation_token_hash": string,"party_contact_email"?: string,"party_label": string,"target_wedding_id": string }; Returns: string
                            },
 "create_wedding":
 { Args: { "wedding_city"?: string,"wedding_date"?: string,"wedding_name": string,"wedding_time_zone"?: string }; Returns: {
@@ -273,6 +273,11 @@ isOneToOne: true
 "get_guest_invitation":
 { Args: { "invitation_token_hash": string }; Returns: {
               "attending": boolean,"dietary_note": string,"guest_id": string,"guest_name": string,"party_label": string
+            }[]
+                           },
+"get_guest_invitation_recovery_envelope":
+{ Args: { "target_invitation_id": string,"target_wedding_id": string }; Returns: {
+              "link_state": string,"token_ciphertext": string,"token_hash": string
             }[]
                            },
 "get_guest_invitation_site_slug":
@@ -304,6 +309,9 @@ isOneToOne: true
                            },
 "record_rsvp_confirmation_email":
 { Args: { "invitation_token_hash": string,"provider_message_id": string,"recipient": string,"target_invitation_id": string,"target_wedding_id": string }; Returns: string
+                           },
+"rotate_guest_invitation_link":
+{ Args: { "invitation_token_ciphertext": string,"invitation_token_hash": string,"target_invitation_id": string,"target_wedding_id": string }; Returns: boolean
                            },
 "save_wedding_site_section":
 { Args: { "section_body": string,"section_kind": Database["public"]['Enums']["content_section_kind"],"section_title": string,"section_visible": boolean,"target_wedding_id": string }; Returns: undefined

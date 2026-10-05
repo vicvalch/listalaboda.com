@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import pg from "pg";
 import { afterAll, inject } from "vitest";
@@ -89,3 +91,14 @@ export async function weddingExists(weddingId: string): Promise<boolean> {
 
 /** Postgres "insufficient_privilege": missing grant or RLS WITH CHECK failure. */
 export const PERMISSION_DENIED = "42501";
+
+/**
+ * LB-13: a v1-SHAPED envelope for calls that create or rotate a link
+ * directly through the RPCs. Random bytes, not a real encryption: the
+ * database can only check the shape (the cryptography is the server's job
+ * and is tested with real envelopes in the service tests).
+ */
+export function shapedEnvelope(): string {
+  const part = (bytes: number) => randomBytes(bytes).toString("base64url");
+  return `v1.${part(12)}.${part(43)}.${part(16)}`;
+}

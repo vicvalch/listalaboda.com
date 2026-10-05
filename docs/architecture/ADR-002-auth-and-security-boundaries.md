@@ -86,6 +86,10 @@ Applies to two distinct token kinds:
 - Generated with a CSPRNG, ≥ 256 bits, URL-safe encoded.
 - **Only a hash is stored** (SHA-256 is sufficient for high-entropy tokens);
   plaintext exists only in the link sent to the recipient.
+  *Later note (LB-13):* the plaintext is still never stored, and the hash is still the only
+  validator. GuestInvitation tokens are now also stored as an AES-256-GCM envelope, under a key
+  kept outside the database, so organizers can recover the same link
+  ([ADR-006](ADR-006-recoverable-rsvp-capability.md)). MembershipInvites are unchanged.
 - Scoped to exactly **one wedding** and **one GuestInvitation** (guest) or
   **one intended role** (MembershipInvite).
 - **Expiring** (MembershipInvites: short-lived, single-use; GuestInvitation tokens:

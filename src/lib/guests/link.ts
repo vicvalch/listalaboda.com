@@ -49,3 +49,14 @@ export function guestLinkState(
 export function guestRsvpPath(token: string): string {
   return `/rsvp/${token}`;
 }
+
+/**
+ * The canonical absolute guest link: the TRUSTED app origin (`APP_ORIGIN`,
+ * from configuration) + `/rsvp/<token>`. The only way absolute RSVP links
+ * are built (fresh links, emails, recovery), so the same token always gives
+ * the same URL. Never pass a request-derived (Host/Origin/X-Forwarded-*)
+ * origin here.
+ */
+export function guestRsvpUrl(token: string, appOrigin: string): string {
+  return new URL(guestRsvpPath(token), appOrigin).toString();
+}

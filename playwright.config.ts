@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 import { assertLocal, readLocalSupabase } from "./e2e/support/local-supabase";
 import { OUTBOX_DIR } from "./e2e/support/outbox";
+import { TEST_RSVP_CAPABILITY_KEY_ENV } from "./src/test/fixtures/rsvp-capability-key";
 
 const PORT = 3100;
 const baseURL = `http://localhost:${PORT}`;
@@ -36,6 +37,11 @@ function emailEnv() {
   };
 }
 
+// LB-13: a FAKE, test-only key (its bytes say so) for recoverable RSVP links.
+function capabilityEnv() {
+  return { RSVP_CAPABILITY_ENCRYPTION_KEY: TEST_RSVP_CAPABILITY_KEY_ENV };
+}
+
 export default defineConfig({
   testDir: "./e2e",
   globalSetup: "./e2e/global-setup.ts",
@@ -53,6 +59,6 @@ export default defineConfig({
     url: baseURL,
     reuseExistingServer: false,
     timeout: 300_000,
-    env: { ...supabaseEnv(), ...emailEnv() },
+    env: { ...supabaseEnv(), ...emailEnv(), ...capabilityEnv() },
   },
 });

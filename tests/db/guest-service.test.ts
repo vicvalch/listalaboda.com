@@ -2,11 +2,14 @@ import { createClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { Database } from "@/lib/supabase/database.types";
+import { TEST_RSVP_CAPABILITY_KEY } from "@/test/fixtures/rsvp-capability-key";
 
 import type { TestUserKey } from "./context";
 import { addMember, createWedding as createFixtureWedding, ctx, sql, users } from "./support";
 
 vi.mock("server-only", () => ({}));
+/** LB-13: the server's (fake, test-only) link-encryption key. */
+const ENCRYPTION = { key: TEST_RSVP_CAPABILITY_KEY };
 const { requireWeddingMembership } = await import("@/lib/authz/wedding");
 const {
   addGuest,
@@ -75,7 +78,7 @@ async function partiesOf(user: TestUserKey, weddingId: string) {
 }
 
 async function newParty(user: TestUserKey, weddingId: string, label: string, guestNames: string[]) {
-  const result = await createGuestParty(await sessionClient(user), weddingId, { label, guestNames }, ORIGIN);
+  const result = await createGuestParty(await sessionClient(user), weddingId, { label, guestNames }, ORIGIN, ENCRYPTION);
   if (!result.ok) throw new Error(`createGuestParty failed: ${result.reason}`);
   const party = (await partiesOf(user, weddingId)).find((p) => p.id === result.guestInvitationId);
   if (!party) throw new Error("party not listed");
@@ -134,12 +137,12 @@ describe("organizer guest services", () => {
     expect(seen?.guests.map((g) => g.rsvp?.attending)).toEqual([true, true]);
 
     // Link administration is owner-only, and nothing changes.
-    expect(await rotateGuestPartyLink(supabase, weddingA, id, ORIGIN)).toEqual({ ok: false, reason: "forbidden" });
+    expect(await rotateGuestPartyLink(supabase, weddingA, id, ORIGIN, ENCRYPTION)).toEqual({ ok: false, reason: "forbidden" });
     expect(await revokeGuestPartyLink(supabase, weddingA, id)).toEqual({ ok: false, reason: "forbidden" });
     expect((await getGuestPartyByToken(guestClient(), created.token)).ok).toBe(true);
 
     const owner = await sessionClient("ownerA");
-    const rotated = await rotateGuestPartyLink(owner, weddingA, id, ORIGIN);
+    const rotated = await rotateGuestPartyLink(owner, weddingA, id, ORIGIN, ENCRYPTION);
     expect(rotated.ok).toBe(true);
     expect(await revokeGuestPartyLink(owner, weddingA, id)).toEqual({ ok: true });
     // Revoking again is a calm no-op.
@@ -160,13 +163,13 @@ describe("organizer guest services", () => {
     const id = created.guestInvitationId;
     const guestId = created.party.guests[0].id;
     const results = [
-      await createGuestParty(supabase, weddingA, { label: "X", guestNames: ["X"] }, ORIGIN),
+      await createGuestParty(supabase, weddingA, { label: "X", guestNames: ["X"] }, ORIGIN, ENCRYPTION),
       await updateGuestPartyLabel(supabase, weddingA, id, "Hackeado"),
       await deleteGuestParty(supabase, weddingA, id),
       await addGuest(supabase, weddingA, id, "Colado"),
       await updateGuestName(supabase, weddingA, guestId, "Hackeado"),
       await removeGuest(supabase, weddingA, guestId),
-      await rotateGuestPartyLink(supabase, weddingA, id, ORIGIN),
+      await rotateGuestPartyLink(supabase, weddingA, id, ORIGIN, ENCRYPTION),
       await revokeGuestPartyLink(supabase, weddingA, id),
     ];
     for (const result of results) expect(result).toEqual({ ok: false, reason: "not_found" });
@@ -192,7 +195,7 @@ describe("organizer guest services", () => {
       await addGuest(supabase, weddingA, id, "Cruzado"),
       await updateGuestName(supabase, weddingA, guestId, "Cruzado"),
       await removeGuest(supabase, weddingA, guestId),
-      await rotateGuestPartyLink(supabase, weddingA, id, ORIGIN),
+      await rotateGuestPartyLink(supabase, weddingA, id, ORIGIN, ENCRYPTION),
       await revokeGuestPartyLink(supabase, weddingA, id),
     ]) {
       expect(result).toEqual({ ok: false, reason: "invalid_target" });
@@ -237,7 +240,7 @@ describe("organizer guest services", () => {
       { guestId: ana.id, attending: true, dietaryNote: null },
       { guestId: carlos.id, attending: false, dietaryNote: null },
     ]);
-    const rotated = await rotateGuestPartyLink(await sessionClient("ownerA"), weddingA, created.guestInvitationId, ORIGIN);
+    const rotated = await rotateGuestPartyLink(await sessionClient("ownerA"), weddingA, created.guestInvitationId, ORIGIN, ENCRYPTION);
     if (!rotated.ok) throw new Error(rotated.reason);
     const newToken = tokenOf(rotated.link);
     expect(newToken).not.toBe(created.token);

@@ -129,9 +129,10 @@ test.describe("guest list and RSVP", () => {
     await expect(card.getByTestId("guest-name")).toHaveText(["Ana Pérez", "Carlos Pérez"]);
     await expectGuestStatus(page, "Familia Pérez", "Ana Pérez", guests.status.pending);
     await expectGuestStatus(page, "Familia Pérez", "Carlos Pérez", guests.status.pending);
-    // The link itself can't be shown again after a reload.
+    // After a reload no link is on the page until someone asks for it (LB-13).
     await expect(page.getByTestId("guest-link")).toHaveCount(0);
-    await expect(card.getByText(guests.link.notRecoverable)).toBeVisible();
+    await expect(card.getByTestId("recovered-guest-link")).toHaveCount(0);
+    await expect(card.getByRole("button", { name: guests.personalLink.show })).toBeVisible();
 
     // B: a guest opens the link in a brand-new browser, no account.
     const guest = await freshPage(browser);
@@ -438,7 +439,8 @@ test.describe("guest list and RSVP", () => {
     // Link administration is owner-only: no "Generar nuevo enlace" / "Revocar acceso".
     await expect(card.getByRole("button", { name: guests.rotate.open })).toHaveCount(0);
     await expect(card.getByRole("button", { name: guests.revoke.open })).toHaveCount(0);
-    await expect(card.getByText(guests.link.notRecoverableCollaborator)).toBeVisible();
+    // ...but a collaborator can show the current link (LB-13).
+    await expect(card.getByRole("button", { name: guests.personalLink.show })).toBeVisible();
 
     // The party's initial link (from creation) works for its guests.
     const guest = await freshPage(browser);

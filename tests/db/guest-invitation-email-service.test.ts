@@ -6,11 +6,14 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { DeliveryRecorder } from "@/lib/email/delivery-recorder";
 import type { EmailSendResult, EmailSender, OutgoingEmail } from "@/lib/email/provider";
 import type { Database } from "@/lib/supabase/database.types";
+import { TEST_RSVP_CAPABILITY_KEY } from "@/test/fixtures/rsvp-capability-key";
 
 import type { TestUserKey } from "./context";
 import { addMember, createWedding as createFixtureWedding, ctx, sql, users } from "./support";
 
 vi.mock("server-only", () => ({}));
+/** LB-13: the server's (fake, test-only) link-encryption key. */
+const ENCRYPTION = { key: TEST_RSVP_CAPABILITY_KEY };
 
 const { createGuestParty, updateGuestPartyContactEmail, listGuestParties } = await import(
   "@/lib/guests/service"
@@ -110,6 +113,7 @@ async function newParty(user: TestUserKey, weddingId: string, label: string, con
     weddingId,
     { label, guestNames: ["Invitada Uno", "Invitado Dos"], contactEmail },
     APP_ORIGIN,
+    ENCRYPTION,
   );
   if (!result.ok) throw new Error(`createGuestParty failed: ${result.reason}`);
   return result;
@@ -345,6 +349,7 @@ describe("rotateLinkAndSendInvitation (owner only)", () => {
       weddingA,
       created.guestInvitationId,
       deliveryWith(sender),
+      ENCRYPTION,
     );
 
     expect(outcome).toMatchObject({ outcome: "sent", recipient: "rotar@example.com" });
@@ -368,6 +373,7 @@ describe("rotateLinkAndSendInvitation (owner only)", () => {
         weddingA,
         created.guestInvitationId,
         deliveryWith(sender),
+        ENCRYPTION,
       ),
     ).toEqual({ outcome: "failed", reason: "forbidden" });
     expect(sender.sent).toHaveLength(0);
@@ -381,16 +387,16 @@ describe("rotateLinkAndSendInvitation (owner only)", () => {
     const sender = fakeSender();
     const owner = await sessionClient("ownerA");
 
-    expect(await rotateLinkAndSendInvitation(owner, weddingA, noEmail.guestInvitationId, deliveryWith(sender))).toEqual({
+    expect(await rotateLinkAndSendInvitation(owner, weddingA, noEmail.guestInvitationId, deliveryWith(sender), ENCRYPTION)).toEqual({
       outcome: "failed",
       reason: "missing_email",
     });
-    expect(await rotateLinkAndSendInvitation(owner, weddingA, withEmail.guestInvitationId, null)).toEqual({
+    expect(await rotateLinkAndSendInvitation(owner, weddingA, withEmail.guestInvitationId, null, ENCRYPTION)).toEqual({
       outcome: "failed",
       reason: "configuration_error",
     });
     expect(
-      await rotateLinkAndSendInvitation(owner, weddingB, withEmail.guestInvitationId, deliveryWith(sender)),
+      await rotateLinkAndSendInvitation(owner, weddingB, withEmail.guestInvitationId, deliveryWith(sender), ENCRYPTION),
     ).toEqual({ outcome: "failed", reason: "not_found" });
     expect(sender.sent).toHaveLength(0);
     expect((await getGuestPartyByToken(anonClient(), noEmail.token)).ok).toBe(true);
@@ -406,6 +412,7 @@ describe("rotateLinkAndSendInvitation (owner only)", () => {
       weddingA,
       created.guestInvitationId,
       deliveryWith(sender),
+      ENCRYPTION,
     );
 
     expect(outcome).toMatchObject({ outcome: "failed", reason: "provider_failed" });

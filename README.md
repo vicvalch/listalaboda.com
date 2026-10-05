@@ -112,7 +112,8 @@ right now:
 - **Fresh link, any member.** Right after creating a party (or replacing its link), the panel that shows the link
   also offers "Enviar invitación por correo". The browser sends that token back in the form body (never a URL); the
   database confirms it is still the party's current, usable link before anything is sent.
-- **Existing party, owner only.** After a reload the link can't be recovered, so emailing needs a new one:
+- **Existing party, owner only.** Emailing a link later still needs a new one (LB-13 makes links recoverable for
+  copying, but emailing a recovered link is reminder delivery, still deferred):
   "Generar nuevo enlace y enviar" (with a confirmation naming the address) replaces the link — the old one stops
   working; guests and answers stay — and emails the new one. Collaborators are told an owner must do it; the
   service and the database refuse it anyway. Nothing is ever rotated silently.
@@ -154,7 +155,30 @@ recipient can differ from the current contact email. The guest has no account, s
 email for the send, and recording it, go through the same server-only recorder module, by the link's hash only
 ([ADR-005](docs/architecture/ADR-005-rsvp-confirmation-email.md)). The RSVP itself never uses the service role.
 
-Still deferred: RSVP reminders (no schedule, cron or queue), activity history, and linking checklist items to guest work.
+**Recoverable RSVP link (LB-13).** A party's RSVP link is meant to be ONE personal link for its whole life: the
+same link can be shared again later (copy today; reminders, WhatsApp or other channels later) until an owner
+explicitly generates a new one. Organizers (owners and collaborators) can now click **Mostrar enlace** on a party
+card to see and copy its current link again, exactly the link the party already has. The guest-list page never
+loads links by itself: only that explicit click recovers one, the link is never cached or stored in the browser,
+and "Ocultar" removes it from the page. Revoked or expired links are never shown.
+
+The plaintext token is still never stored. Its SHA-256 hash stays the only thing that validates a guest's link.
+Each new or replaced link is also stored as an **AES-256-GCM** envelope in a private table
+(`private.guest_invitation_capability_secrets`, no client access, not on the Data API), bound to that hash and
+written in the same transaction. The key, `RSVP_CAPABILITY_ENCRYPTION_KEY`, lives only in the server environment,
+never in the database. Recovery checks membership, then decrypts on the server and re-checks the hash. It builds
+the URL from `APP_ORIGIN` (no email provider needed), and only that URL reaches the browser. A database dump alone
+still reveals no usable link; the dump plus the key would
+([ADR-006](docs/architecture/ADR-006-recoverable-rsvp-capability.md)). The key is required to create parties and
+generate new links: without it they fail safely before changing anything. Losing or changing the key never breaks
+guests' links; it only makes existing links unrecoverable until an owner generates new ones (no keyring yet).
+
+Links created before LB-13 have only their hash, so they **keep working for guests** but can't be shown again.
+"Mostrar enlace" says so. An owner can generate a new link once (the old one stops working, as always) and from then
+on it is recoverable; collaborators are told an owner must do it. Nothing is backfilled or rotated automatically.
+
+Still deferred: RSVP reminders (no schedule, cron, queue, WhatsApp or emailing a recovered link), activity history,
+and linking checklist items to guest work.
 
 ## Stack
 
@@ -169,6 +193,12 @@ npm ci
 cp .env.example .env.local   # fill in values; see comments in the file
 npm run dev                  # http://localhost:3000
 ```
+
+RSVP link recovery (LB-13): set `RSVP_CAPABILITY_ENCRYPTION_KEY` (generate one with
+`node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`; it is a secret, keep it stable and
+never commit it) and `APP_ORIGIN`. Every absolute RSVP link (shown after creating or replacing it, emailed or
+recovered) is `APP_ORIGIN` + `/rsvp/<token>`, never derived from the request's Host/Origin headers. Without the key
+or `APP_ORIGIN`, creating parties and generating links refuse safely. The E2E suite uses a fake, test-only key.
 
 Email (optional locally): set `APP_ORIGIN`, `EMAIL_FROM`, `RESEND_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY` (the
 local `SECRET_KEY` from `npx supabase status`; used only for email delivery metadata, ADR-004/ADR-005) to send real
@@ -226,6 +256,7 @@ one later.
 - [ADR-003 — Donor extraction policy](docs/architecture/ADR-003-donor-extraction-policy.md)
 - [ADR-004 — Service-role exception: recording invitation-email delivery](docs/architecture/ADR-004-invitation-delivery-recorder.md)
 - [ADR-005 — Service-role exception: RSVP confirmation email](docs/architecture/ADR-005-rsvp-confirmation-email.md)
+- [ADR-006 — Recoverable RSVP capability encryption](docs/architecture/ADR-006-recoverable-rsvp-capability.md)
 
 Database migrations live in `supabase/migrations/` and are named `YYYYMMDDHHMMSS_lb_<slug>.sql`.
 After changing the schema, run `npm run db:reset && npm run db:types` and commit the regenerated types.

@@ -8,11 +8,14 @@ import type { DeliveryRecorder } from "@/lib/email/delivery-recorder";
 import type { EmailSendResult, EmailSender, OutgoingEmail } from "@/lib/email/provider";
 import { es } from "@/lib/i18n/messages/es";
 import type { Database } from "@/lib/supabase/database.types";
+import { TEST_RSVP_CAPABILITY_KEY } from "@/test/fixtures/rsvp-capability-key";
 
 import type { TestUserKey } from "./context";
 import { addMember, createWedding as createFixtureWedding, ctx, sql, users } from "./support";
 
 vi.mock("server-only", () => ({}));
+/** LB-13: the server's (fake, test-only) link-encryption key. */
+const ENCRYPTION = { key: TEST_RSVP_CAPABILITY_KEY };
 
 const { createGuestParty, listGuestParties, updateGuestPartyContactEmail } = await import("@/lib/guests/service");
 const { submitRsvpWithConfirmation } = await import("@/lib/rsvp/confirmation");
@@ -105,6 +108,7 @@ async function newParty(weddingId: string, label: string, contactEmail: string |
     weddingId,
     { label, guestNames: ["Ana Prueba", "Carlos Prueba"], contactEmail },
     APP_ORIGIN,
+    ENCRYPTION,
   );
   if (!result.ok) throw new Error(`createGuestParty failed: ${result.reason}`);
   const guestIds = (

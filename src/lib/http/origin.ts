@@ -10,7 +10,8 @@ import { headers } from "next/headers";
  * there `Origin` is the app's own origin. The `Host` fallback covers
  * requests without an `Origin` header. The result is only ever used to build
  * links shown to the same user, or as a redirect target that Supabase Auth
- * checks against its own allow-list.
+ * checks against its own allow-list. Never for RSVP (guest) links: those
+ * always use the trusted `APP_ORIGIN` (`guestRsvpUrl`, LB-13).
  */
 export async function getRequestOrigin(): Promise<string | null> {
   const requestHeaders = await headers();

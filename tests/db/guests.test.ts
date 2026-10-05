@@ -13,6 +13,7 @@ import {
   createWedding as createFixtureWedding,
   sql,
   superuser,
+  shapedEnvelope,
 } from "./support";
 
 // LB-09: GuestInvitation → Guest → RSVP, exercised as real anon and
@@ -54,6 +55,7 @@ async function createParty(
     target_wedding_id: weddingId,
     party_label: label,
     invitation_token_hash: hash,
+    invitation_token_ciphertext: shapedEnvelope(),
     guest_names: names,
   });
   if (error || !data) throw new Error(`create_guest_invitation failed: ${error?.message}`);
@@ -62,6 +64,16 @@ async function createParty(
     [data],
   );
   return { id: data, hash, guestIds: rows.map((r) => r.id) };
+}
+
+/** "Generar nuevo enlace" through its only door (LB-13): new hash + envelope, one transaction. */
+function rotate(actor: keyof typeof as, weddingId: string, partyId: string, hash: string, envelope = shapedEnvelope()) {
+  return as[actor].rpc("rotate_guest_invitation_link", {
+    target_wedding_id: weddingId,
+    target_invitation_id: partyId,
+    invitation_token_hash: hash,
+    invitation_token_ciphertext: envelope,
+  });
 }
 
 function getParty(actor: keyof typeof as, hash: string) {
@@ -200,6 +212,7 @@ describe("organizer access", () => {
         target_wedding_id: weddingA,
         party_label: "Intrusos",
         invitation_token_hash: newToken().hash,
+        invitation_token_ciphertext: shapedEnvelope(),
         guest_names: ["Nadie"],
       });
       expect(error?.code, actor).toBe(PERMISSION_DENIED);
@@ -208,6 +221,7 @@ describe("organizer access", () => {
       target_wedding_id: weddingA,
       party_label: "Intrusos",
       invitation_token_hash: newToken().hash,
+      invitation_token_ciphertext: shapedEnvelope(),
       guest_names: ["Nadie"],
     });
     expect(anon.error).not.toBeNull();
@@ -295,6 +309,8 @@ describe("organizer access", () => {
         .eq("id", party.id)
         .select("id");
       expect(rotated.data ?? [], actor).toEqual([]);
+      const rotatedRpc = await rotate(actor, weddingA, party.id, newToken().hash);
+      expect(rotatedRpc.data ?? false, actor).toBe(false);
       const deleted = await as[actor].from("guest_invitations").delete().eq("id", party.id).select("id");
       expect(deleted.data ?? [], actor).toEqual([]);
       const guestDeleted = await as[actor].from("guests").delete().eq("id", party.guestIds[0]).select("id");
@@ -408,15 +424,17 @@ describe("party invariants", () => {
       target_wedding_id: wedding,
       party_label: "Vacío",
       invitation_token_hash: newToken().hash,
+      invitation_token_ciphertext: shapedEnvelope(),
       guest_names: [],
     });
     expect(empty.error?.code).toBe(CHECK_VIOLATION);
     expect(empty.error?.message).toBe("guest_invitation_needs_guest");
-    // A direct insert without guests fails at commit too.
+    // There is no direct insert path at all since LB-13 (a party needs its
+    // link envelope, written only by create_guest_invitation).
     const direct = await as.ownerA
       .from("guest_invitations")
       .insert({ wedding_id: wedding, label: "Vacío directo", token_hash: newToken().hash });
-    expect(direct.error?.message).toBe("guest_invitation_needs_guest");
+    expect(direct.error?.code).toBe(PERMISSION_DENIED);
     expect(await sql("select 1 from public.guest_invitations where label like 'Vacío%'")).toEqual([]);
 
     const party = await createParty("ownerA", wedding, "Solo", ["Única"]);
@@ -458,6 +476,7 @@ describe("party invariants", () => {
         target_wedding_id: wedding,
         party_label: label,
         invitation_token_hash: newToken().hash,
+        invitation_token_ciphertext: shapedEnvelope(),
         guest_names: ["Alguien"],
       });
       expect(error?.code, JSON.stringify(label)).toBe(CHECK_VIOLATION);
@@ -477,6 +496,7 @@ describe("party invariants", () => {
         target_wedding_id: wedding,
         party_label: "Hash malo",
         invitation_token_hash: hash,
+        invitation_token_ciphertext: shapedEnvelope(),
         guest_names: ["H"],
       });
       expect(error?.code).toBe(CHECK_VIOLATION);
@@ -485,6 +505,7 @@ describe("party invariants", () => {
       target_wedding_id: wedding,
       party_label: "Duplicado",
       invitation_token_hash: party.hash,
+      invitation_token_ciphertext: shapedEnvelope(),
       guest_names: ["D"],
     });
     expect(dup.error?.code).toBe("23505");
@@ -506,13 +527,16 @@ describe("link revocation and rotation", () => {
     const party = await createParty("collabA", wedding, "De colaboración", ["Clara"]);
     expect((await getParty("anon", party.hash)).data).toHaveLength(1);
 
-    const rotate = await as.collabA
+    const rotateRpc = await rotate("collabA", wedding, party.id, newToken().hash);
+    expect(rotateRpc.error?.code).toBe(PERMISSION_DENIED);
+    expect(rotateRpc.error?.message).toBe("guest_link_owner_only");
+    // LB-13: the plain UPDATE door is closed for every client (no column grant).
+    const rotateDirect = await as.collabA
       .from("guest_invitations")
       .update({ token_hash: newToken().hash })
       .eq("id", party.id)
       .select("id");
-    expect(rotate.error?.code).toBe(PERMISSION_DENIED);
-    expect(rotate.error?.message).toBe("guest_link_owner_only");
+    expect(rotateDirect.error?.code).toBe(PERMISSION_DENIED);
     const revoke = await as.collabA
       .from("guest_invitations")
       .update({ revoked_at: new Date().toISOString() })
@@ -525,7 +549,7 @@ describe("link revocation and rotation", () => {
       .from("guest_invitations")
       .update({ label: "Renombrado", token_hash: newToken().hash })
       .eq("id", party.id);
-    expect(mixed.error?.message).toBe("guest_link_owner_only");
+    expect(mixed.error?.code).toBe(PERMISSION_DENIED);
 
     const stored = await sql<{ label: string; token_hash: string; revoked_at: Date | null }>(
       "select label, token_hash, revoked_at from public.guest_invitations where id = $1",
@@ -545,12 +569,8 @@ describe("link revocation and rotation", () => {
 
     // The owner can do both.
     const next = newToken();
-    const ownerRotate = await as.ownerA
-      .from("guest_invitations")
-      .update({ token_hash: next.hash })
-      .eq("id", party.id)
-      .select("id");
-    expect(ownerRotate.data).toHaveLength(1);
+    const ownerRotate = await rotate("ownerA", wedding, party.id, next.hash);
+    expect(ownerRotate.data).toBe(true);
     const ownerRevoke = await as.ownerA
       .from("guest_invitations")
       .update({ revoked_at: new Date().toISOString() })
@@ -618,15 +638,15 @@ describe("link revocation and rotation", () => {
     await backdateLink(party.id, 10);
 
     const next = newToken();
-    const rotated = await as.ownerA
-      .from("guest_invitations")
-      .update({ token_hash: next.hash })
-      .eq("id", party.id)
-      .select("id, revoked_at, token_issued_at");
+    const rotated = await rotate("ownerA", wedding, party.id, next.hash);
     expect(rotated.error).toBeNull();
-    expect(rotated.data?.[0]?.id).toBe(party.id);
-    expect(rotated.data?.[0]?.revoked_at).toBeNull();
-    expect(Date.now() - new Date(rotated.data?.[0]?.token_issued_at ?? 0).getTime()).toBeLessThan(60_000);
+    expect(rotated.data).toBe(true);
+    const after = await as.ownerA
+      .from("guest_invitations")
+      .select("id, revoked_at, token_issued_at")
+      .eq("id", party.id);
+    expect(after.data?.[0]?.revoked_at).toBeNull();
+    expect(Date.now() - new Date(after.data?.[0]?.token_issued_at ?? 0).getTime()).toBeLessThan(60_000);
 
     expect((await getParty("anon", party.hash)).data).toEqual([]);
     const fresh = await getParty("anon", next.hash);

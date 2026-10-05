@@ -12,6 +12,8 @@ import {
   sendGuestInvitationEmail,
   type SendInvitationOutcome,
 } from "@/lib/guests/invitation-email";
+import { getGuestLinkConfig } from "@/lib/guests/link-config";
+import { recoverGuestPartyLink } from "@/lib/guests/link-recovery";
 import {
   addGuest,
   createGuestParty,
@@ -29,8 +31,11 @@ import {
   parsePartyLabel,
   type NewPartyField,
 } from "@/lib/guests/validation";
-import { getRequestOrigin } from "@/lib/http/origin";
 import { getMessages, interpolate } from "@/lib/i18n";
+import {
+  getRsvpCapabilityEncryptionSettings,
+  type RsvpCapabilityEncryptionSettings,
+} from "@/lib/security/rsvp-capability-encryption";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
@@ -48,7 +53,21 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
  * owner, an explicit "new link and send". Email configuration and the
  * trusted origin come from the server (`getEmailDelivery`), never the
  * request. Results carry only catalog messages, never provider errors.
+ *
+ * LB-13: new and rotated links are stored recoverably (ADR-006); the key
+ * comes from the server environment, never the request. Any member can
+ * explicitly recover a party's CURRENT link ("Mostrar enlace"); the link
+ * comes back only in that action's response. Every absolute RSVP link
+ * (fresh, emailed, recovered) is built from the trusted `APP_ORIGIN`
+ * (`getGuestLinkConfig` / the email configuration), never from request
+ * headers (Host, Origin, X-Forwarded-*): same token, same URL.
  */
+
+/** The server's link-encryption key, or null (creating/rotating then refuses). */
+function linkEncryption(): RsvpCapabilityEncryptionSettings | null {
+  const result = getRsvpCapabilityEncryptionSettings();
+  return result.ok ? result.settings : null;
+}
 
 function guestsPath(weddingId: string): string {
   return `/app/weddings/${encodeURIComponent(weddingId)}/guests`;
@@ -74,6 +93,9 @@ async function handleFailure(weddingId: string, failure: ServiceFailure): Promis
       return copy.linkOwnerOnly;
     case "last_guest":
       return getMessages().guests.removeGuest.lastGuest;
+    case "configuration_error":
+      // New links can't be made recoverable: nothing was written.
+      return copy.linkNotConfigured;
     default:
       return copy.failed;
   }
@@ -108,14 +130,15 @@ export async function createPartyAction(
   const parsed = parseNewParty(values);
   if (!parsed.ok) return { ok: false, fieldErrors: parsed.fieldErrors, values };
 
-  const origin = await getRequestOrigin();
-  if (!origin) return { ok: false, formError: getMessages().guests.errors.failed, values };
+  const linkConfig = getGuestLinkConfig();
+  if (!linkConfig) return { ok: false, formError: getMessages().guests.errors.linkNotConfigured, values };
 
   const result = await createGuestParty(
     await createSupabaseServerClient(),
     weddingId,
     parsed.input,
-    origin,
+    linkConfig.appOrigin,
+    linkConfig.encryption,
   );
   if (!result.ok) {
     if (result.reason === "invalid") {
@@ -127,7 +150,7 @@ export async function createPartyAction(
   }
 
   revalidatePath(guestsPath(weddingId));
-  // The one and only time this link's plaintext is available.
+  // Shown now; later only through an explicit "Mostrar enlace".
   return {
     ok: true,
     data: {
@@ -336,18 +359,19 @@ export async function rotateLinkAction(
   const weddingId = formText(formData, "weddingId");
   await requireUser(guestsPath(weddingId));
 
-  const origin = await getRequestOrigin();
-  if (!origin) return { ok: false, formError: getMessages().guests.errors.failed };
+  const linkConfig = getGuestLinkConfig();
+  if (!linkConfig) return { ok: false, formError: getMessages().guests.errors.linkNotConfigured };
 
   const result = await rotateGuestPartyLink(
     await createSupabaseServerClient(),
     weddingId,
     formText(formData, "guestInvitationId"),
-    origin,
+    linkConfig.appOrigin,
+    linkConfig.encryption,
   );
   if (!result.ok) return { ok: false, formError: await handleFailure(weddingId, result) };
   revalidatePath(guestsPath(weddingId));
-  // The one and only time the new link's plaintext is available.
+  // Shown now; later only through an explicit "Mostrar enlace".
   return {
     ok: true,
     data: {
@@ -385,6 +409,7 @@ async function sendOutcomeMessage(
     missing_email: copy.errors.missingEmail,
     invalid_email: copy.errors.recipientRejected,
     configuration_error: copy.errors.notConfigured,
+    link_configuration_error: getMessages().guests.errors.linkNotConfigured,
     recipient_rejected: copy.errors.recipientRejected,
     provider_failed: copy.errors.providerFailed,
     forbidden: copy.ownerRequired,
@@ -440,6 +465,7 @@ export async function rotateAndSendAction(
     weddingId,
     guestInvitationId,
     getEmailDelivery(),
+    linkEncryption(),
   );
   if (outcome.link) revalidatePath(guestsPath(weddingId));
 
@@ -453,4 +479,53 @@ export async function rotateAndSendAction(
     link: { guestInvitationId, link: outcome.link.link, token: outcome.link.token },
     canRetry: failedToSend,
   };
+}
+
+// ------------------------------------------------------- link recovery
+
+export type RecoverLinkState =
+  | Readonly<{ status: "shown"; link: string; nonce: string }>
+  | Readonly<{
+      status: "legacy" | "unrecoverable" | "unavailable" | "failed";
+      message: string;
+      nonce: string;
+    }>
+  | null;
+
+/**
+ * "Mostrar enlace" (LB-13): the party's CURRENT link, on explicit request,
+ * for any member (owner or collaborator). Membership is checked with the
+ * user's own session first; the envelope is read and decrypted on the
+ * server, and only the final URL (from `APP_ORIGIN`) is returned in this
+ * response — never cached, stored or logged. Nothing is written: no
+ * revalidation, and a failure never touches the link.
+ */
+export async function recoverLinkAction(
+  _prev: RecoverLinkState,
+  formData: FormData,
+): Promise<RecoverLinkState> {
+  const weddingId = formText(formData, "weddingId");
+  await requireUser(guestsPath(weddingId));
+  const copy = getMessages().guests.personalLink;
+  const nonce = crypto.randomUUID();
+
+  const result = await recoverGuestPartyLink(
+    await createSupabaseServerClient(),
+    weddingId,
+    formText(formData, "guestInvitationId"),
+    getGuestLinkConfig(),
+  );
+  if (result.ok) return { status: "shown", link: result.link, nonce };
+  switch (result.reason) {
+    case "legacy":
+      return { status: "legacy", message: copy.legacy, nonce };
+    case "unrecoverable":
+      return { status: "unrecoverable", message: copy.unrecoverable, nonce };
+    case "unavailable":
+      return { status: "unavailable", message: copy.unavailable, nonce };
+    case "configuration_error":
+      return { status: "failed", message: copy.notConfigured, nonce };
+    default:
+      return { status: "failed", message: await handleFailure(weddingId, result), nonce };
+  }
 }

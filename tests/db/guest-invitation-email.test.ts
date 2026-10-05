@@ -10,6 +10,7 @@ import {
   createWedding as createFixtureWedding,
   serviceRole,
   sql,
+  shapedEnvelope,
 } from "./support";
 
 // LB-11: the party's contact email and its invitation-email send metadata,
@@ -48,6 +49,7 @@ async function createParty(
     target_wedding_id: weddingId,
     party_label: label,
     invitation_token_hash: hash,
+    invitation_token_ciphertext: shapedEnvelope(),
     guest_names: ["Invitada Uno", "Invitado Dos"],
     ...(contactEmail ? { party_contact_email: contactEmail } : {}),
   });
@@ -135,6 +137,7 @@ describe("contact email: optional party data", () => {
       target_wedding_id: weddingA,
       party_label: "Correo malo",
       invitation_token_hash: hash,
+      invitation_token_ciphertext: shapedEnvelope(),
       guest_names: ["Uno"],
       party_contact_email: "no es un correo",
     });
@@ -380,8 +383,14 @@ describe("guest_invitation_link_is_current", () => {
 
     // Rotation (owner-only, LB-09) makes the old link stale.
     const fresh = newToken();
-    const rotated = await as.ownerA.from("guest_invitations").update({ token_hash: fresh.hash }).eq("id", party.id);
+    const rotated = await as.ownerA.rpc("rotate_guest_invitation_link", {
+      target_wedding_id: weddingA,
+      target_invitation_id: party.id,
+      invitation_token_hash: fresh.hash,
+      invitation_token_ciphertext: shapedEnvelope(),
+    });
     expect(rotated.error).toBeNull();
+    expect(rotated.data).toBe(true);
     expect((await check("ownerA", weddingA, party.id, party.hash)).data).toBe(false);
     expect((await check("ownerA", weddingA, party.id, fresh.hash)).data).toBe(true);
 
@@ -397,11 +406,14 @@ describe("guest_invitation_link_is_current", () => {
 
   it("link rotation and revocation stay owner-only", async () => {
     const party = await createParty("ownerA", weddingA, "Solo dueños", "solo@example.com");
-    const rotate = await as.collabA
-      .from("guest_invitations")
-      .update({ token_hash: newToken().hash })
-      .eq("id", party.id);
+    const rotate = await as.collabA.rpc("rotate_guest_invitation_link", {
+      target_wedding_id: weddingA,
+      target_invitation_id: party.id,
+      invitation_token_hash: newToken().hash,
+      invitation_token_ciphertext: shapedEnvelope(),
+    });
     expect(rotate.error?.code).toBe(PERMISSION_DENIED);
+    expect(rotate.error?.message).toBe("guest_link_owner_only");
     const revoke = await as.collabA
       .from("guest_invitations")
       .update({ revoked_at: new Date().toISOString() })

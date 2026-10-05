@@ -4,11 +4,14 @@ import { createClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { Database } from "@/lib/supabase/database.types";
+import { TEST_RSVP_CAPABILITY_KEY } from "@/test/fixtures/rsvp-capability-key";
 
 import type { TestUserKey } from "./context";
 import { addMember, createWedding as createFixtureWedding, ctx, sql, users } from "./support";
 
 vi.mock("server-only", () => ({}));
+/** LB-13: the server's (fake, test-only) link-encryption key. */
+const ENCRYPTION = { key: TEST_RSVP_CAPABILITY_KEY };
 const { requireWeddingMembership } = await import("@/lib/authz/wedding");
 const {
   getWeddingSiteEditor,
@@ -268,7 +271,7 @@ describe("RSVP page context", () => {
     const slug = uniqueSlug("rsvp-sitio");
     await saveContentSection(owner, wedding, section("intro", "Hola"));
     await setWeddingSiteSlug(owner, wedding, slug);
-    const party = await createGuestParty(owner, wedding, { label: "Familia Prueba", guestNames: ["Uno"] }, "http://localhost:3100");
+    const party = await createGuestParty(owner, wedding, { label: "Familia Prueba", guestNames: ["Uno"] }, "http://localhost:3100", ENCRYPTION);
     if (!party.ok) throw new Error("party failed");
     const token = party.link.split("/").pop() ?? "";
 

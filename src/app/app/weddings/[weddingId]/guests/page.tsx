@@ -29,6 +29,7 @@ import {
 } from "./actions";
 import { ConfirmButton } from "./ConfirmButton";
 import { NewPartyForm } from "./NewPartyForm";
+import { PersonalLinkPanel } from "./PersonalLinkPanel";
 import { RotateAndSendButton } from "./RotateAndSendButton";
 import { RotateLinkButton } from "./RotateLinkButton";
 import { TextEditForm } from "./TextEditForm";
@@ -39,7 +40,8 @@ export const metadata: Metadata = { title: getMessages().guests.title };
  * "Invitados": the wedding's guest list, a secondary area next to the
  * checklist (which stays the wedding's home). Any member — owner or
  * collaborator — sees and manages its content; only owners see the link
- * actions (replace/revoke), which the service and database also enforce; membership is checked server-side
+ * actions (replace/revoke), which the service and database also enforce; any member can explicitly
+ * show a party's current link (LB-13), which this page never loads by itself; membership is checked server-side
  * first and a non-member, a nonexistent wedding and a malformed id all get
  * the same 404, without revealing whether any guest data exists. All data
  * is loaded here after that check, in a bounded number of queries; counts
@@ -312,9 +314,20 @@ function PartyCard({
       />
 
       <div className="space-y-3 border-t border-border pt-4">
-        <p className="text-muted text-sm">
-          {canAdministerLink ? copy.link.notRecoverable : copy.link.notRecoverableCollaborator}
-        </p>
+        {/* LB-13: the current link only on an explicit request; this page
+            never loads or decrypts any link. Dead links aren't offered. */}
+        {linkState === "active" ? (
+          <PersonalLinkPanel
+            weddingId={weddingId}
+            guestInvitationId={party.id}
+            partyLabel={party.label}
+            canAdministerLink={canAdministerLink}
+          />
+        ) : (
+          <p className="text-muted text-sm">
+            {canAdministerLink ? copy.personalLink.inactive : copy.personalLink.inactiveCollaborator}
+          </p>
+        )}
         {canAdministerLink ? (
           <RotateLinkButton weddingId={weddingId} guestInvitationId={party.id} partyLabel={party.label} />
         ) : null}

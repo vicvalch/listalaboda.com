@@ -7,10 +7,14 @@ import {
   requireWeddingRole,
   type WeddingAccess,
 } from "@/lib/authz/wedding";
-import { guestRsvpPath } from "@/lib/guests/link";
+import { guestRsvpUrl } from "@/lib/guests/link";
 import type { GuestResponse } from "@/lib/guests/summary";
 import type { NewPartyInput } from "@/lib/guests/validation";
-import { generateCapabilityToken } from "@/lib/security/capability-token";
+import { generateCapabilityToken, type CapabilityToken } from "@/lib/security/capability-token";
+import {
+  encryptRsvpCapability,
+  type RsvpCapabilityEncryptionSettings,
+} from "@/lib/security/rsvp-capability-encryption";
 import type { Database } from "@/lib/supabase/database.types";
 
 /**
@@ -30,9 +34,13 @@ import type { Database } from "@/lib/supabase/database.types";
  * wedding. RLS, column grants, composite same-wedding FKs and the party
  * triggers are the backstop.
  *
- * A guest link's plaintext token exists only in the return value of
- * create/rotate (the one link shown to the organizer) and is never logged,
- * stored or echoed in errors. Organizers never write RSVPs.
+ * A guest link's plaintext token is never logged, stored or echoed in
+ * errors. Since LB-13 (ADR-006) every new or rotated link is also stored
+ * as an AES-256-GCM envelope (server-side key, `encryption`), written in
+ * the same transaction as its hash, so members can later recover the SAME
+ * link (`@/lib/guests/link-recovery`). Without a valid key, creating a
+ * party or rotating a link fails BEFORE any write: no new hash-only links.
+ * Organizers never write RSVPs.
  *
  * LB-11: a party may have a contact email (PRIVATE, members only), managed
  * like any guest-list content. Setting, changing or removing it never
@@ -55,12 +63,30 @@ function accessDenial(reason: "unauthenticated" | "not_found" | "forbidden" | "e
 
 type DbError = Readonly<{ code?: string; message?: string }>;
 
+/**
+ * A new link ready to store: the token (for the one link returned), its
+ * hash (the validator) and its envelope (for recovery). null when the
+ * envelope can't be made — the caller then writes nothing.
+ */
+function newRecoverableLink(
+  encryption: RsvpCapabilityEncryptionSettings | null,
+): (CapabilityToken & Readonly<{ envelope: string }>) | null {
+  if (!encryption) return null;
+  const { token, tokenHash } = generateCapabilityToken();
+  try {
+    return { token, tokenHash, envelope: encryptRsvpCapability({ token, tokenHash, key: encryption.key }) };
+  } catch {
+    return null;
+  }
+}
+
 function isLastGuestError(error: DbError): boolean {
   return error.code === "23514" && error.message === "guest_invitation_needs_guest";
 }
 
+/** `origin` must be the trusted `APP_ORIGIN` (`getGuestLinkConfig`), never a request header. */
 function linkUrl(token: string, origin: string): string {
-  return new URL(guestRsvpPath(token), origin).toString();
+  return guestRsvpUrl(token, origin);
 }
 
 // -------------------------------------------------------------------- list
@@ -158,29 +184,35 @@ export type FreshLink = Readonly<{ link: string; token: string }>;
 
 export type CreatePartyResult =
   | Readonly<{ ok: true; guestInvitationId: string } & FreshLink>
-  | Readonly<{ ok: false; reason: AccessDenial | "invalid" }>;
+  | Readonly<{ ok: false; reason: AccessDenial | "invalid" | "configuration_error" }>;
 
 /**
  * Creates a party with its first guests (never empty), its optional contact
- * email and its first link, atomically, through `create_guest_invitation`
- * (runs as the caller, RLS applies). Returns the link — the only time its
- * plaintext exists. Never sends anything by itself.
+ * email and its first link (hash + recoverable envelope), atomically,
+ * through `create_guest_invitation` (runs as the caller, RLS applies).
+ * Returns the link for the organizer's screen. Never sends anything by
+ * itself. Without encryption settings nothing is written
+ * (`configuration_error`).
  */
 export async function createGuestParty(
   supabase: Client,
   weddingId: string,
   input: NewPartyInput,
   origin: string,
+  encryption: RsvpCapabilityEncryptionSettings | null,
 ): Promise<CreatePartyResult> {
   const access = await requireWeddingMembership(supabase, weddingId);
   if (!access.ok) return { ok: false, reason: accessDenial(access.reason) };
 
-  const { token, tokenHash } = generateCapabilityToken();
+  const fresh = newRecoverableLink(encryption);
+  if (!fresh) return { ok: false, reason: "configuration_error" };
+  const { token, tokenHash, envelope } = fresh;
   try {
     const { data, error } = await supabase.rpc("create_guest_invitation", {
       target_wedding_id: access.access.weddingId,
       party_label: input.label,
       invitation_token_hash: tokenHash,
+      invitation_token_ciphertext: envelope,
       guest_names: [...input.guestNames],
       ...(input.contactEmail ? { party_contact_email: input.contactEmail } : {}),
     });
@@ -294,7 +326,7 @@ type LinkAdminDenial = AccessDenial | "forbidden" | "invalid_target";
 
 export type RotateLinkResult =
   | Readonly<{ ok: true } & FreshLink>
-  | Readonly<{ ok: false; reason: LinkAdminDenial }>;
+  | Readonly<{ ok: false; reason: LinkAdminDenial | "configuration_error" }>;
 
 export type RevokeLinkResult = Readonly<{ ok: true }> | Readonly<{ ok: false; reason: LinkAdminDenial }>;
 
@@ -304,45 +336,53 @@ function linkAdminWriteError(error: DbError): LinkAdminDenial {
 }
 
 /**
- * "Generar nuevo enlace" (owner-only): replaces the party's token hash. The
- * old link stops working at once; a revoked party is reopened with the NEW
- * link (the database re-stamps token_issued_at and clears revoked_at). Same
- * party, same guests, same RSVPs. Returns the new link, once.
+ * "Generar nuevo enlace" (owner-only): replaces the party's token hash and
+ * its recoverable envelope together. The old link stops working at once; a
+ * revoked party is reopened with the NEW link (the database re-stamps
+ * token_issued_at and clears revoked_at). Same party, same guests, same
+ * RSVPs. Returns the new link (later recoverable). Never runs silently:
+ * only on an owner's explicit request.
  */
 export async function rotateGuestPartyLink(
   supabase: Client,
   weddingId: string,
   guestInvitationId: string,
   origin: string,
+  encryption: RsvpCapabilityEncryptionSettings | null,
 ): Promise<RotateLinkResult> {
   const access = await requireWeddingRole(supabase, weddingId, ["owner"]);
   if (!access.ok) return { ok: false, reason: access.reason };
   if (!UUID_PATTERN.test(guestInvitationId)) return { ok: false, reason: "invalid_target" };
-  return replaceGuestPartyLink(supabase, access.access, guestInvitationId, origin);
+  return replaceGuestPartyLink(supabase, access.access, guestInvitationId, origin, encryption);
 }
 
 /**
  * The rotation write itself, for callers that already hold an OWNER's
  * `WeddingAccess` (this function and the owner-only "new link and send").
- * The database re-checks the role (link guard trigger).
+ * One call to `rotate_guest_invitation_link` (hash + envelope, one
+ * transaction; the database re-checks the owner role). Without encryption
+ * settings nothing is written and the old link stays current.
  */
 export async function replaceGuestPartyLink(
   supabase: Client,
   access: WeddingAccess,
   guestInvitationId: string,
   origin: string,
+  encryption: RsvpCapabilityEncryptionSettings | null,
 ): Promise<RotateLinkResult> {
   if (access.role !== "owner") return { ok: false, reason: "forbidden" };
-  const { token, tokenHash } = generateCapabilityToken();
+  const fresh = newRecoverableLink(encryption);
+  if (!fresh) return { ok: false, reason: "configuration_error" };
+  const { token, tokenHash, envelope } = fresh;
   try {
-    const { data, error } = await supabase
-      .from("guest_invitations")
-      .update({ token_hash: tokenHash })
-      .eq("id", guestInvitationId)
-      .eq("wedding_id", access.weddingId)
-      .select("id");
+    const { data, error } = await supabase.rpc("rotate_guest_invitation_link", {
+      target_wedding_id: access.weddingId,
+      target_invitation_id: guestInvitationId,
+      invitation_token_hash: tokenHash,
+      invitation_token_ciphertext: envelope,
+    });
     if (error) return { ok: false, reason: linkAdminWriteError(error) };
-    if (!data || data.length === 0) return { ok: false, reason: "invalid_target" };
+    if (data !== true) return { ok: false, reason: "invalid_target" };
     return { ok: true, link: linkUrl(token, origin), token };
   } catch {
     return { ok: false, reason: "error" };

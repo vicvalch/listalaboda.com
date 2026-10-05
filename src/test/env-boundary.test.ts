@@ -41,6 +41,14 @@ describe("public env", () => {
     expect(JSON.stringify(getPublicEnv())).not.toContain("server-secret-placeholder");
   });
 
+  it("does not pick up the RSVP capability encryption key (LB-13) from process.env", () => {
+    vi.stubEnv(URL_VAR, validSource[URL_VAR]);
+    vi.stubEnv(KEY_VAR, validSource[KEY_VAR]);
+    vi.stubEnv("RSVP_CAPABILITY_ENCRYPTION_KEY", "capability-secret-placeholder");
+
+    expect(JSON.stringify(getPublicEnv())).not.toContain("capability-secret-placeholder");
+  });
+
   it.each([URL_VAR, KEY_VAR])("fails clearly when %s is missing", (name) => {
     const source = { ...validSource, [name]: "  " };
     expect(() => parsePublicEnv(source)).toThrow(EnvError);

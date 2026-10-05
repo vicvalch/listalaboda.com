@@ -3,6 +3,9 @@ import "server-only";
 import { isAbsolute } from "node:path";
 
 import { normalizeContactEmail } from "@/lib/guests/contact-email";
+import { isLocalOrigin, parseAppOrigin } from "@/lib/http/app-origin";
+
+export { parseAppOrigin };
 
 /**
  * Server-only email configuration (LB-11). The one place that reads the
@@ -41,28 +44,7 @@ export type EmailConfigResult =
 
 type EnvSource = Readonly<Record<string, string | undefined>>;
 
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/;
-
-/** An exact `http(s)://host[:port]` origin; https unless it's localhost. */
-export function parseAppOrigin(value: string): string | null {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return null;
-  }
-  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
-  if (url.protocol === "http:" && !LOCAL_HOSTS.has(url.hostname)) return null;
-  if (url.username || url.password) return null;
-  // Only an origin: no path, query or fragment (a trailing "/" is fine).
-  if (value.replace(/\/$/, "") !== url.origin) return null;
-  return url.origin;
-}
-
-function isLocalOrigin(origin: string): boolean {
-  return LOCAL_HOSTS.has(new URL(origin).hostname);
-}
 
 /** `Name <address>` or `address`; the address must be a plain valid one. */
 export function parseSender(value: string): string | null {

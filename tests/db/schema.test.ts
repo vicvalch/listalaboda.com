@@ -70,7 +70,7 @@ describe("schema guarantees", () => {
     expect(rows.map((r) => r.table_name).sort()).toEqual([
       "checklist_items",
       "content_sections",
-      "guest_invitations",
+      // LB-13: no guest_invitations — parties come only from create_guest_invitation.
       "guests",
       "membership_invites",
     ]);
@@ -105,12 +105,14 @@ describe("schema guarantees", () => {
                                 'unpublish_wedding_site', 'get_published_wedding_site',
                                 'get_guest_invitation_site_slug', 'guest_invitation_link_is_current',
                                 'record_guest_invitation_email', 'get_rsvp_confirmation_email_context',
-                                'record_rsvp_confirmation_email'))
+                                'record_rsvp_confirmation_email', 'rotate_guest_invitation_link',
+                                'get_guest_invitation_recovery_envelope'))
        order by 1`,
     );
 
     expect(rows.map((r) => r.name)).toEqual([
       "private.assign_checklist_item_sort_order",
+      "private.enforce_guest_invitation_capability_secret",
       "private.enforce_guest_invitation_has_guest",
       "private.enforce_wedding_has_owner",
       "private.guard_guest_invitation_link",
@@ -126,6 +128,7 @@ describe("schema guarantees", () => {
       "public.create_guest_invitation",
       "public.create_wedding",
       "public.get_guest_invitation",
+      "public.get_guest_invitation_recovery_envelope",
       "public.get_guest_invitation_site_slug",
       "public.get_published_wedding_site",
       "public.get_rsvp_confirmation_email_context",
@@ -134,6 +137,7 @@ describe("schema guarantees", () => {
       "public.publish_wedding_site",
       "public.record_guest_invitation_email",
       "public.record_rsvp_confirmation_email",
+      "public.rotate_guest_invitation_link",
       "public.save_wedding_site_section",
       "public.set_wedding_display_name",
       "public.set_wedding_site_slug",
@@ -154,11 +158,13 @@ describe("schema guarantees", () => {
       "public.create_guest_invitation",
       "public.create_wedding",
       "public.get_guest_invitation",
+      "public.get_guest_invitation_recovery_envelope",
       "public.get_guest_invitation_site_slug",
       "public.get_published_wedding_site",
       "public.guest_invitation_link_is_current",
       "public.initialize_wedding_checklist",
       "public.publish_wedding_site",
+      "public.rotate_guest_invitation_link",
       "public.save_wedding_site_section",
       "public.set_wedding_display_name",
       "public.set_wedding_site_slug",
@@ -179,7 +185,11 @@ describe("schema guarantees", () => {
     // LB-12 (ADR-005): service_role-only, scoped to one party.
     expect(definer).toContain("public.get_rsvp_confirmation_email_context");
     expect(definer).toContain("public.record_rsvp_confirmation_email");
-    expect(definer).not.toContain("public.create_guest_invitation");
+    // LB-13 (ADR-006): no client role can read or write token_hash/envelopes,
+    // so the two writers and the recovery read check membership themselves.
+    expect(definer).toContain("public.get_guest_invitation_recovery_envelope");
+    expect(definer).toContain("public.rotate_guest_invitation_link");
+    expect(definer).toContain("public.create_guest_invitation");
     expect(definer).not.toContain("public.save_wedding_site_section");
   });
 
@@ -196,20 +206,25 @@ describe("schema guarantees", () => {
                            'set_wedding_site_slug', 'publish_wedding_site',
                            'unpublish_wedding_site', 'get_published_wedding_site',
                            'get_guest_invitation_site_slug', 'guest_invitation_link_is_current',
-                           'record_guest_invitation_email')
+                           'record_guest_invitation_email', 'rotate_guest_invitation_link',
+                           'get_guest_invitation_recovery_envelope')
        order by 1`,
     );
     expect(rows).toEqual([
       { name: "accept_membership_invite", args: "invite_token_hash text" },
       {
         name: "create_guest_invitation",
-        args: "target_wedding_id uuid, party_label text, invitation_token_hash text, guest_names text[], party_contact_email text",
+        args: "target_wedding_id uuid, party_label text, invitation_token_hash text, invitation_token_ciphertext text, guest_names text[], party_contact_email text",
       },
       {
         name: "create_wedding",
         args: "wedding_name text, wedding_date date, wedding_city text, wedding_time_zone text",
       },
       { name: "get_guest_invitation", args: "invitation_token_hash text" },
+      {
+        name: "get_guest_invitation_recovery_envelope",
+        args: "target_wedding_id uuid, target_invitation_id uuid",
+      },
       { name: "get_guest_invitation_site_slug", args: "invitation_token_hash text" },
       { name: "get_published_wedding_site", args: "site_slug text" },
       {
@@ -223,6 +238,10 @@ describe("schema guarantees", () => {
       {
         name: "record_guest_invitation_email",
         args: "target_wedding_id uuid, target_invitation_id uuid, invitation_token_hash text, recipient text, provider_message_id text",
+      },
+      {
+        name: "rotate_guest_invitation_link",
+        args: "target_wedding_id uuid, target_invitation_id uuid, invitation_token_hash text, invitation_token_ciphertext text",
       },
       {
         name: "save_wedding_site_section",
@@ -429,7 +448,9 @@ describe("schema guarantees", () => {
         "rsvp_confirmation_email_sent_to",
       ]),
     );
-    expect(columns("INSERT")).toEqual(["contact_email", "label", "token_hash", "wedding_id"]);
-    expect(columns("UPDATE")).toEqual(["contact_email", "label", "revoked_at", "token_hash"]);
+    // LB-13: parties are created only through create_guest_invitation (party + envelope).
+    expect(columns("INSERT")).toEqual([]);
+    // LB-13: rotation only through rotate_guest_invitation_link (hash + envelope).
+    expect(columns("UPDATE")).toEqual(["contact_email", "label", "revoked_at"]);
   });
 });

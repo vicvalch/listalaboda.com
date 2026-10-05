@@ -20,9 +20,9 @@ import { getWeddingDetail } from "@/lib/weddings/service";
 
 /**
  * Sending a party's invitation by email (LB-11). Two entry points, both
- * carrying a link whose plaintext the server holds right now (LB-13 made
- * links recoverable for sharing, ADR-006, but emailing a recovered link is
- * reminder delivery, which is still deferred):
+ * carrying a link whose plaintext the server holds right now (re-sending a
+ * party's CURRENT recovered link without replacing it is the LB-14 reminder,
+ * `@/lib/guests/rsvp-reminder`):
  *
  * - `sendGuestInvitationEmail` — any member, with a FRESH link they were
  *   just shown (party created, or link rotated): the browser sends the

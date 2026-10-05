@@ -111,6 +111,7 @@ function fakeDelivery(fakes: Fakes, log: string[], state: { saved: boolean }) {
     },
     recorder: {
       recordInvitation: notAllowed,
+      recordRsvpReminder: notAllowed,
       async readRsvpConfirmationContext(tokenHash) {
         log.push("CONTEXT");
         contextReads.push(tokenHash);

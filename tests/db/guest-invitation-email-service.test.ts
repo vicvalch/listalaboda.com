@@ -62,6 +62,7 @@ function countingRecorder() {
     },
     readRsvpConfirmationContext: real.readRsvpConfirmationContext,
     recordRsvpConfirmation: real.recordRsvpConfirmation,
+    recordRsvpReminder: real.recordRsvpReminder,
   };
   return { recorder, calls };
 }

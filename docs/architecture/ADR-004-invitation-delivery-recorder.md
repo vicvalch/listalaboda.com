@@ -6,6 +6,8 @@ Related: [ADR-002 §6 — Service-role policy](ADR-002-auth-and-security-boundar
 > Later note (LB-12): this decision is unchanged. [ADR-005](ADR-005-rsvp-confirmation-email.md) separately
 > accepts two more named operations in the same module, for RSVP confirmation emails. Since then, this ADR's
 > `record(...)` is named `recordInvitation(...)`.
+> LB-14: [ADR-007](ADR-007-manual-rsvp-reminder-delivery.md) adds a fourth, `recordRsvpReminder(...)`, for manual
+> RSVP reminder emails; same module, same rules.
 
 ## Context
 

@@ -112,8 +112,8 @@ right now:
 - **Fresh link, any member.** Right after creating a party (or replacing its link), the panel that shows the link
   also offers "Enviar invitación por correo". The browser sends that token back in the form body (never a URL); the
   database confirms it is still the party's current, usable link before anything is sent.
-- **Existing party, owner only.** Emailing a link later still needs a new one (LB-13 makes links recoverable for
-  copying, but emailing a recovered link is reminder delivery, still deferred):
+- **Existing party, owner only.** An invitation email for an existing party still means a new link (to email the
+  party's current link again without replacing it, use LB-14's "Enviar recordatorio"):
   "Generar nuevo enlace y enviar" (with a confirmation naming the address) replaces the link — the old one stops
   working; guests and answers stay — and emails the new one. Collaborators are told an owner must do it; the
   service and the database refuse it anyway. Nothing is ever rotated silently.
@@ -177,8 +177,32 @@ Links created before LB-13 have only their hash, so they **keep working for gues
 "Mostrar enlace" says so. An owner can generate a new link once (the old one stops working, as always) and from then
 on it is recoverable; collaborators are told an owner must do it. Nothing is backfilled or rotated automatically.
 
-Still deferred: RSVP reminders (no schedule, cron, queue, WhatsApp or emailing a recovered link), activity history,
-and linking checklist items to guest work.
+**Manual RSVP reminders (LB-14).** Organizers (owners and collaborators) can remind a party with its **same** personal
+link, from the party card's "Recordatorio de confirmación" panel, only when they ask:
+
+- **Enviar recordatorio** emails the party's current contact email ("Recordatorio de confirmación — {boda}"). The
+  email has the party's name, the wedding's name, date and city when set, a "Confirmar asistencia" button with the
+  party's current RSVP link (and the raw link as a fallback), and the website only while it is published. Unlike the
+  RSVP confirmation, it is meant to carry the link. It never includes answers, food notes, ids or provider data.
+- **Preparar mensaje para WhatsApp** shows a short ready-made text (greeting, reminder, current link) to copy and send
+  yourself. The app doesn't send it, store it or record it, and needs no phone number. There is no WhatsApp or SMS
+  integration.
+
+Both recover the party's current link on the server at the moment of the click (LB-13), so a link an owner replaced
+after the page loaded is the one used. Nothing ever rotates, revokes or creates a link. The recipient is always the
+contact email stored right now, never a value from the page. Revoked or expired links get no reminder. Links created
+before LB-13 can't be reminded until an owner explicitly generates a new link (collaborators are told so). Without a
+contact email, only the WhatsApp text is available.
+
+Each send is one provider call, never retried automatically. A provider failure records nothing and leaves the link
+as it was. If the provider accepted but the status couldn't be saved, the page says so and asks not to resend yet.
+Each party shows "Recordatorio por correo: Último recordatorio enviado el … a …" (latest successful reminder only),
+next to and separate from the invitation and confirmation statuses. That status is written only by a
+service_role-only database function, through the same server-only recorder
+([ADR-007](docs/architecture/ADR-007-manual-rsvp-reminder-delivery.md)).
+
+Still deferred: automatic or scheduled reminders (no cron, queue, policies or retries), messaging APIs and phone
+numbers, activity history, and linking checklist items to guest work.
 
 ## Stack
 
@@ -201,8 +225,8 @@ recovered) is `APP_ORIGIN` + `/rsvp/<token>`, never derived from the request's H
 or `APP_ORIGIN`, creating parties and generating links refuse safely. The E2E suite uses a fake, test-only key.
 
 Email (optional locally): set `APP_ORIGIN`, `EMAIL_FROM`, `RESEND_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY` (the
-local `SECRET_KEY` from `npx supabase status`; used only for email delivery metadata, ADR-004/ADR-005) to send real
-invitation and RSVP confirmation emails,
+local `SECRET_KEY` from `npx supabase status`; used only for email delivery metadata, ADR-004/ADR-005/ADR-007) to send
+real invitation, RSVP confirmation and RSVP reminder emails,
 or `EMAIL_TRANSPORT=outbox` with an absolute `EMAIL_OUTBOX_DIR` (localhost `APP_ORIGIN` only) to write them to files.
 Without them, everything works except sending (RSVPs are still saved; they just get no confirmation email).
 
@@ -257,6 +281,7 @@ one later.
 - [ADR-004 — Service-role exception: recording invitation-email delivery](docs/architecture/ADR-004-invitation-delivery-recorder.md)
 - [ADR-005 — Service-role exception: RSVP confirmation email](docs/architecture/ADR-005-rsvp-confirmation-email.md)
 - [ADR-006 — Recoverable RSVP capability encryption](docs/architecture/ADR-006-recoverable-rsvp-capability.md)
+- [ADR-007 — Manual RSVP reminder delivery](docs/architecture/ADR-007-manual-rsvp-reminder-delivery.md)
 
 Database migrations live in `supabase/migrations/` and are named `YYYYMMDDHHMMSS_lb_<slug>.sql`.
 After changing the schema, run `npm run db:reset && npm run db:types` and commit the regenerated types.

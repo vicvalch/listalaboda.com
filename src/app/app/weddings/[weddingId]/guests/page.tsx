@@ -30,6 +30,7 @@ import {
 import { ConfirmButton } from "./ConfirmButton";
 import { NewPartyForm } from "./NewPartyForm";
 import { PersonalLinkPanel } from "./PersonalLinkPanel";
+import { ReminderPanel } from "./ReminderPanel";
 import { RotateAndSendButton } from "./RotateAndSendButton";
 import { RotateLinkButton } from "./RotateLinkButton";
 import { TextEditForm } from "./TextEditForm";
@@ -41,7 +42,8 @@ export const metadata: Metadata = { title: getMessages().guests.title };
  * checklist (which stays the wedding's home). Any member — owner or
  * collaborator — sees and manages its content; only owners see the link
  * actions (replace/revoke), which the service and database also enforce; any member can explicitly
- * show a party's current link (LB-13), which this page never loads by itself; membership is checked server-side
+ * show a party's current link (LB-13) or remind the party with it (LB-14), which this page never loads by
+ * itself; membership is checked server-side
  * first and a non-member, a nonexistent wedding and a malformed id all get
  * the same 404, without revealing whether any guest data exists. All data
  * is loaded here after that check, in a bounded number of queries; counts
@@ -317,16 +319,32 @@ function PartyCard({
         {/* LB-13: the current link only on an explicit request; this page
             never loads or decrypts any link. Dead links aren't offered. */}
         {linkState === "active" ? (
-          <PersonalLinkPanel
-            weddingId={weddingId}
-            guestInvitationId={party.id}
-            partyLabel={party.label}
-            canAdministerLink={canAdministerLink}
-          />
+          <>
+            <PersonalLinkPanel
+              weddingId={weddingId}
+              guestInvitationId={party.id}
+              partyLabel={party.label}
+              canAdministerLink={canAdministerLink}
+            />
+            {/* LB-14: manual reminders with the SAME current link, recovered
+                only when the organizer asks; never a new link. */}
+            <ReminderPanel
+              weddingId={weddingId}
+              guestInvitationId={party.id}
+              partyLabel={party.label}
+              contactEmail={party.contactEmail}
+              canAdministerLink={canAdministerLink}
+            />
+          </>
         ) : (
-          <p className="text-muted text-sm">
-            {canAdministerLink ? copy.personalLink.inactive : copy.personalLink.inactiveCollaborator}
-          </p>
+          <div className="space-y-1">
+            <p className="text-muted text-sm">
+              {canAdministerLink ? copy.personalLink.inactive : copy.personalLink.inactiveCollaborator}
+            </p>
+            <p className="text-muted text-sm" data-testid="reminder-inactive">
+              {copy.reminder.inactive}
+            </p>
+          </div>
         )}
         {canAdministerLink ? (
           <RotateLinkButton weddingId={weddingId} guestInvitationId={party.id} partyLabel={party.label} />
@@ -370,7 +388,8 @@ type ContactEmailSectionProps = {
 /**
  * The party's contact email (members only — this page), its invitation
  * email status and, separately, its latest RSVP confirmation email (LB-12;
- * sent automatically when the party answers, so there is no button). The
+ * sent automatically when the party answers, so there is no button) and its
+ * latest RSVP reminder email (LB-14; sent from the reminder panel). The
  * recipients shown are where each email actually went, which may differ
  * from the current contact email. Any member adds, edits or removes the email. Emailing needs
  * a link whose plaintext exists right now: a fresh one (shown after
@@ -383,6 +402,7 @@ function ContactEmailSection({ weddingId, weddingTimeZone, party, canAdministerL
   const partyKeys = { weddingId, guestInvitationId: party.id };
   const sent = party.invitationEmail;
   const confirmed = party.rsvpConfirmationEmail;
+  const reminded = party.rsvpReminderEmail;
   const linkChangedSince = sent !== null && new Date(party.tokenIssuedAt) > new Date(sent.sentAt);
 
   return (
@@ -415,6 +435,17 @@ function ContactEmailSection({ weddingId, weddingTimeZone, party, canAdministerL
                   email: confirmed.sentTo,
                 })
               : copy.rsvpConfirmationEmail.never}
+          </span>
+        </p>
+        <p>
+          <span className="font-semibold">{copy.reminder.emailStatusTitle}:</span>{" "}
+          <span data-testid="party-reminder-email-status">
+            {reminded
+              ? interpolate(copy.reminder.lastSent, {
+                  date: formatWeddingTimestamp(reminded.sentAt, weddingTimeZone),
+                  email: reminded.sentTo,
+                })
+              : copy.reminder.never}
           </span>
         </p>
       </div>

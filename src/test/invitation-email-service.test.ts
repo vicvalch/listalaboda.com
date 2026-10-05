@@ -154,6 +154,7 @@ function fakeSender(
     },
     readRsvpConfirmationContext: notInvitation,
     recordRsvpConfirmation: notInvitation,
+    recordRsvpReminder: notInvitation,
   };
   return { sender, sent, records, order, delivery: { sender, appOrigin: APP_ORIGIN, recorder } };
 }

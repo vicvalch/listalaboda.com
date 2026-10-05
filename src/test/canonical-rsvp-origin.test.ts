@@ -54,6 +54,7 @@ vi.mock("@/lib/email/delivery-recorder", () => ({
     recordInvitation: async () => ({ ok: true, sentAt: "2026-10-04T12:00:00Z" }),
     readRsvpConfirmationContext: vi.fn(),
     recordRsvpConfirmation: vi.fn(),
+    recordRsvpReminder: vi.fn(),
   }),
 }));
 

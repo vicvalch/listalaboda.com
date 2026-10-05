@@ -14,6 +14,7 @@ import {
 } from "@/lib/guests/invitation-email";
 import { getGuestLinkConfig } from "@/lib/guests/link-config";
 import { recoverGuestPartyLink } from "@/lib/guests/link-recovery";
+import { prepareRsvpReminderMessage, sendRsvpReminderEmail } from "@/lib/guests/rsvp-reminder";
 import {
   addGuest,
   createGuestParty,
@@ -61,6 +62,12 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
  * (fresh, emailed, recovered) is built from the trusted `APP_ORIGIN`
  * (`getGuestLinkConfig` / the email configuration), never from request
  * headers (Host, Origin, X-Forwarded-*): same token, same URL.
+ *
+ * LB-14: any member can explicitly send a reminder email ("Enviar
+ * recordatorio") or prepare a WhatsApp-ready text, both with the party's
+ * CURRENT link, recovered on the server during the action. The form carries
+ * only the wedding and party ids: never a recipient, link or token. Sending
+ * a reminder never rotates anything.
  */
 
 /** The server's link-encryption key, or null (creating/rotating then refuses). */
@@ -525,6 +532,101 @@ export async function recoverLinkAction(
       return { status: "unavailable", message: copy.unavailable, nonce };
     case "configuration_error":
       return { status: "failed", message: copy.notConfigured, nonce };
+    default:
+      return { status: "failed", message: await handleFailure(weddingId, result), nonce };
+  }
+}
+
+// ------------------------------------------------------- RSVP reminders
+
+export type SendReminderState = Readonly<{
+  tone: "success" | "info" | "error";
+  message: string;
+  nonce: string;
+  /** No recoverable link: an owner must generate a new one first. */
+  needsNewLink?: boolean;
+}> | null;
+
+/**
+ * "Enviar recordatorio" (LB-14, ADR-007): any member. The form carries only
+ * lookup keys; the recipient (the party's CURRENT contact email) and the
+ * link (its CURRENT recoverable capability) are read on the server now.
+ * One provider attempt per click; nothing is rotated.
+ */
+export async function sendReminderAction(
+  _prev: SendReminderState,
+  formData: FormData,
+): Promise<SendReminderState> {
+  const weddingId = formText(formData, "weddingId");
+  await requireUser(guestsPath(weddingId));
+  const copy = getMessages().guests.reminder;
+  const nonce = crypto.randomUUID();
+
+  const outcome = await sendRsvpReminderEmail(
+    await createSupabaseServerClient(),
+    weddingId,
+    formText(formData, "guestInvitationId"),
+    getEmailDelivery(),
+    linkEncryption(),
+  );
+  switch (outcome.outcome) {
+    case "sent":
+      revalidatePath(guestsPath(weddingId));
+      return { tone: "success", message: interpolate(copy.sent, { email: outcome.recipient }), nonce };
+    case "sent_but_unrecorded":
+      return { tone: "info", message: copy.errors.sentUnrecorded, nonce };
+    case "no_email":
+      return { tone: "error", message: copy.noEmail, nonce };
+    case "email_not_configured":
+      return { tone: "error", message: copy.errors.notConfigured, nonce };
+    case "link_not_configured":
+      return { tone: "error", message: copy.errors.linkNotConfigured, nonce };
+    case "link_unrecoverable":
+      return { tone: "error", message: copy.errors.linkUnrecoverable, nonce, needsNewLink: true };
+    case "link_unavailable":
+      return { tone: "error", message: copy.errors.linkUnavailable, nonce };
+    case "recipient_rejected":
+      return { tone: "error", message: copy.errors.recipientRejected, nonce };
+    case "provider_failed":
+      return { tone: "error", message: copy.errors.providerFailed, nonce };
+    case "failed":
+      return { tone: "error", message: await handleFailure(weddingId, outcome), nonce };
+  }
+}
+
+export type ReminderMessageState =
+  | Readonly<{ status: "shown"; message: string; nonce: string }>
+  | Readonly<{ status: "unrecoverable" | "failed"; message: string; nonce: string }>
+  | null;
+
+/**
+ * "Preparar mensaje para WhatsApp" (LB-14): any member, on explicit
+ * request. Returns the text (with the CURRENT link) in this response only:
+ * nothing is sent, stored, logged or recorded as delivered.
+ */
+export async function prepareReminderMessageAction(
+  _prev: ReminderMessageState,
+  formData: FormData,
+): Promise<ReminderMessageState> {
+  const weddingId = formText(formData, "weddingId");
+  await requireUser(guestsPath(weddingId));
+  const copy = getMessages().guests.reminder.errors;
+  const nonce = crypto.randomUUID();
+
+  const result = await prepareRsvpReminderMessage(
+    await createSupabaseServerClient(),
+    weddingId,
+    formText(formData, "guestInvitationId"),
+    getGuestLinkConfig(),
+  );
+  if (result.ok) return { status: "shown", message: result.message, nonce };
+  switch (result.reason) {
+    case "link_unrecoverable":
+      return { status: "unrecoverable", message: copy.linkUnrecoverable, nonce };
+    case "link_unavailable":
+      return { status: "failed", message: copy.linkUnavailable, nonce };
+    case "link_not_configured":
+      return { status: "failed", message: copy.linkNotConfigured, nonce };
     default:
       return { status: "failed", message: await handleFailure(weddingId, result), nonce };
   }

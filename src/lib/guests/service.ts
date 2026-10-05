@@ -45,7 +45,8 @@ import type { Database } from "@/lib/supabase/database.types";
  * LB-11: a party may have a contact email (PRIVATE, members only), managed
  * like any guest-list content. Setting, changing or removing it never
  * touches the link or the RSVPs. Sending the invitation email lives in
- * `@/lib/guests/invitation-email`.
+ * `@/lib/guests/invitation-email`; manual reminders (LB-14) in
+ * `@/lib/guests/rsvp-reminder`.
  */
 
 type Client = SupabaseClient<Database>;
@@ -107,6 +108,12 @@ export type InvitationEmailStatus = Readonly<{ sentAt: string; sentTo: string }>
  */
 export type RsvpConfirmationEmailStatus = Readonly<{ sentAt: string; sentTo: string }> | null;
 
+/**
+ * The latest successful RSVP reminder email (LB-14); null = never sent.
+ * Separate from the invitation and the confirmation: a third, distinct email.
+ */
+export type RsvpReminderEmailStatus = Readonly<{ sentAt: string; sentTo: string }> | null;
+
 export type GuestListParty = Readonly<{
   id: string;
   label: string;
@@ -116,6 +123,7 @@ export type GuestListParty = Readonly<{
   contactEmail: string | null;
   invitationEmail: InvitationEmailStatus;
   rsvpConfirmationEmail: RsvpConfirmationEmailStatus;
+  rsvpReminderEmail: RsvpReminderEmailStatus;
   guests: readonly GuestListGuest[];
 }>;
 
@@ -134,7 +142,7 @@ export async function listGuestParties(
     const { data, error } = await supabase
       .from("guest_invitations")
       .select(
-        "id, label, token_issued_at, revoked_at, contact_email, invitation_email_sent_at, invitation_email_sent_to, rsvp_confirmation_email_sent_at, rsvp_confirmation_email_sent_to, created_at, guests(id, name, created_at, rsvps(attending, dietary_note))",
+        "id, label, token_issued_at, revoked_at, contact_email, invitation_email_sent_at, invitation_email_sent_to, rsvp_confirmation_email_sent_at, rsvp_confirmation_email_sent_to, rsvp_reminder_email_sent_at, rsvp_reminder_email_sent_to, created_at, guests(id, name, created_at, rsvps(attending, dietary_note))",
       )
       .eq("wedding_id", access.weddingId)
       .order("created_at", { ascending: true })
@@ -154,6 +162,10 @@ export async function listGuestParties(
       rsvpConfirmationEmail:
         party.rsvp_confirmation_email_sent_at && party.rsvp_confirmation_email_sent_to
           ? { sentAt: party.rsvp_confirmation_email_sent_at, sentTo: party.rsvp_confirmation_email_sent_to }
+          : null,
+      rsvpReminderEmail:
+        party.rsvp_reminder_email_sent_at && party.rsvp_reminder_email_sent_to
+          ? { sentAt: party.rsvp_reminder_email_sent_at, sentTo: party.rsvp_reminder_email_sent_to }
           : null,
       guests: [...party.guests]
         .sort((a, b) =>

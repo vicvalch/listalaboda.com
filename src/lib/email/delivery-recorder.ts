@@ -8,7 +8,7 @@ import type { Database } from "@/lib/supabase/database.types";
 
 /**
  * The application's ONLY service-role use (ADR-002 §6), for email delivery
- * metadata and nothing else. Three named operations, each one fixed RPC:
+ * metadata and nothing else. Four named operations, each one fixed RPC:
  *
  * - `recordInvitation` (ADR-004): the provider accepted an invitation email.
  * - `readRsvpConfirmationContext` (ADR-005): after a party's RSVP was saved
@@ -19,6 +19,8 @@ import type { Database } from "@/lib/supabase/database.types";
  *   read it.
  * - `recordRsvpConfirmation` (ADR-005): the provider accepted an RSVP
  *   confirmation email.
+ * - `recordRsvpReminder` (ADR-007): the provider accepted an RSVP reminder
+ *   email that an organizer explicitly sent with the party's CURRENT link.
  *
  * Why recording is privileged: the database can't authenticate a provider
  * result coming from a client credential. A Server Action talks to Postgres
@@ -32,7 +34,7 @@ import type { Database } from "@/lib/supabase/database.types";
  *   2. the provider accepted the message (its id comes from the provider
  *      response, never from the browser).
  *
- * Scope, deliberately tiny: three functions, three RPCs, one party per call.
+ * Scope, deliberately tiny: four functions, four RPCs, one party per call.
  * The privileged client is created inside and never returned or exported;
  * there is no generic service-role client to reuse, no `from()`, no
  * arbitrary RPC name. No authorization. The key is read only here, never
@@ -52,6 +54,9 @@ export type DeliveryRecord = Readonly<{
 
 /** Same scope as an invitation record: the link whose RSVP was confirmed. */
 export type RsvpConfirmationRecord = DeliveryRecord;
+
+/** Same scope: the CURRENT, usable link the reminder carried. */
+export type RsvpReminderRecord = DeliveryRecord;
 
 export type DeliveryRecordResult = Readonly<{ ok: true; sentAt: string }> | Readonly<{ ok: false }>;
 
@@ -76,6 +81,7 @@ export interface DeliveryRecorder {
   recordInvitation(entry: DeliveryRecord): Promise<DeliveryRecordResult>;
   readRsvpConfirmationContext(tokenHash: string): Promise<RsvpConfirmationContextResult>;
   recordRsvpConfirmation(entry: RsvpConfirmationRecord): Promise<DeliveryRecordResult>;
+  recordRsvpReminder(entry: RsvpReminderRecord): Promise<DeliveryRecordResult>;
 }
 
 type RecorderSettings = Readonly<{ supabaseUrl: string; serviceRoleKey: string }>;
@@ -142,9 +148,9 @@ export function createDeliveryRecorder({ supabaseUrl, serviceRoleKey }: Recorder
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  /** One of the two fixed record RPCs; never a caller-chosen name. */
+  /** One of the three fixed record RPCs; never a caller-chosen name. */
   async function record(
-    rpc: "record_guest_invitation_email" | "record_rsvp_confirmation_email",
+    rpc: "record_guest_invitation_email" | "record_rsvp_confirmation_email" | "record_rsvp_reminder_email",
     entry: DeliveryRecord,
   ): Promise<DeliveryRecordResult> {
     if (!isStorableMessageId(entry.providerMessageId)) return { ok: false };
@@ -160,6 +166,7 @@ export function createDeliveryRecorder({ supabaseUrl, serviceRoleKey }: Recorder
   return {
     recordInvitation: (entry) => record("record_guest_invitation_email", entry),
     recordRsvpConfirmation: (entry) => record("record_rsvp_confirmation_email", entry),
+    recordRsvpReminder: (entry) => record("record_rsvp_reminder_email", entry),
     async readRsvpConfirmationContext(tokenHash) {
       if (!TOKEN_HASH_PATTERN.test(tokenHash)) return { ok: false };
       try {
@@ -201,7 +208,7 @@ export function getDeliveryRecorder(): DeliveryRecorder | null {
   }
   const settings = parseRecorderSettings({
     NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
-    // ADR-004/ADR-005: the one sanctioned read of this key (eslint allows it in this file only).
+    // ADR-004/ADR-005/ADR-007: the one sanctioned read of this key (eslint allows it in this file only).
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
   });
   return settings ? createDeliveryRecorder(settings) : null;

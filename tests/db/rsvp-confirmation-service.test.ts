@@ -65,6 +65,7 @@ function countingRecorder(fail = false) {
       calls.push(entry.providerMessageId);
       return fail ? { ok: false } : real.recordRsvpConfirmation(entry);
     },
+    recordRsvpReminder: real.recordRsvpReminder,
   };
   return { recorder, calls };
 }

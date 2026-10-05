@@ -106,7 +106,7 @@ describe("schema guarantees", () => {
                                 'get_guest_invitation_site_slug', 'guest_invitation_link_is_current',
                                 'record_guest_invitation_email', 'get_rsvp_confirmation_email_context',
                                 'record_rsvp_confirmation_email', 'rotate_guest_invitation_link',
-                                'get_guest_invitation_recovery_envelope'))
+                                'get_guest_invitation_recovery_envelope', 'record_rsvp_reminder_email'))
        order by 1`,
     );
 
@@ -137,6 +137,7 @@ describe("schema guarantees", () => {
       "public.publish_wedding_site",
       "public.record_guest_invitation_email",
       "public.record_rsvp_confirmation_email",
+      "public.record_rsvp_reminder_email",
       "public.rotate_guest_invitation_link",
       "public.save_wedding_site_section",
       "public.set_wedding_display_name",
@@ -185,6 +186,8 @@ describe("schema guarantees", () => {
     // LB-12 (ADR-005): service_role-only, scoped to one party.
     expect(definer).toContain("public.get_rsvp_confirmation_email_context");
     expect(definer).toContain("public.record_rsvp_confirmation_email");
+    // LB-14 (ADR-007): service_role-only, scoped to one party's live link.
+    expect(definer).toContain("public.record_rsvp_reminder_email");
     // LB-13 (ADR-006): no client role can read or write token_hash/envelopes,
     // so the two writers and the recovery read check membership themselves.
     expect(definer).toContain("public.get_guest_invitation_recovery_envelope");
@@ -362,7 +365,8 @@ describe("schema guarantees", () => {
        order by 1`,
     );
     // The address itself, and the latest sends' metadata (recipient
-    // included): the invitation (LB-11) and the RSVP confirmation (LB-12).
+    // included): the invitation (LB-11), the RSVP confirmation (LB-12) and
+    // the RSVP reminder (LB-14). Still no phone or WhatsApp number.
     expect(rows.map((r) => r.column_name)).toEqual([
       "guest_invitations.contact_email",
       "guest_invitations.invitation_email_provider_id",
@@ -371,6 +375,9 @@ describe("schema guarantees", () => {
       "guest_invitations.rsvp_confirmation_email_provider_id",
       "guest_invitations.rsvp_confirmation_email_sent_at",
       "guest_invitations.rsvp_confirmation_email_sent_to",
+      "guest_invitations.rsvp_reminder_email_provider_id",
+      "guest_invitations.rsvp_reminder_email_sent_at",
+      "guest_invitations.rsvp_reminder_email_sent_to",
     ]);
   });
 
@@ -410,10 +417,11 @@ describe("schema guarantees", () => {
     expect(publicGrant).toEqual([]);
   });
 
-  it("only service_role can execute the RSVP confirmation functions (ADR-005)", async () => {
+  it("only service_role can execute the RSVP confirmation and reminder functions (ADR-005, ADR-007)", async () => {
     for (const signature of [
       "public.get_rsvp_confirmation_email_context(text)",
       "public.record_rsvp_confirmation_email(uuid, uuid, text, text, text)",
+      "public.record_rsvp_reminder_email(uuid, uuid, text, text, text)",
     ]) {
       const rows = await sql<{ role: string; can: boolean }>(
         `select r.role, has_function_privilege(r.role, $1::regprocedure, 'execute') as can
@@ -446,6 +454,8 @@ describe("schema guarantees", () => {
         "invitation_email_sent_to",
         "rsvp_confirmation_email_sent_at",
         "rsvp_confirmation_email_sent_to",
+        "rsvp_reminder_email_sent_at",
+        "rsvp_reminder_email_sent_to",
       ]),
     );
     // LB-13: parties are created only through create_guest_invitation (party + envelope).

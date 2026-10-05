@@ -201,6 +201,8 @@ service-role key: in the deployment's secret store, apart from database backups 
 
 Reminder delivery (email reminders, WhatsApp, schedules, cron, queues, rate limits, reminder metadata) is
 not part of this decision. LB-13 only provides the same-link recovery primitive those features will use.
+*Later note (LB-14):* manual reminders (email and a WhatsApp-ready text) now reuse this primitive without
+rotating; see [ADR-007](ADR-007-manual-rsvp-reminder-delivery.md). Scheduling is still deferred.
 The RSVP confirmation email (ADR-005) still carries no capability.
 
 ## Consequences

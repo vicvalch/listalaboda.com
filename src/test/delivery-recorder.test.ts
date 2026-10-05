@@ -73,11 +73,12 @@ describe("getDeliveryRecorder", () => {
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", SECRET);
     const recorder = getDeliveryRecorder();
     expect(recorder).not.toBeNull();
-    // The only things handed out are the three named operations.
+    // The only things handed out are the four named operations.
     expect(Object.keys(recorder ?? {}).sort()).toEqual([
       "readRsvpConfirmationContext",
       "recordInvitation",
       "recordRsvpConfirmation",
+      "recordRsvpReminder",
     ]);
     for (const value of Object.values(recorder ?? {})) expect(typeof value).toBe("function");
     expect(JSON.stringify(recorder)).not.toContain(SECRET);
@@ -122,6 +123,45 @@ describe("createDeliveryRecorder: recordInvitation (ADR-004)", () => {
     expect(await recorder.recordInvitation(entry)).toEqual({ ok: false });
     rpc.mockRejectedValueOnce(new Error(`network down ${SECRET}`));
     const failed = await recorder.recordInvitation(entry);
+    expect(failed).toEqual({ ok: false });
+    expect(JSON.stringify(failed)).not.toContain(SECRET);
+  });
+});
+
+describe("createDeliveryRecorder: RSVP reminder (ADR-007)", () => {
+  beforeEach(() => {
+    rpc.mockReset();
+    from.mockReset();
+  });
+
+  const recorder = () => createDeliveryRecorder({ supabaseUrl: URL_VALUE, serviceRoleKey: SECRET });
+
+  it("recordRsvpReminder calls exactly record_rsvp_reminder_email, never another RPC or a table", async () => {
+    rpc.mockResolvedValue({ data: "2026-10-04T13:00:00+00:00", error: null });
+    expect(await recorder().recordRsvpReminder(entry)).toEqual({ ok: true, sentAt: "2026-10-04T13:00:00+00:00" });
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith("record_rsvp_reminder_email", {
+      target_wedding_id: entry.weddingId,
+      target_invitation_id: entry.guestInvitationId,
+      invitation_token_hash: entry.tokenHash,
+      recipient: entry.recipient,
+      provider_message_id: entry.providerMessageId,
+    });
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("recordRsvpReminder refuses an unstorable provider id without calling the database", async () => {
+    for (const providerMessageId of ["", "a".repeat(201), "https://x/rsvp/abc"]) {
+      expect(await recorder().recordRsvpReminder({ ...entry, providerMessageId })).toEqual({ ok: false });
+    }
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("a database refusal or an exception is a plain failure, nothing echoed", async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: { code: "P0001", message: "rsvp_reminder_email_not_recorded" } });
+    expect(await recorder().recordRsvpReminder(entry)).toEqual({ ok: false });
+    rpc.mockRejectedValueOnce(new Error(`network down ${SECRET}`));
+    const failed = await recorder().recordRsvpReminder(entry);
     expect(failed).toEqual({ ok: false });
     expect(JSON.stringify(failed)).not.toContain(SECRET);
   });

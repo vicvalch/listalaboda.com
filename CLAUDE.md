@@ -10,8 +10,8 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - `docs/architecture/ADR-001-product-domain-and-tenancy.md`
 - `docs/architecture/ADR-002-auth-and-security-boundaries.md`
 - `docs/architecture/ADR-003-donor-extraction-policy.md`
-- `docs/architecture/ADR-004-invitation-delivery-recorder.md` and `docs/architecture/ADR-005-rsvp-confirmation-email.md`
-  (the only service-role exceptions, one module)
+- `docs/architecture/ADR-004-invitation-delivery-recorder.md`, `docs/architecture/ADR-005-rsvp-confirmation-email.md`
+  and `docs/architecture/ADR-007-manual-rsvp-reminder-delivery.md` (the only service-role exceptions, one module)
 - `docs/architecture/ADR-006-recoverable-rsvp-capability.md` (recoverable RSVP link encryption)
 
 ## Product rules
@@ -26,9 +26,10 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 
 - Strict TypeScript. No `@ts-ignore`, no `any` to silence errors.
 - RLS enabled in the same migration that creates any table.
-- The service-role key is never normal persistence. Its only use is the ADR-004/ADR-005 exception
-  (`src/lib/email/delivery-recorder.ts`: recording provider-accepted invitation and RSVP confirmation emails,
-  and reading a party's confirmation context by its link's hash); there is no generic service-role client.
+- The service-role key is never normal persistence. Its only use is the ADR-004/ADR-005/ADR-007 exception
+  (`src/lib/email/delivery-recorder.ts`: recording provider-accepted invitation, RSVP confirmation and RSVP
+  reminder emails, and reading a party's confirmation context by its link's hash); there is no generic
+  service-role client.
   Any other use needs its own `server-only` module plus a written justification (ADR-002 §6).
   ESLint blocks `process.env.SUPABASE_SERVICE_ROLE_KEY` everywhere else.
 - Browser code reads env only through `src/lib/env/public.ts` (`NEXT_PUBLIC_*` only).
@@ -184,7 +185,7 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   `EmailDelivery` parameter; tests inject fakes and never reach a real provider (E2E: the localhost-only file outbox).
 - Email content: catalog copy only (`es.invitationEmail`), text + HTML, every user value escaped at render, one-line
   subject. Include the website link only while it is published (`getPublishedSitePath`).
-- Sending never implies open RSVP. Reminders are deferred (no cron, queue or jobs); confirmations: LB-12 below.
+- Sending never implies open RSVP. Confirmations: LB-12 below; manual reminders: LB-14 below (no cron, queue or jobs).
 
 ## RSVP confirmation email rules (LB-12)
 
@@ -209,7 +210,7 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - The guest page shows RSVP success first and at most one secondary sentence about the email (`?email=sent|failed`,
   fixed words); it never reveals the address. Organizers see the last confirmation's date and recipient,
   distinct from the invitation status and from the current contact email.
-- Still deferred: RSVP reminders, cron/queues/jobs, provider webhooks and activity history.
+- Still deferred: automatic/scheduled reminders, cron/queues/jobs, provider webhooks and activity history.
 
 ## Recoverable RSVP capability rules (LB-13, ADR-006)
 
@@ -232,7 +233,30 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   failures never rotate, revoke or rewrite anything, and leak no crypto detail.
 - Legacy hash-only (pre-LB-13) links keep working and are `legacy` for recovery: never backfill or auto-rotate; an
   owner's explicit "Generar nuevo enlace" makes them recoverable.
-- No reminders, WhatsApp, schedulers or emailing a recovered link yet (LB-14+).
+- Recovered links are delivered again only by LB-14's explicit manual reminders (below); no schedulers.
+
+## Manual RSVP reminder rules (LB-14, ADR-007)
+
+- A reminder reuses the party's CURRENT recoverable capability: recovered inside the action through
+  `recoverCurrentCapability` (`@/lib/guests/link-recovery`), URL from `guestRsvpUrl(token, APP_ORIGIN)`. A reminder
+  never generates, rotates, revokes or stores a token, and never uses a token or link sent by the browser.
+- Explicit organizer actions only ("Enviar recordatorio", "Preparar mensaje para WhatsApp"), owners and collaborators
+  alike, through `@/lib/guests/rsvp-reminder`. Never on page load, recovery, RSVP, edits, publication or rotation.
+- Email recipient = the party's CURRENT `guest_invitations.contact_email`, read from the database at action time;
+  never a form value. No contact email = no email (the WhatsApp text still works).
+- Legacy/undecryptable links: no reminder in either channel; only an owner's explicit "Generar nuevo enlace" repairs
+  them. Revoked/expired: nothing is sent. Every failure happens before the provider and leaves the link untouched.
+- Email order: authorize → validate → config (email + link key) → party/recipient → recover → content → ONE provider
+  call → privileged record. No retries. Provider accepted + not recorded = `sent_but_unrecorded`.
+- The reminder email INTENTIONALLY carries `/rsvp/<token>` (`@/lib/email/rsvp-reminder`, `es.rsvpReminderEmail`);
+  the LB-12 confirmation stays token-free. Never answers, notes, members, ids, hashes or envelopes in either.
+- Reminder metadata (`rsvp_reminder_email_sent_at/_sent_to/_provider_id`, latest only, all-or-none) is separate from
+  `invitation_email_*` and `rsvp_confirmation_email_*`, written only by service_role-only `record_rsvp_reminder_email`
+  (current usable hash + current contact email) via the recorder's `recordRsvpReminder`.
+- WhatsApp is MANUAL COPY ONLY: plain text (`@/lib/guests/rsvp-reminder-message`) returned by the action, shown and
+  copied by the organizer. No API (WhatsApp Business/Meta/Twilio/SMS), no phone numbers, no `wa.me` share URL (token
+  in a query string), no storage and no delivery metadata; the UI never says "Enviar WhatsApp" or "enviado".
+- No scheduler, cron, queue, recurring or automatic reminders, and no activity history yet.
 
 ## Commands
 
@@ -259,4 +283,6 @@ status; no confirmation emails, reminders or activity history yet). LB-12 adds t
 every successful RSVP save to the party's contact email, without the RSVP link; latest-confirmation status for
 organizers; ADR-005; no reminders, scheduling or activity history yet). LB-13 makes the party's current RSVP link
 recoverable (AES-256-GCM envelope next to the hash, server-side key, explicit "Mostrar enlace" for members; ADR-006;
-no reminders or delivery yet). Don't implement ahead of the current prompt.
+no reminders or delivery yet). LB-14 adds manual RSVP reminders with that same link: an explicit reminder email to the
+party's contact email (latest-reminder status; ADR-007) and a WhatsApp-ready text to copy (no API, no phone numbers;
+no scheduling or activity history yet). Don't implement ahead of the current prompt.

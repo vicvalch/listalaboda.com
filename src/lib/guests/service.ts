@@ -26,7 +26,10 @@ import type { Database } from "@/lib/supabase/database.types";
  *
  * Replacing or revoking a link later is owner-only: it changes an external
  * bearer-capability boundary. Checked here first (`requireWeddingRole`),
- * then by the database (the link guard trigger refuses collaborators).
+ * then by the database (the rotate/revoke RPCs check the owner role; the
+ * link guard trigger backs them up). Since LB-15 each party fact is also
+ * recorded in the wedding activity history by the database, in the same
+ * transaction (`@/lib/activity/service` reads it).
  *
  * Every function takes the current user's RLS-bound client and resolves
  * membership server-side first (`@/lib/authz/wedding`); ids from the
@@ -343,7 +346,7 @@ export type RotateLinkResult =
 export type RevokeLinkResult = Readonly<{ ok: true }> | Readonly<{ ok: false; reason: LinkAdminDenial }>;
 
 function linkAdminWriteError(error: DbError): LinkAdminDenial {
-  // The link guard trigger: the caller's role changed since the check.
+  // The rotate/revoke RPC's owner check: the caller's role changed since ours.
   return error.code === "42501" && error.message === "guest_link_owner_only" ? "forbidden" : "error";
 }
 
@@ -403,8 +406,11 @@ export async function replaceGuestPartyLink(
 
 /**
  * "Revocar acceso" (owner-only): the current link stops working; the party,
- * its guests and their RSVPs stay. Only `revoked_at` is sent; the database stamps its
- * own clock. Revoking an already-revoked link is a no-op success.
+ * its guests and their RSVPs stay. One call to `revoke_guest_invitation_link`
+ * (LB-15: the only way to revoke), which re-checks the owner role, stamps
+ * the database clock and records the revocation in the wedding's activity
+ * history in the same transaction. Revoking an already-revoked link is a
+ * no-op success (and records nothing new).
  */
 export async function revokeGuestPartyLink(
   supabase: Client,
@@ -416,24 +422,13 @@ export async function revokeGuestPartyLink(
   if (!UUID_PATTERN.test(guestInvitationId)) return { ok: false, reason: "invalid_target" };
 
   try {
-    const { data, error } = await supabase
-      .from("guest_invitations")
-      .update({ revoked_at: new Date().toISOString() })
-      .eq("id", guestInvitationId)
-      .eq("wedding_id", access.access.weddingId)
-      .is("revoked_at", null)
-      .select("id");
+    const { data, error } = await supabase.rpc("revoke_guest_invitation_link", {
+      target_wedding_id: access.access.weddingId,
+      target_invitation_id: guestInvitationId,
+    });
     if (error) return { ok: false, reason: linkAdminWriteError(error) };
-    if (data && data.length > 0) return { ok: true };
-
-    // Nothing updated: already revoked (fine) or not a party of this wedding.
-    const { data: existing, error: readError } = await supabase
-      .from("guest_invitations")
-      .select("id")
-      .eq("id", guestInvitationId)
-      .eq("wedding_id", access.access.weddingId);
-    if (readError) return { ok: false, reason: "error" };
-    return existing && existing.length > 0 ? { ok: true } : { ok: false, reason: "invalid_target" };
+    // false: not a party of this wedding (or the caller's membership vanished).
+    return data === true ? { ok: true } : { ok: false, reason: "invalid_target" };
   } catch {
     return { ok: false, reason: "error" };
   }

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { createClient, type SupportedStorage } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 
-import type { DeliveryRecord, DeliveryRecordResult, DeliveryRecorder } from "@/lib/email/delivery-recorder";
+import type { DeliveryRecordResult, DeliveryRecorder, InvitationRecord } from "@/lib/email/delivery-recorder";
 import type { EmailSendResult, EmailSender, OutgoingEmail } from "@/lib/email/provider";
 import type { Database } from "@/lib/supabase/database.types";
 import { TEST_RSVP_CAPABILITY_KEY } from "@/test/fixtures/rsvp-capability-key";
@@ -132,7 +132,7 @@ function fakeSender(
   recordResult: DeliveryRecordResult | "throw" = { ok: true, sentAt: SENT_AT },
 ) {
   const sent: OutgoingEmail[] = [];
-  const records: DeliveryRecord[] = [];
+  const records: InvitationRecord[] = [];
   const order: string[] = [];
   const sender: EmailSender = {
     async send(email) {
@@ -146,7 +146,7 @@ function fakeSender(
     return { ok: false } as const;
   };
   const recorder: DeliveryRecorder = {
-    async recordInvitation(entry: DeliveryRecord) {
+    async recordInvitation(entry: InvitationRecord) {
       records.push(entry);
       order.push("RECORD");
       if (recordResult === "throw") throw new Error("network down");
@@ -188,7 +188,8 @@ describe("sendGuestInvitationEmail", () => {
       invitation_token_hash: TOKEN_HASH,
     });
     // The provider's id (from its response), the authorized wedding, the
-    // party, the hash — never the plaintext token.
+    // party, the hash — never the plaintext token — and (LB-15) the member
+    // from the server's own session check, for the activity history.
     expect(fake.records).toEqual([
       {
         weddingId: WEDDING_ID,
@@ -196,6 +197,7 @@ describe("sendGuestInvitationEmail", () => {
         tokenHash: TOKEN_HASH,
         recipient: "familia@example.com",
         providerMessageId: "msg_1",
+        actingUserId: USER_ID,
       },
     ]);
     // The plaintext token never reaches the database.

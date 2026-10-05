@@ -106,7 +106,8 @@ describe("schema guarantees", () => {
                                 'get_guest_invitation_site_slug', 'guest_invitation_link_is_current',
                                 'record_guest_invitation_email', 'get_rsvp_confirmation_email_context',
                                 'record_rsvp_confirmation_email', 'rotate_guest_invitation_link',
-                                'get_guest_invitation_recovery_envelope', 'record_rsvp_reminder_email'))
+                                'get_guest_invitation_recovery_envelope', 'record_rsvp_reminder_email',
+                                'revoke_guest_invitation_link', 'get_wedding_activity'))
        order by 1`,
     );
 
@@ -117,9 +118,11 @@ describe("schema guarantees", () => {
       "private.enforce_wedding_has_owner",
       "private.guard_guest_invitation_link",
       "private.guard_membership_invite_state",
+      "private.guard_wedding_activity",
       "private.guest_invitation_expires_at",
       "private.has_wedding_role",
       "private.is_wedding_member",
+      "private.record_guest_invitation_contact_email_change",
       "private.require_wedding_site_owner",
       "private.set_updated_at",
       "private.stamp_checklist_item_completion",
@@ -132,12 +135,14 @@ describe("schema guarantees", () => {
       "public.get_guest_invitation_site_slug",
       "public.get_published_wedding_site",
       "public.get_rsvp_confirmation_email_context",
+      "public.get_wedding_activity",
       "public.guest_invitation_link_is_current",
       "public.initialize_wedding_checklist",
       "public.publish_wedding_site",
       "public.record_guest_invitation_email",
       "public.record_rsvp_confirmation_email",
       "public.record_rsvp_reminder_email",
+      "public.revoke_guest_invitation_link",
       "public.rotate_guest_invitation_link",
       "public.save_wedding_site_section",
       "public.set_wedding_display_name",
@@ -162,9 +167,11 @@ describe("schema guarantees", () => {
       "public.get_guest_invitation_recovery_envelope",
       "public.get_guest_invitation_site_slug",
       "public.get_published_wedding_site",
+      "public.get_wedding_activity",
       "public.guest_invitation_link_is_current",
       "public.initialize_wedding_checklist",
       "public.publish_wedding_site",
+      "public.revoke_guest_invitation_link",
       "public.rotate_guest_invitation_link",
       "public.save_wedding_site_section",
       "public.set_wedding_display_name",
@@ -194,6 +201,10 @@ describe("schema guarantees", () => {
     expect(definer).toContain("public.rotate_guest_invitation_link");
     expect(definer).toContain("public.create_guest_invitation");
     expect(definer).not.toContain("public.save_wedding_site_section");
+    // LB-15 (ADR-008): revocation's one door checks the owner role itself and
+    // writes the history row; the history read runs as the caller (RLS).
+    expect(definer).toContain("public.revoke_guest_invitation_link");
+    expect(definer).not.toContain("public.get_wedding_activity");
   });
 
   it("no function takes a caller-supplied user id", async () => {
@@ -210,7 +221,8 @@ describe("schema guarantees", () => {
                            'unpublish_wedding_site', 'get_published_wedding_site',
                            'get_guest_invitation_site_slug', 'guest_invitation_link_is_current',
                            'record_guest_invitation_email', 'rotate_guest_invitation_link',
-                           'get_guest_invitation_recovery_envelope')
+                           'get_guest_invitation_recovery_envelope', 'record_rsvp_reminder_email',
+                           'revoke_guest_invitation_link', 'get_wedding_activity')
        order by 1`,
     );
     expect(rows).toEqual([
@@ -230,6 +242,7 @@ describe("schema guarantees", () => {
       },
       { name: "get_guest_invitation_site_slug", args: "invitation_token_hash text" },
       { name: "get_published_wedding_site", args: "site_slug text" },
+      { name: "get_wedding_activity", args: "target_wedding_id uuid, max_events integer" },
       {
         name: "guest_invitation_link_is_current",
         args: "target_wedding_id uuid, target_invitation_id uuid, invitation_token_hash text",
@@ -238,10 +251,19 @@ describe("schema guarantees", () => {
       { name: "initialize_wedding_checklist", args: "target_wedding_id uuid" },
       { name: "is_wedding_member", args: "target_wedding_id uuid" },
       { name: "publish_wedding_site", args: "target_wedding_id uuid" },
+      // LB-15 (ADR-008): the ONE exception — the two service_role-only
+      // recorders take the acting member for ATTRIBUTION (activity history),
+      // never authority. Only the server can call them, it passes its own
+      // auth.getUser() id, and they re-check membership (asserted below).
       {
         name: "record_guest_invitation_email",
-        args: "target_wedding_id uuid, target_invitation_id uuid, invitation_token_hash text, recipient text, provider_message_id text",
+        args: "target_wedding_id uuid, target_invitation_id uuid, invitation_token_hash text, recipient text, provider_message_id text, acting_user_id uuid",
       },
+      {
+        name: "record_rsvp_reminder_email",
+        args: "target_wedding_id uuid, target_invitation_id uuid, invitation_token_hash text, recipient text, provider_message_id text, acting_user_id uuid",
+      },
+      { name: "revoke_guest_invitation_link", args: "target_wedding_id uuid, target_invitation_id uuid" },
       {
         name: "rotate_guest_invitation_link",
         args: "target_wedding_id uuid, target_invitation_id uuid, invitation_token_hash text, invitation_token_ciphertext text",
@@ -257,6 +279,22 @@ describe("schema guarantees", () => {
       { name: "set_wedding_site_slug", args: "target_wedding_id uuid, new_slug text" },
       { name: "submit_guest_rsvp", args: "invitation_token_hash text, responses jsonb" },
       { name: "unpublish_wedding_site", args: "target_wedding_id uuid" },
+    ]);
+
+    // Anywhere in public/private: a function that takes a user id is never
+    // executable by a client role (so no browser can name an actor).
+    const userIdTakers = await sql<{ name: string; anon: boolean; authenticated: boolean }>(
+      `select p.proname as name,
+              has_function_privilege('anon', p.oid, 'execute') as anon,
+              has_function_privilege('authenticated', p.oid, 'execute') as authenticated
+       from pg_proc p
+       where p.pronamespace in ('private'::regnamespace, 'public'::regnamespace)
+         and exists (select 1 from unnest(p.proargnames) a where a ~ 'user_id')
+       order by 1`,
+    );
+    expect(userIdTakers).toEqual([
+      { name: "record_guest_invitation_email", anon: false, authenticated: false },
+      { name: "record_rsvp_reminder_email", anon: false, authenticated: false },
     ]);
   });
 
@@ -400,7 +438,7 @@ describe("schema guarantees", () => {
       `select r.role, has_function_privilege(r.role, p.oid, 'execute') as can
        from pg_proc p
        cross join (values ('anon'), ('authenticated'), ('service_role')) as r (role)
-       where p.oid = 'public.record_guest_invitation_email(uuid, uuid, text, text, text)'::regprocedure
+       where p.oid = 'public.record_guest_invitation_email(uuid, uuid, text, text, text, uuid)'::regprocedure
        order by r.role`,
     );
     expect(rows).toEqual([
@@ -411,7 +449,7 @@ describe("schema guarantees", () => {
     // No PUBLIC grant either.
     const publicGrant = await sql(
       `select 1 from pg_proc p, aclexplode(p.proacl) a
-       where p.oid = 'public.record_guest_invitation_email(uuid, uuid, text, text, text)'::regprocedure
+       where p.oid = 'public.record_guest_invitation_email(uuid, uuid, text, text, text, uuid)'::regprocedure
          and a.grantee = 0`,
     );
     expect(publicGrant).toEqual([]);
@@ -421,7 +459,7 @@ describe("schema guarantees", () => {
     for (const signature of [
       "public.get_rsvp_confirmation_email_context(text)",
       "public.record_rsvp_confirmation_email(uuid, uuid, text, text, text)",
-      "public.record_rsvp_reminder_email(uuid, uuid, text, text, text)",
+      "public.record_rsvp_reminder_email(uuid, uuid, text, text, text, uuid)",
     ]) {
       const rows = await sql<{ role: string; can: boolean }>(
         `select r.role, has_function_privilege(r.role, $1::regprocedure, 'execute') as can
@@ -461,6 +499,7 @@ describe("schema guarantees", () => {
     // LB-13: parties are created only through create_guest_invitation (party + envelope).
     expect(columns("INSERT")).toEqual([]);
     // LB-13: rotation only through rotate_guest_invitation_link (hash + envelope).
-    expect(columns("UPDATE")).toEqual(["contact_email", "label", "revoked_at"]);
+    // LB-15: revocation only through revoke_guest_invitation_link (revocation + history).
+    expect(columns("UPDATE")).toEqual(["contact_email", "label"]);
   });
 });

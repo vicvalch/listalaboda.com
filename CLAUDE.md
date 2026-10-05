@@ -13,6 +13,7 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - `docs/architecture/ADR-004-invitation-delivery-recorder.md`, `docs/architecture/ADR-005-rsvp-confirmation-email.md`
   and `docs/architecture/ADR-007-manual-rsvp-reminder-delivery.md` (the only service-role exceptions, one module)
 - `docs/architecture/ADR-006-recoverable-rsvp-capability.md` (recoverable RSVP link encryption)
+- `docs/architecture/ADR-008-basic-activity-history.md` (append-only wedding activity history)
 
 ## Product rules
 
@@ -29,7 +30,8 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - The service-role key is never normal persistence. Its only use is the ADR-004/ADR-005/ADR-007 exception
   (`src/lib/email/delivery-recorder.ts`: recording provider-accepted invitation, RSVP confirmation and RSVP
   reminder emails, and reading a party's confirmation context by its link's hash); there is no generic
-  service-role client.
+  service-role client. Since LB-15 each record RPC also appends that send's activity row in the same transaction
+  (ADR-008); that is not a new privileged operation.
   Any other use needs its own `server-only` module plus a written justification (ADR-002 §6).
   ESLint blocks `process.env.SUPABASE_SERVICE_ROLE_KEY` everywhere else.
 - Browser code reads env only through `src/lib/env/public.ts` (`NEXT_PUBLIC_*` only).
@@ -256,7 +258,39 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - WhatsApp is MANUAL COPY ONLY: plain text (`@/lib/guests/rsvp-reminder-message`) returned by the action, shown and
   copied by the organizer. No API (WhatsApp Business/Meta/Twilio/SMS), no phone numbers, no `wa.me` share URL (token
   in a query string), no storage and no delivery metadata; the UI never says "Enviar WhatsApp" or "enviado".
-- No scheduler, cron, queue, recurring or automatic reminders, and no activity history yet.
+- No scheduler, cron, queue, recurring or automatic reminders (activity history: LB-15 below).
+
+## Wedding activity history rules (LB-15, ADR-008)
+
+- `public.wedding_activity` is Wedding-scoped, append-only history of GuestInvitation/RSVP facts. It is not logging,
+  analytics, an event bus or an outbox; nothing reads it to make decisions.
+- The event type (`wedding_activity_event`) and actor kind (`member | guest_capability | system`) are closed enums.
+  Adding an event is a migration plus an exhaustive label in `@/lib/activity/presentation` (`es.activity`); copy is
+  never stored. No JSON/free-text payload, no snapshots.
+- Write the row INSIDE the database function that performs the fact, in the same transaction (create, rotate,
+  `revoke_guest_invitation_link`, the contact-email trigger, `submit_guest_rsvp`, the three recorder RPCs). Never from
+  the app, React or a separate call; there is no `appendActivity`/generic writer and no client-executable function
+  takes an event type.
+- No client role may INSERT/UPDATE/DELETE it (members SELECT via RLS); a guard trigger refuses edits and deletes for
+  every role except the FKs' own actions. `occurred_at` is always the database clock.
+- Revoking a link goes only through `revoke_guest_invitation_link` (owner-only, records once; already revoked = no-op).
+  The client `UPDATE (revoked_at)` grant is gone.
+- Actors: `member` = `auth.uid()` in member RPCs. For member-initiated emails (invitation, reminder) the application
+  derives the initiating member from the authenticated `WeddingAccess` context (`userId`, never browser/form input);
+  `delivery-recorder.ts` passes it through its named operation, and the service-role recorder verifies that the
+  attributed user is a member of the target Wedding before recording. It does not prove who clicked; authorization
+  happens in the authenticated app flow. The user id is attribution only, never authorization. Guest RSVPs and
+  confirmations are `guest_capability` (no user id; the token is never an identity). These two service_role-only
+  recorders are the ONLY functions that take a user id; no client-executable function may supply an actor user id.
+- Email events exist only when provider accepted AND the record committed: `sent_but_unrecorded` and failures write
+  nothing. `submitted` vs `updated` comes from stored rsvps under the party lock, never the payload.
+- Never store or return tokens, hashes, envelopes, RSVP URLs, answers, notes, email addresses or provider ids.
+  The read path (`get_wedding_activity`, `@/lib/activity/service`) is SECURITY INVOKER, newest first, max 50, and
+  returns the party's CURRENT label and the actor's membership id only.
+- Deletion: wedding → history cascades; party → rows stay with `guest_invitation_id` null ("Grupo eliminado");
+  account → `actor_user_id` null. No fabricated backfill: history begins at LB-15.
+- Activity can answer "was a reminder recorded for this party?" but it is not a scheduler, dedupe key or lock;
+  automatic reminders remain deferred.
 
 ## Commands
 
@@ -285,4 +319,6 @@ organizers; ADR-005; no reminders, scheduling or activity history yet). LB-13 ma
 recoverable (AES-256-GCM envelope next to the hash, server-side key, explicit "Mostrar enlace" for members; ADR-006;
 no reminders or delivery yet). LB-14 adds manual RSVP reminders with that same link: an explicit reminder email to the
 party's contact email (latest-reminder status; ADR-007) and a WhatsApp-ready text to copy (no API, no phone numbers;
-no scheduling or activity history yet). Don't implement ahead of the current prompt.
+no scheduling or activity history yet). LB-15 adds the basic wedding activity history: an append-only, member-only
+"Actividad" page of GuestInvitation/RSVP facts, each written in the same transaction as the fact (owner-only revoke RPC,
+member-attributed recorder events; ADR-008; no backfill, no scheduler yet). Don't implement ahead of the current prompt.

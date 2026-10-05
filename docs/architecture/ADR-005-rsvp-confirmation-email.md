@@ -3,6 +3,10 @@
 Status: Accepted (LB-12) · Date: 2026-10-04
 Related: [ADR-002 §5, §6](ADR-002-auth-and-security-boundaries.md), [ADR-004](ADR-004-invitation-delivery-recorder.md), [Product Constitution §8](../product/PRODUCT-CONSTITUTION.md)
 
+> Later note (LB-15): [ADR-008](ADR-008-basic-activity-history.md): `record_rsvp_confirmation_email` also appends
+> `rsvp_confirmation_email_sent` (actor: the party's link holder) in the same transaction. Signature and grants
+> unchanged.
+
 ## Context
 
 LB-12 emails a party a confirmation of its answers after it saves its RSVP through its link

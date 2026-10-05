@@ -11,6 +11,7 @@ import {
   serviceRole,
   sql,
   shapedEnvelope,
+  users,
 } from "./support";
 
 // LB-11: the party's contact email and its invitation-email send metadata,
@@ -96,6 +97,8 @@ function record(
     hash: string;
     recipient: string;
     providerId?: string;
+    /** LB-15: the member who sent it (default: the owner who created the wedding). */
+    actingUserId?: string;
   },
 ) {
   const client = actor === "service" ? serviceRole : as[actor];
@@ -105,6 +108,7 @@ function record(
     invitation_token_hash: args.hash,
     recipient: args.recipient,
     provider_message_id: args.providerId ?? "msg_0123456789",
+    acting_user_id: args.actingUserId ?? users.ownerA.id,
   });
 }
 
@@ -395,7 +399,7 @@ describe("guest_invitation_link_is_current", () => {
     expect((await check("ownerA", weddingA, party.id, fresh.hash)).data).toBe(true);
 
     // Revoked links are never current.
-    await as.ownerA.from("guest_invitations").update({ revoked_at: new Date().toISOString() }).eq("id", party.id);
+    await as.ownerA.rpc("revoke_guest_invitation_link", { target_wedding_id: weddingA, target_invitation_id: party.id });
     expect((await check("ownerA", weddingA, party.id, fresh.hash)).data).toBe(false);
   });
 
@@ -414,11 +418,9 @@ describe("guest_invitation_link_is_current", () => {
     });
     expect(rotate.error?.code).toBe(PERMISSION_DENIED);
     expect(rotate.error?.message).toBe("guest_link_owner_only");
-    const revoke = await as.collabA
-      .from("guest_invitations")
-      .update({ revoked_at: new Date().toISOString() })
-      .eq("id", party.id);
+    const revoke = await as.collabA.rpc("revoke_guest_invitation_link", { target_wedding_id: weddingA, target_invitation_id: party.id });
     expect(revoke.error?.code).toBe(PERMISSION_DENIED);
+    expect(revoke.error?.message).toBe("guest_link_owner_only");
     const stored = await row(party.id);
     expect(stored.token_hash).toBe(party.hash);
     expect(stored.revoked_at).toBeNull();

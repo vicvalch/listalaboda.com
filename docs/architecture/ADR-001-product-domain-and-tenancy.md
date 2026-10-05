@@ -176,6 +176,10 @@ A simple `wedding_activity` log (actor, action, entity reference, timestamp,
 small metadata) is **Phase 2**. The MVP keeps `created_by`, `completed_by`,
 `completed_at` on items. No governance event model, no event sourcing.
 
+*Later note (LB-15):* built as [ADR-008](ADR-008-basic-activity-history.md): typed columns (event type, party
+reference, actor kind and member, database time), no metadata payload, append-only, written in the same transaction
+as each fact.
+
 ## Consequences
 
 **Positive**

@@ -115,7 +115,8 @@ Applies to two distinct token kinds:
   invitation emails; LB-11), [ADR-005](ADR-005-rsvp-confirmation-email.md) (reading a party's private
   confirmation context by its link's hash and recording provider-accepted RSVP confirmations; LB-12) and
   [ADR-007](ADR-007-manual-rsvp-reminder-delivery.md) (recording provider-accepted manual RSVP reminders;
-  LB-14). All are in the same single server-only module.
+  LB-14). All are in the same single server-only module. Since LB-15 ([ADR-008](ADR-008-basic-activity-history.md))
+  each record also appends its activity-history row in the same transaction; no operation was added.
 
 ### 7. Public / private boundary
 

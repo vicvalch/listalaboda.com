@@ -194,6 +194,8 @@ export async function sendRsvpReminderEmail(
       tokenHash,
       recipient,
       providerMessageId: sent.messageId,
+      // LB-15: the member who sent it, from this action's own membership check.
+      actingUserId: access.userId,
     });
     return recorded.ok ? { outcome: "sent", recipient, sentAt: recorded.sentAt } : unrecorded;
   } catch {

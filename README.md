@@ -201,8 +201,30 @@ next to and separate from the invitation and confirmation statuses. That status 
 service_role-only database function, through the same server-only recorder
 ([ADR-007](docs/architecture/ADR-007-manual-rsvp-reminder-delivery.md)).
 
+**Wedding activity history (LB-15).** Each wedding has an **Actividad** page (`/app/weddings/[id]/activity`, linked
+from the wedding's home) showing what happened to its guest parties, newest first (the latest 50): "Invitación
+creada", "Enlace personal regenerado", "Acceso RSVP revocado", "Correo de contacto actualizado", "Invitación enviada
+por correo", "RSVP recibido", "RSVP actualizado", "Confirmación RSVP enviada" and "Recordatorio RSVP enviado". Each
+row names the party (its current name, or "Grupo eliminado"), who did it (a member, the group through its personal
+link, or the system) and when, in the wedding's time zone.
+
+- **Append-only.** History is written only by the database function that performs each fact, in the same
+  transaction (a failed history write rolls the action back, and the other way round). No one can edit or delete a
+  row, not even through the API as a member; deleting the wedding deletes its history. Revoking a link now goes
+  through one owner-only function, `revoke_guest_invitation_link`, so the revocation and its history row commit
+  together.
+- **Members only.** Owners and collaborators read their own wedding's history; outsiders get a 404, and guests and
+  anonymous visitors get nothing.
+- **Only facts that really happened.** Emails appear only after the provider accepted them **and** the send was
+  recorded. A failed or `sent_but_unrecorded` send leaves no history row.
+- **Nothing sensitive.** No links, tokens, hashes, envelopes, RSVP answers, food notes, email addresses or provider
+  ids are stored in or shown by the history.
+- **Starts at LB-15.** Nothing earlier is backfilled; existing weddings start with an empty history.
+
+See [ADR-008](docs/architecture/ADR-008-basic-activity-history.md).
+
 Still deferred: automatic or scheduled reminders (no cron, queue, policies or retries), messaging APIs and phone
-numbers, activity history, and linking checklist items to guest work.
+numbers, and linking checklist items to guest work.
 
 ## Stack
 
@@ -282,6 +304,7 @@ one later.
 - [ADR-005 — Service-role exception: RSVP confirmation email](docs/architecture/ADR-005-rsvp-confirmation-email.md)
 - [ADR-006 — Recoverable RSVP capability encryption](docs/architecture/ADR-006-recoverable-rsvp-capability.md)
 - [ADR-007 — Manual RSVP reminder delivery](docs/architecture/ADR-007-manual-rsvp-reminder-delivery.md)
+- [ADR-008 — Basic wedding activity history](docs/architecture/ADR-008-basic-activity-history.md)
 
 Database migrations live in `supabase/migrations/` and are named `YYYYMMDDHHMMSS_lb_<slug>.sql`.
 After changing the schema, run `npm run db:reset && npm run db:types` and commit the regenerated types.

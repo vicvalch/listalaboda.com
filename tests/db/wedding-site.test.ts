@@ -652,10 +652,7 @@ describe("guest link → published site", () => {
     expect((await siteSlugFor(party.hash)).data).toBe(slug);
 
     // A revoked link reveals nothing, even for a published site.
-    await as.ownerA
-      .from("guest_invitations")
-      .update({ revoked_at: new Date().toISOString() })
-      .eq("id", party.id);
+    await as.ownerA.rpc("revoke_guest_invitation_link", { target_wedding_id: weddingId, target_invitation_id: party.id });
     expect((await siteSlugFor(party.hash)).data).toBeNull();
     expect((await siteSlugFor(newToken().hash)).data).toBeNull();
   });

@@ -75,6 +75,8 @@ Organization ──< WeddingAssignment >── Wedding
 - Links from checklist items to other modules use **explicit nullable FKs**,
   not text-typed polymorphic `(linked_entity_type, linked_entity_id)` pairs, so
   that referential integrity and RLS both hold.
+  *Later note (LB-16):* the first such link is `checklist_items.guest_invitation_id`, a same-wedding composite FK
+  to the item's guest party ([ADR-009](ADR-009-checklist-guest-work.md)).
 
 ### 3. Membership model
 

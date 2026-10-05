@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
 
 import { Notice } from "@/components/ui/Notice";
 import { SubmitButton } from "@/components/ui/SubmitButton";
-import { inputClass, secondaryButtonClass } from "@/components/ui/styles";
+import { inputClass, secondaryButtonClass, textLinkClass } from "@/components/ui/styles";
+import { guestPartyHref, type GuestPartyOption } from "@/lib/checklist/guest-work";
 import { statusControls } from "@/lib/checklist/presentation";
 import type { ChecklistItem } from "@/lib/checklist/types";
 import { itemFormValues } from "@/lib/checklist/validation";
@@ -15,11 +17,13 @@ import { ChecklistItemFields } from "./ChecklistItemFields";
 import {
   deleteChecklistItemAction,
   setChecklistItemAssigneeAction,
+  setChecklistItemGuestPartyAction,
   setChecklistItemStatusAction,
   updateChecklistItemAction,
   type AssignmentState,
   type ChecklistItemFormState,
   type DeleteItemState,
+  type GuestWorkState,
   type StatusChangeState,
 } from "./checklist-actions";
 
@@ -55,6 +59,13 @@ type Props = {
    * couldn't be loaded: the assignment is then not shown at all.
    */
   assignment: Readonly<{ label: string; options: readonly MemberOption[] }> | null;
+  /**
+   * LB-16: the guest party this item is about (its CURRENT label, or null
+   * when unlinked or the party is gone) and the wedding's parties to choose
+   * from (id + label only). null when the parties couldn't be loaded: the
+   * relation is then not shown at all.
+   */
+  guestWork: Readonly<{ linked: GuestPartyOption | null; options: readonly GuestPartyOption[] }> | null;
 };
 
 /**
@@ -62,7 +73,14 @@ type Props = {
  * and "Volver a pendiente" are explicit buttons, so status never depends on
  * the checkbox (or on color) alone. Each status change is announced.
  */
-export function ChecklistItemRow({ weddingId, item, overdue, timingText, assignment }: Props) {
+export function ChecklistItemRow({
+  weddingId,
+  item,
+  overdue,
+  timingText,
+  assignment,
+  guestWork,
+}: Props) {
   const [statusState, statusAction, statusPending] = useActionState<StatusChangeState, FormData>(
     setChecklistItemStatusAction,
     null,
@@ -161,6 +179,20 @@ export function ChecklistItemRow({ weddingId, item, overdue, timingText, assignm
               {timingText}
             </p>
           ) : null}
+          {guestWork?.linked ? (
+            <p className="text-sm break-words" data-testid="checklist-item-guest-work">
+              <span className="text-muted">{checklist.guestWork.label}: </span>
+              <span className="font-semibold">{guestWork.linked.label}</span>
+              {" · "}
+              <Link
+                href={guestPartyHref(weddingId, guestWork.linked.id)}
+                aria-label={withTitle(checklist.guestWork.viewParty, guestWork.linked.label)}
+                className={textLinkClass}
+              >
+                {checklist.guestWork.viewParty}
+              </Link>
+            </p>
+          ) : null}
           {item.description ? (
             <p className="text-muted text-sm whitespace-pre-line break-words">{item.description}</p>
           ) : null}
@@ -201,6 +233,26 @@ export function ChecklistItemRow({ weddingId, item, overdue, timingText, assignm
                 {checklist.assignment.open}
               </summary>
               <AssignChecklistItem weddingId={weddingId} item={item} options={assignment.options} />
+            </details>
+          ) : null}
+
+          {guestWork ? (
+            <details className="pt-1">
+              <summary
+                aria-label={withTitle(
+                  guestWork.linked ? checklist.guestWork.change : checklist.guestWork.open,
+                  item.title,
+                )}
+                className="text-accent inline-flex min-h-9 cursor-pointer items-center text-sm font-semibold underline-offset-4 hover:underline"
+              >
+                {guestWork.linked ? checklist.guestWork.change : checklist.guestWork.open}
+              </summary>
+              <LinkGuestParty
+                weddingId={weddingId}
+                item={item}
+                linked={guestWork.linked}
+                options={guestWork.options}
+              />
             </details>
           ) : null}
 
@@ -284,6 +336,112 @@ function AssignChecklistItem({
       </form>
       <p role="status" className="text-success text-sm font-medium">
         {state?.ok ? copy.saved : null}
+      </p>
+      {failure ? (
+        <p id={errorId} role="alert" className="text-danger text-sm">
+          {failure.formError}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * "Vincular con invitados" / "Cambiar vínculo": a native select of the
+ * wedding's parties (labels only) with an explicit save, and "Quitar
+ * vínculo" when linked. Only the party id is submitted; nothing about the
+ * party is shown or sent beyond its current label. A shortcut, not a
+ * workflow: it never changes the item's status.
+ */
+function LinkGuestParty({
+  weddingId,
+  item,
+  linked,
+  options,
+}: {
+  weddingId: string;
+  item: ChecklistItem;
+  linked: GuestPartyOption | null;
+  options: readonly GuestPartyOption[];
+}) {
+  const [state, formAction] = useActionState<GuestWorkState, FormData>(
+    setChecklistItemGuestPartyAction,
+    null,
+  );
+  const [removeState, removeAction] = useActionState<GuestWorkState, FormData>(
+    setChecklistItemGuestPartyAction,
+    null,
+  );
+  const { guestWork: copy } = getMessages().checklist;
+  const selectId = `guest-work-${item.id}`;
+  const errorId = `guest-work-${item.id}-error`;
+  const failure = state && !state.ok ? state : removeState && !removeState.ok ? removeState : null;
+
+  if (options.length === 0 && !linked) {
+    return (
+      <p className="text-muted mt-2 text-sm">
+        {copy.noParties}{" "}
+        <Link href={`/app/weddings/${encodeURIComponent(weddingId)}/guests`} className={textLinkClass}>
+          {copy.goToGuests}
+        </Link>
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-2 space-y-2">
+      <p className="text-muted text-sm">{copy.hint}</p>
+      {/* Remount when the saved party changes, so the select shows it. */}
+      <form
+        key={`${linked?.id ?? "none"}-${state?.ok ? state.data.nonce : ""}`}
+        action={formAction}
+        className="flex flex-wrap items-end gap-2"
+      >
+        <input type="hidden" name="weddingId" value={weddingId} />
+        <input type="hidden" name="itemId" value={item.id} />
+        <div className="min-w-0 flex-1 space-y-1 sm:max-w-64">
+          <label htmlFor={selectId} className="block text-sm font-semibold">
+            {copy.selectLabel}
+          </label>
+          <select
+            id={selectId}
+            name="guestInvitationId"
+            required
+            defaultValue={linked?.id ?? ""}
+            aria-invalid={failure ? true : undefined}
+            aria-describedby={failure ? errorId : undefined}
+            className={`${inputClass} min-h-9 py-1.5`}
+          >
+            <option value="">{copy.choose}</option>
+            {options.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <SubmitButton
+          label={copy.submit}
+          pendingLabel={copy.submitting}
+          variant="secondary"
+          className="min-h-9 px-3 py-1.5"
+        />
+      </form>
+      {linked ? (
+        <form action={removeAction}>
+          <input type="hidden" name="weddingId" value={weddingId} />
+          <input type="hidden" name="itemId" value={item.id} />
+          <input type="hidden" name="guestInvitationId" value="" />
+          <SubmitButton
+            label={copy.remove}
+            pendingLabel={copy.removing}
+            variant="secondary"
+            className="min-h-9 px-3 py-1.5"
+          />
+        </form>
+      ) : null}
+      <p role="status" className="text-success text-sm font-medium">
+        {state?.ok && linked ? copy.saved : null}
       </p>
       {failure ? (
         <p id={errorId} role="alert" className="text-danger text-sm">

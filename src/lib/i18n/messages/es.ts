@@ -228,6 +228,24 @@ export const es = {
       invalidMember:
         "Esa persona ya no forma parte de la boda. Recarga la página y elige a otra.",
     },
+    guestWork: {
+      label: "Relacionado con",
+      viewParty: "Ver grupo",
+      open: "Vincular con invitados",
+      change: "Cambiar vínculo",
+      selectLabel: "Grupo de invitados",
+      choose: "Elige un grupo",
+      submit: "Guardar vínculo",
+      submitting: "Guardando…",
+      saved: "Vínculo guardado.",
+      remove: "Quitar vínculo",
+      removing: "Quitando…",
+      hint: "Es un atajo entre este pendiente y un grupo de invitados. No cambia el estado del pendiente ni los datos del grupo.",
+      noParties: "Todavía no tienes grupos de invitados.",
+      goToGuests: "Ir a Invitados",
+      failed: "No pudimos guardar el vínculo. Recarga la página e inténtalo de nuevo.",
+      invalidParty: "Ese grupo ya no está en la lista de invitados. Recarga la página y elige otro.",
+    },
     plan: {
       noPending: "No quedan pendientes por hacer.",
       resolvedTitle: "Hechos y no aplica ({count})",
@@ -465,6 +483,9 @@ export const es = {
       pending: "Sin responder",
     },
     dietaryNote: "Alimentación:",
+    relatedItems: {
+      title: "Pendientes relacionados",
+    },
     guestCountOne: "1 invitado",
     guestCountMany: "{count} invitados",
     link: {

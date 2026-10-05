@@ -140,7 +140,7 @@ describe("assignment schema", () => {
     expect(rows.map((r) => r.column_name)).toEqual(["role"]);
   });
 
-  it("checklist item UPDATE grants: content, status and assignee only", async () => {
+  it("checklist item UPDATE grants: content, status, assignee and (LB-16) guest party only", async () => {
     const rows = await sql<{ column_name: string }>(
       `select column_name from information_schema.column_privileges
        where grantee = 'authenticated' and privilege_type = 'UPDATE'
@@ -152,6 +152,8 @@ describe("assignment schema", () => {
       "category",
       "description",
       "due_date",
+      // LB-16 (ADR-009): the same-wedding guest party link.
+      "guest_invitation_id",
       "relative_days",
       "status",
       "timing_mode",

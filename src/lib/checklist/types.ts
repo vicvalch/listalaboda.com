@@ -57,4 +57,10 @@ export type ChecklistItem = Readonly<{
    * wedding), or null: "Sin asignar". Planning metadata, never authorization.
    */
   assigneeMembershipId: string | null;
+  /**
+   * The guest party (GuestInvitation) of the same wedding this item is
+   * about, or null. Navigation and context only (LB-16, ADR-009): never
+   * authorization, and nothing about the party is copied onto the item.
+   */
+  guestInvitationId: string | null;
 }>;

@@ -33,6 +33,7 @@ function item(
     timing,
     sortOrder,
     assigneeMembershipId,
+    guestInvitationId: null,
   };
 }
 

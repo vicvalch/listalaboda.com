@@ -426,6 +426,8 @@ describe("listGuestParties", () => {
                   rsvps: [{ attending: true, dietary_note: "vegetariana" }],
                 },
               ],
+              // LB-16: the checklist items about this party (none here).
+              checklist_items: [],
             },
           ],
         },
@@ -448,6 +450,7 @@ describe("listGuestParties", () => {
           { id: GUEST_ID, name: "Ana", rsvp: { attending: true, dietaryNote: "vegetariana" } },
           { id: GUEST_2, name: "Carlos", rsvp: null },
         ],
+        relatedChecklistItems: [],
       },
     ]);
     const reads = requests.filter((r) => r.url.pathname.startsWith("/rest/v1/"));

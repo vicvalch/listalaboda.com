@@ -14,7 +14,7 @@ import type { Database } from "@/lib/supabase/database.types";
 
 /**
  * Checklist application layer: read, initialize from the template, create,
- * edit, change status, delete.
+ * edit, change status, assign, link to a guest party (LB-16), delete.
  *
  * Every function uses the current user's RLS-bound client. Mutations check
  * membership through `@/lib/authz/wedding` first (any member manages the
@@ -31,7 +31,7 @@ export type ChecklistDenial = "unauthenticated" | "not_found" | "forbidden" | "e
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const ITEM_COLUMNS =
-  "id, title, description, category, status, timing_mode, relative_days, due_date, sort_order, assignee_membership_id";
+  "id, title, description, category, status, timing_mode, relative_days, due_date, sort_order, assignee_membership_id, guest_invitation_id";
 
 // -------------------------------------------------------------------- read
 
@@ -79,6 +79,7 @@ export async function getWeddingChecklist(
         timing: timingFromColumns(row) ?? { mode: "none" },
         sortOrder: row.sort_order,
         assigneeMembershipId: row.assignee_membership_id,
+        guestInvitationId: row.guest_invitation_id,
       })),
     };
   } catch {
@@ -131,23 +132,38 @@ export async function initializeWeddingChecklist(
  * `item_not_found` means the wedding is accessible but the item isn't in it,
  * e.g. a partner deleted it a moment ago. `invalid_assignee` means the
  * requested assignee isn't a current member of this wedding (it never says
- * whether it belongs to some other wedding).
+ * whether it belongs to some other wedding). `invalid_guest_party` is the
+ * same for a requested guest party (LB-16).
  */
 export type MutationResult =
   | Readonly<{ ok: true }>
   | Readonly<{
       ok: false;
-      reason: ChecklistDenial | "invalid" | "item_not_found" | "invalid_assignee";
+      reason:
+        | ChecklistDenial
+        | "invalid"
+        | "item_not_found"
+        | "invalid_assignee"
+        | "invalid_guest_party";
     }>;
+
+/** Which reference a foreign-key violation is about: each mutation sends only one. */
+type ForeignKeyReason = "invalid_assignee" | "invalid_guest_party";
 
 /** check_violation: the database rejected the values (blank title, bad timing…). */
 const CHECK_VIOLATION = "23514";
-/** foreign_key_violation: here, only the same-wedding assignee reference. */
+/**
+ * foreign_key_violation: a same-wedding reference (assignee or guest party)
+ * that isn't in the item's wedding.
+ */
 const FOREIGN_KEY_VIOLATION = "23503";
 
-function failure(code: string | undefined): MutationResult {
+function failure(
+  code: string | undefined,
+  foreignKey: ForeignKeyReason = "invalid_assignee",
+): MutationResult {
   if (code === CHECK_VIOLATION) return { ok: false, reason: "invalid" };
-  if (code === FOREIGN_KEY_VIOLATION) return { ok: false, reason: "invalid_assignee" };
+  if (code === FOREIGN_KEY_VIOLATION) return { ok: false, reason: foreignKey };
   if (code === "42501") return { ok: false, reason: "forbidden" };
   return { ok: false, reason: "error" };
 }
@@ -191,6 +207,7 @@ async function mutateItem(
   run: (
     access: WeddingAccess,
   ) => PromiseLike<{ data: { id: string }[] | null; error: { code: string } | null }>,
+  foreignKey?: ForeignKeyReason,
 ): Promise<MutationResult> {
   const access = await requireWeddingMembership(supabase, weddingId);
   if (!access.ok) return { ok: false, reason: access.reason };
@@ -198,7 +215,7 @@ async function mutateItem(
 
   try {
     const { data, error } = await run(access.access);
-    if (error) return failure(error.code);
+    if (error) return failure(error.code, foreignKey);
     if (!data || data.length === 0) return { ok: false, reason: "item_not_found" };
     return { ok: true };
   } catch {
@@ -273,6 +290,40 @@ export function setChecklistItemAssignee(
           .eq("id", itemId)
           .eq("wedding_id", access.weddingId)
           .select("id"),
+  );
+}
+
+/**
+ * Links the item to a guest party of this wedding (LB-16, ADR-009), changes
+ * it, or removes the link (null). Any member may do it, like any checklist
+ * edit. The party id is only a requested target: the database accepts it
+ * only if it is a party of the item's own wedding (composite foreign key),
+ * so a party of another wedding, a deleted party or a made-up id are all
+ * `invalid_guest_party`, indistinguishably. Only the link column is sent:
+ * status, timing, order, assignee and the party itself are untouched, and
+ * nothing about the party (label, guests, email, link) is copied.
+ */
+export function setChecklistItemGuestParty(
+  supabase: Client,
+  weddingId: string,
+  itemId: string,
+  guestInvitationId: string | null,
+): Promise<MutationResult> {
+  return mutateItem(
+    supabase,
+    weddingId,
+    itemId,
+    (access) =>
+      // A malformed id (a URL, a token…) can't be a party: answer as the database would.
+      guestInvitationId !== null && !UUID_PATTERN.test(guestInvitationId)
+        ? Promise.resolve({ data: null, error: { code: FOREIGN_KEY_VIOLATION } })
+        : supabase
+            .from("checklist_items")
+            .update({ guest_invitation_id: guestInvitationId })
+            .eq("id", itemId)
+            .eq("wedding_id", access.weddingId)
+            .select("id"),
+    "invalid_guest_party",
   );
 }
 

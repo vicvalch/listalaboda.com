@@ -7,6 +7,7 @@ import {
   requireWeddingRole,
   type WeddingAccess,
 } from "@/lib/authz/wedding";
+import type { GuestPartyOption, RelatedChecklistItem } from "@/lib/checklist/guest-work";
 import { guestRsvpUrl } from "@/lib/guests/link";
 import type { GuestResponse } from "@/lib/guests/summary";
 import type { NewPartyInput } from "@/lib/guests/validation";
@@ -128,11 +129,17 @@ export type GuestListParty = Readonly<{
   rsvpConfirmationEmail: RsvpConfirmationEmailStatus;
   rsvpReminderEmail: RsvpReminderEmailStatus;
   guests: readonly GuestListGuest[];
+  /**
+   * LB-16: the checklist items about this party, in the checklist's order.
+   * Id, title and status only: navigation back to the list, not a copy of it.
+   */
+  relatedChecklistItems: readonly RelatedChecklistItem[];
 }>;
 
 /**
- * The whole guest list of the wedding — parties, their guests and each
- * guest's current response — in ONE query (nested select), never per party.
+ * The whole guest list of the wedding — parties, their guests, each guest's
+ * current response and (LB-16) the checklist items about each party — in
+ * ONE query (nested select), never per party.
  * Takes the `WeddingAccess` of a successful membership check, so it can't
  * run before one. Never selects token_hash (it isn't readable anyway).
  * Returns null on failure.
@@ -145,7 +152,7 @@ export async function listGuestParties(
     const { data, error } = await supabase
       .from("guest_invitations")
       .select(
-        "id, label, token_issued_at, revoked_at, contact_email, invitation_email_sent_at, invitation_email_sent_to, rsvp_confirmation_email_sent_at, rsvp_confirmation_email_sent_to, rsvp_reminder_email_sent_at, rsvp_reminder_email_sent_to, created_at, guests(id, name, created_at, rsvps(attending, dietary_note))",
+        "id, label, token_issued_at, revoked_at, contact_email, invitation_email_sent_at, invitation_email_sent_to, rsvp_confirmation_email_sent_at, rsvp_confirmation_email_sent_to, rsvp_reminder_email_sent_at, rsvp_reminder_email_sent_to, created_at, guests(id, name, created_at, rsvps(attending, dietary_note)), checklist_items(id, title, status, sort_order, created_at)",
       )
       .eq("wedding_id", access.weddingId)
       .order("created_at", { ascending: true })
@@ -182,7 +189,39 @@ export async function listGuestParties(
             rsvp: rsvp ? { attending: rsvp.attending, dietaryNote: rsvp.dietary_note } : null,
           };
         }),
+      // The checklist's persisted order (sort_order, created_at, id).
+      relatedChecklistItems: [...party.checklist_items]
+        .sort(
+          (a, b) =>
+            a.sort_order - b.sort_order ||
+            (a.created_at === b.created_at ? (a.id < b.id ? -1 : 1) : a.created_at < b.created_at ? -1 : 1),
+        )
+        .map((item) => ({ id: item.id, title: item.title, status: item.status })),
     }));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * LB-16: the wedding's parties as the checklist offers them for linking —
+ * id and CURRENT label only (no guests, contact email, link state or
+ * answers) — in one query, in the guest list's order. Takes the
+ * `WeddingAccess` of a successful membership check. Returns null on failure.
+ */
+export async function listGuestPartyOptions(
+  supabase: Client,
+  access: WeddingAccess,
+): Promise<GuestPartyOption[] | null> {
+  try {
+    const { data, error } = await supabase
+      .from("guest_invitations")
+      .select("id, label")
+      .eq("wedding_id", access.weddingId)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true });
+    if (error || !data) return null;
+    return data.map((party) => ({ id: party.id, label: party.label }));
   } catch {
     return null;
   }

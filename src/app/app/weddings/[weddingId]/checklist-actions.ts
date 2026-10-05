@@ -9,6 +9,7 @@ import {
   deleteChecklistItem,
   initializeWeddingChecklist,
   setChecklistItemAssignee,
+  setChecklistItemGuestParty,
   setChecklistItemStatus,
   updateChecklistItem,
   type MutationResult,
@@ -192,6 +193,44 @@ export async function setChecklistItemAssigneeAction(
     return {
       ok: false,
       formError: result.reason === "invalid_assignee" ? assignment.invalidMember : assignment.failed,
+    };
+  }
+  return { ok: true, data: { nonce: crypto.randomUUID() } };
+}
+
+// ------------------------------------------------------ guest work (LB-16)
+
+export type GuestWorkState = FormState<never, { nonce: string }> | null;
+
+/**
+ * Links an item to a guest party of this wedding, changes it, or removes
+ * the link ("" = none). The submitted party id is only the requested target:
+ * the service checks the caller's membership and rejects anything that
+ * isn't a UUID (a URL, a token…), and the database accepts only a party of
+ * the item's own wedding. Status, timing, order, assignee and the party
+ * itself are never touched.
+ */
+export async function setChecklistItemGuestPartyAction(
+  _prev: GuestWorkState,
+  formData: FormData,
+): Promise<GuestWorkState> {
+  const weddingId = await startAction(formData);
+  const { guestWork } = getMessages().checklist;
+  const party = formText(formData, "guestInvitationId").trim();
+
+  const result = await setChecklistItemGuestParty(
+    await createSupabaseServerClient(),
+    weddingId,
+    formText(formData, "itemId"),
+    party === "" ? null : party,
+  );
+  await handleDenial(result, weddingId);
+  revalidatePath(weddingPath(weddingId));
+  revalidatePath(`${weddingPath(weddingId)}/guests`);
+  if (!result.ok) {
+    return {
+      ok: false,
+      formError: result.reason === "invalid_guest_party" ? guestWork.invalidParty : guestWork.failed,
     };
   }
   return { ok: true, data: { nonce: crypto.randomUUID() } };

@@ -4,6 +4,7 @@ import { Notice } from "@/components/ui/Notice";
 import { cardClass, textLinkClass } from "@/components/ui/styles";
 import type { WeddingRole } from "@/lib/authz/wedding";
 import { STATUS_FILTERS, filterItems, type StatusFilter } from "@/lib/checklist/filters";
+import { linkedParty, type GuestPartyOption } from "@/lib/checklist/guest-work";
 import {
   isOverdue,
   nextUpcomingItems,
@@ -43,6 +44,11 @@ type Props = {
   currentMembershipId: string;
   /** Current members, ordered and labeled; null when they couldn't be loaded. */
   members: readonly LabeledMember[] | null;
+  /**
+   * LB-16: the wedding's guest parties (id + current label) an item may be
+   * linked to; null when they couldn't be loaded (the relation is hidden).
+   */
+  guestParties: readonly GuestPartyOption[] | null;
 };
 
 /** Everything a row needs to show and change its assignee. */
@@ -95,6 +101,7 @@ function ChecklistBody({
   basePath,
   currentMembershipId,
   members,
+  guestParties,
 }: Props & { checklist: WeddingChecklist }) {
   const copy = getMessages().checklist;
   const isOwner = role === "owner";
@@ -278,6 +285,7 @@ function ChecklistBody({
           items={items}
           filter={filter}
           assignment={assignment}
+          guestParties={guestParties}
         />
       ) : view === "category" ? (
         <CategoryView
@@ -286,6 +294,7 @@ function ChecklistBody({
           items={items}
           filter={filter}
           assignment={assignment}
+          guestParties={guestParties}
         />
       ) : view === "mine" ? (
         <MineView
@@ -294,6 +303,7 @@ function ChecklistBody({
           items={mine}
           filter={filter}
           assignment={assignment}
+          guestParties={guestParties}
         />
       ) : (
         <ItemList
@@ -302,6 +312,7 @@ function ChecklistBody({
           items={filterItems(items, filter)}
           labelledBy="checklist-title"
           assignment={assignment}
+          guestParties={guestParties}
         />
       )}
     </div>
@@ -497,6 +508,7 @@ type ViewProps = {
   items: readonly ChecklistItem[];
   filter: StatusFilter;
   assignment: Assignment;
+  guestParties: readonly GuestPartyOption[] | null;
 };
 
 /**
@@ -512,6 +524,7 @@ function PlanView({
   items,
   filter,
   assignment,
+  guestParties,
   noPendingText,
 }: ViewProps & { noPendingText?: string }) {
   const copy = getMessages().checklist;
@@ -524,6 +537,7 @@ function PlanView({
         items={sortByPlanning(filterItems(items, filter), dates.weddingDate)}
         labelledBy="checklist-title"
         assignment={assignment}
+        guestParties={guestParties}
       />
     );
   }
@@ -545,6 +559,7 @@ function PlanView({
               items={overdue}
               labelledBy="plan-overdue-title"
               assignment={assignment}
+              guestParties={guestParties}
             />
           </section>
           <section aria-labelledby="plan-upcoming-title" className="space-y-3" data-testid="plan-upcoming">
@@ -558,6 +573,7 @@ function PlanView({
               labelledBy="plan-upcoming-title"
               emptyText={emptyText}
               assignment={assignment}
+              guestParties={guestParties}
             />
           </section>
         </>
@@ -569,6 +585,7 @@ function PlanView({
           labelledBy="checklist-title"
           emptyText={emptyText}
           assignment={assignment}
+          guestParties={guestParties}
         />
       )}
       {filter === "all" && resolved.length > 0 ? (
@@ -577,7 +594,13 @@ function PlanView({
             {interpolate(copy.plan.resolvedTitle, { count: formatNumber(resolved.length) })}
           </summary>
           <div className="pt-3">
-            <ItemList weddingId={weddingId} dates={dates} items={resolved} assignment={assignment} />
+            <ItemList
+              weddingId={weddingId}
+              dates={dates}
+              items={resolved}
+              assignment={assignment}
+              guestParties={guestParties}
+            />
           </div>
         </details>
       ) : null}
@@ -610,7 +633,7 @@ function MineView(props: ViewProps) {
  * inside. Overdue items are only marked, never moved, and don't affect
  * progress.
  */
-function CategoryView({ weddingId, dates, items, filter, assignment }: ViewProps) {
+function CategoryView({ weddingId, dates, items, filter, assignment, guestParties }: ViewProps) {
   const copy = getMessages().checklist;
   const groups = groupByCategory(items)
     .map((group) => ({ ...group, visible: filterItems(group.items, filter) }))
@@ -672,6 +695,7 @@ function CategoryView({ weddingId, dates, items, filter, assignment }: ViewProps
               items={visible}
               labelledBy={headingId}
               assignment={assignment}
+              guestParties={guestParties}
             />
           </section>
         );
@@ -688,6 +712,7 @@ function ItemList({
   labelledBy,
   emptyText,
   assignment,
+  guestParties,
 }: {
   weddingId: string;
   dates: PlanningDateContext;
@@ -695,6 +720,7 @@ function ItemList({
   labelledBy?: string;
   emptyText?: string;
   assignment: Assignment;
+  guestParties: readonly GuestPartyOption[] | null;
 }) {
   const copy = getMessages().checklist;
   if (items.length === 0) return <p className="text-muted">{emptyText ?? copy.empty.filtered}</p>;
@@ -713,6 +739,11 @@ function ItemList({
                   label: assigneeLabel(assignment.members, item.assigneeMembershipId),
                   options: assignment.options,
                 }
+              : null
+          }
+          guestWork={
+            guestParties
+              ? { linked: linkedParty(guestParties, item.guestInvitationId), options: guestParties }
               : null
           }
         />

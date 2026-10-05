@@ -212,6 +212,7 @@ describe("party and guest writes", () => {
       "POST /rest/v1/guests": { status: 201, body: null },
       "PATCH /rest/v1/guests": { status: 200, body: [{ id: GUEST_ID }] },
       "DELETE /rest/v1/guests": { status: 200, body: [{ id: GUEST_ID }] },
+      "POST /rest/v1/rpc/revoke_guest_invitation_link": { status: 200, body: true },
     };
     const { supabase, requests } = clientFor({ role: "owner", replies });
     expect(await updateGuestPartyLabel(supabase, WEDDING_ID, PARTY_ID, "Nuevo")).toEqual({ ok: true });
@@ -222,15 +223,18 @@ describe("party and guest writes", () => {
     expect(await revokeGuestPartyLink(supabase, WEDDING_ID, PARTY_ID)).toEqual({ ok: true });
 
     for (const write of writes(requests)) {
-      if (write.method === "POST") {
+      if (write.url.pathname === "/rest/v1/rpc/revoke_guest_invitation_link") {
+        // LB-15: revocation is one RPC (the database records it in the activity history).
+        expect(write.body).toEqual({ target_wedding_id: WEDDING_ID, target_invitation_id: PARTY_ID });
+      } else if (write.method === "POST") {
         expect(write.body).toEqual({ wedding_id: WEDDING_ID, guest_invitation_id: PARTY_ID, name: "Ana" });
       } else {
         expect(write.url.searchParams.get("wedding_id"), write.method).toBe(`eq.${WEDDING_ID}`);
       }
     }
-    // Only the columns organizers may change are sent.
+    // Only the columns organizers may change are sent; revoked_at is never sent.
     const patches = writes(requests).filter((r) => r.method === "PATCH");
-    expect(patches.map((p) => Object.keys(p.body as object))).toEqual([["label"], ["name"], ["revoked_at"]]);
+    expect(patches.map((p) => Object.keys(p.body as object))).toEqual([["label"], ["name"]]);
   });
 
   it("collaborators manage content but are refused link actions before any write", async () => {
@@ -265,7 +269,7 @@ describe("party and guest writes", () => {
       role: "owner",
       replies: {
         "POST /rest/v1/rpc/rotate_guest_invitation_link": pgError("42501", "guest_link_owner_only"),
-        "PATCH /rest/v1/guest_invitations": pgError("42501", "guest_link_owner_only"),
+        "POST /rest/v1/rpc/revoke_guest_invitation_link": pgError("42501", "guest_link_owner_only"),
       },
     });
     expect(await rotateGuestPartyLink(supabase, WEDDING_ID, PARTY_ID, ORIGIN, ENCRYPTION)).toEqual({
@@ -363,29 +367,31 @@ describe("party and guest writes", () => {
     expect(await deleteGuestParty(down.supabase, WEDDING_ID, PARTY_ID)).toEqual({ ok: false, reason: "error" });
   });
 
-  it("revoking an already revoked link is a no-op success; an unknown party is not", async () => {
+  it("revocation is one RPC (no client timestamp); true = revoked or already revoked, false = unknown party", async () => {
     const revoked = clientFor({
       role: "owner",
-      replies: {
-        "PATCH /rest/v1/guest_invitations": { status: 200, body: [] },
-        "GET /rest/v1/guest_invitations": { status: 200, body: [{ id: PARTY_ID }] },
-      },
+      replies: { "POST /rest/v1/rpc/revoke_guest_invitation_link": { status: 200, body: true } },
     });
     expect(await revokeGuestPartyLink(revoked.supabase, WEDDING_ID, PARTY_ID)).toEqual({ ok: true });
-    const [patch] = writes(revoked.requests);
-    expect(patch?.url.searchParams.get("revoked_at")).toBe("is.null");
+    expect(writes(revoked.requests).map((w) => [w.method, w.url.pathname, w.body])).toEqual([
+      [
+        "POST",
+        "/rest/v1/rpc/revoke_guest_invitation_link",
+        { target_wedding_id: WEDDING_ID, target_invitation_id: PARTY_ID },
+      ],
+    ]);
 
     const unknown = clientFor({
       role: "owner",
-      replies: {
-        "PATCH /rest/v1/guest_invitations": { status: 200, body: [] },
-        "GET /rest/v1/guest_invitations": { status: 200, body: [] },
-      },
+      replies: { "POST /rest/v1/rpc/revoke_guest_invitation_link": { status: 200, body: false } },
     });
     expect(await revokeGuestPartyLink(unknown.supabase, WEDDING_ID, PARTY_ID)).toEqual({
       ok: false,
       reason: "invalid_target",
     });
+
+    const down = clientFor({ role: "owner", networkDown: "POST /rest/v1/rpc/revoke_guest_invitation_link" });
+    expect(await revokeGuestPartyLink(down.supabase, WEDDING_ID, PARTY_ID)).toEqual({ ok: false, reason: "error" });
   });
 });
 

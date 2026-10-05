@@ -1,7 +1,7 @@
 import { createClient, type SupportedStorage } from "@supabase/supabase-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { DeliveryRecord, DeliveryRecordResult, DeliveryRecorder } from "@/lib/email/delivery-recorder";
+import type { DeliveryRecordResult, DeliveryRecorder, RsvpReminderRecord } from "@/lib/email/delivery-recorder";
 import type { EmailSendResult, EmailSender, OutgoingEmail } from "@/lib/email/provider";
 import type { Database } from "@/lib/supabase/database.types";
 import { TEST_RSVP_CAPABILITY_KEY, WRONG_TEST_RSVP_CAPABILITY_KEY } from "@/test/fixtures/rsvp-capability-key";
@@ -172,7 +172,7 @@ function fakeDelivery(
   recordResult: DeliveryRecordResult | "throw" = { ok: true, sentAt: SENT_AT },
 ) {
   const sent: OutgoingEmail[] = [];
-  const records: DeliveryRecord[] = [];
+  const records: RsvpReminderRecord[] = [];
   const order: string[] = [];
   const sender: EmailSender = {
     async send(email) {
@@ -255,7 +255,8 @@ describe("sendRsvpReminderEmail", () => {
       expectNoLinkChange(requests);
 
       // The provider's id, the authorized wedding, the party, the hash —
-      // never the plaintext token.
+      // never the plaintext token — and (LB-15) the member from the
+      // server's own session check, for the activity history.
       expect(fake.records).toEqual([
         {
           weddingId: WEDDING_ID,
@@ -263,6 +264,7 @@ describe("sendRsvpReminderEmail", () => {
           tokenHash: link.tokenHash,
           recipient: "familia@example.com",
           providerMessageId: "msg_1",
+          actingUserId: USER_ID,
         },
       ]);
       expect(JSON.stringify(requests.map((r) => [r.url.toString(), r.body])).includes(link.token)).toBe(false);

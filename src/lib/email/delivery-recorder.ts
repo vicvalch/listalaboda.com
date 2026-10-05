@@ -22,6 +22,14 @@ import type { Database } from "@/lib/supabase/database.types";
  * - `recordRsvpReminder` (ADR-007): the provider accepted an RSVP reminder
  *   email that an organizer explicitly sent with the party's CURRENT link.
  *
+ * Since LB-15 (ADR-008) each record also appends the party's activity
+ * history row, inside the same database function and transaction: no
+ * history without the metadata, and none for a send that couldn't be
+ * recorded. Member-initiated emails (invitation, reminder) carry the
+ * acting member's user id, taken by the caller from its own membership
+ * check (`WeddingAccess.userId`, i.e. `auth.getUser()`), never from the
+ * browser; the database re-checks that it is a member of the wedding.
+ *
  * Why recording is privileged: the database can't authenticate a provider
  * result coming from a client credential. A Server Action talks to Postgres
  * with the user's own JWT (or, for a guest, anon) and the public
@@ -52,11 +60,24 @@ export type DeliveryRecord = Readonly<{
   providerMessageId: string;
 }>;
 
-/** Same scope as an invitation record: the link whose RSVP was confirmed. */
+/**
+ * An email a MEMBER explicitly sent (invitation, reminder): the activity
+ * history attributes it to them (LB-15, ADR-008).
+ */
+export type MemberDeliveryRecord = DeliveryRecord &
+  Readonly<{
+    /** From the server's own membership check (`WeddingAccess.userId`), never from input. */
+    actingUserId: string;
+  }>;
+
+/** An invitation email a member sent. */
+export type InvitationRecord = MemberDeliveryRecord;
+
+/** Same scope as an invitation record: the link whose RSVP was confirmed. No member sent it. */
 export type RsvpConfirmationRecord = DeliveryRecord;
 
-/** Same scope: the CURRENT, usable link the reminder carried. */
-export type RsvpReminderRecord = DeliveryRecord;
+/** Same scope: the CURRENT, usable link the reminder carried, sent by a member. */
+export type RsvpReminderRecord = MemberDeliveryRecord;
 
 export type DeliveryRecordResult = Readonly<{ ok: true; sentAt: string }> | Readonly<{ ok: false }>;
 
@@ -78,7 +99,7 @@ export type RsvpConfirmationContextResult =
   | Readonly<{ ok: false }>;
 
 export interface DeliveryRecorder {
-  recordInvitation(entry: DeliveryRecord): Promise<DeliveryRecordResult>;
+  recordInvitation(entry: InvitationRecord): Promise<DeliveryRecordResult>;
   readRsvpConfirmationContext(tokenHash: string): Promise<RsvpConfirmationContextResult>;
   recordRsvpConfirmation(entry: RsvpConfirmationRecord): Promise<DeliveryRecordResult>;
   recordRsvpReminder(entry: RsvpReminderRecord): Promise<DeliveryRecordResult>;
@@ -123,6 +144,7 @@ export function parseRecorderSettings(source: EnvSource): RecorderSettings | nul
 }
 
 const TOKEN_HASH_PATTERN = /^[0-9a-f]{64}$/;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type RecordArgs = Readonly<{
   target_wedding_id: string;
@@ -142,20 +164,24 @@ function recordArgs(entry: DeliveryRecord): RecordArgs {
   };
 }
 
+function memberRecordArgs(entry: MemberDeliveryRecord): RecordArgs & Readonly<{ acting_user_id: string }> {
+  return { ...recordArgs(entry), acting_user_id: entry.actingUserId };
+}
+
 /** Builds the recorder from explicit settings (the factory below, and DB tests). */
 export function createDeliveryRecorder({ supabaseUrl, serviceRoleKey }: RecorderSettings): DeliveryRecorder {
   const privileged = createClient<Database>(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  /** One of the three fixed record RPCs; never a caller-chosen name. */
+  /** Runs one fixed record RPC (chosen below, never by the caller); maps every failure to `ok: false`. */
   async function record(
-    rpc: "record_guest_invitation_email" | "record_rsvp_confirmation_email" | "record_rsvp_reminder_email",
     entry: DeliveryRecord,
+    call: () => PromiseLike<{ data: string | null; error: unknown }>,
   ): Promise<DeliveryRecordResult> {
     if (!isStorableMessageId(entry.providerMessageId)) return { ok: false };
     try {
-      const { data, error } = await privileged.rpc(rpc, recordArgs(entry));
+      const { data, error } = await call();
       if (error || typeof data !== "string") return { ok: false };
       return { ok: true, sentAt: data };
     } catch {
@@ -164,9 +190,16 @@ export function createDeliveryRecorder({ supabaseUrl, serviceRoleKey }: Recorder
   }
 
   return {
-    recordInvitation: (entry) => record("record_guest_invitation_email", entry),
-    recordRsvpConfirmation: (entry) => record("record_rsvp_confirmation_email", entry),
-    recordRsvpReminder: (entry) => record("record_rsvp_reminder_email", entry),
+    recordInvitation: (entry) =>
+      UUID_PATTERN.test(entry.actingUserId)
+        ? record(entry, () => privileged.rpc("record_guest_invitation_email", memberRecordArgs(entry)))
+        : Promise.resolve({ ok: false }),
+    recordRsvpConfirmation: (entry) =>
+      record(entry, () => privileged.rpc("record_rsvp_confirmation_email", recordArgs(entry))),
+    recordRsvpReminder: (entry) =>
+      UUID_PATTERN.test(entry.actingUserId)
+        ? record(entry, () => privileged.rpc("record_rsvp_reminder_email", memberRecordArgs(entry)))
+        : Promise.resolve({ ok: false }),
     async readRsvpConfirmationContext(tokenHash) {
       if (!TOKEN_HASH_PATTERN.test(tokenHash)) return { ok: false };
       try {

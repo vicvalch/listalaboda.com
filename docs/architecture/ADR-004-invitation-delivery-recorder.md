@@ -8,6 +8,9 @@ Related: [ADR-002 §6 — Service-role policy](ADR-002-auth-and-security-boundar
 > `record(...)` is named `recordInvitation(...)`.
 > LB-14: [ADR-007](ADR-007-manual-rsvp-reminder-delivery.md) adds a fourth, `recordRsvpReminder(...)`, for manual
 > RSVP reminder emails; same module, same rules.
+> LB-15: [ADR-008](ADR-008-basic-activity-history.md): `record_guest_invitation_email` also appends the send's activity
+> row in the same transaction, and takes the acting member (`acting_user_id`, from the action's own session check,
+> re-checked as a member of the wedding) for attribution only. Still service_role-only; no new operation.
 
 ## Context
 

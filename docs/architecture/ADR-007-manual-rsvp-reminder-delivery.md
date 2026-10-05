@@ -3,6 +3,10 @@
 Status: Accepted (LB-14) · Date: 2026-10-04
 Related: [ADR-002 §5, §6](ADR-002-auth-and-security-boundaries.md), [ADR-004](ADR-004-invitation-delivery-recorder.md), [ADR-005](ADR-005-rsvp-confirmation-email.md), [ADR-006](ADR-006-recoverable-rsvp-capability.md), [Product Constitution §8](../product/PRODUCT-CONSTITUTION.md)
 
+> Later note (LB-15): [ADR-008](ADR-008-basic-activity-history.md): `record_rsvp_reminder_email` also appends
+> `rsvp_reminder_email_sent` in the same transaction and takes the acting member (`acting_user_id`, from the action's
+> own session check, re-checked as a member) for attribution only. §7's "activity history" is no longer deferred.
+
 ## Context
 
 Constitution §8 lists "RSVP reminders" in Phase 2. LB-13 (ADR-006) made each party's current RSVP link

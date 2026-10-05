@@ -11,6 +11,7 @@ import {
   serviceRole,
   shapedEnvelope,
   sql,
+  users,
 } from "./support";
 
 // LB-14 (ADR-007): the RSVP reminder's database boundary, exercised as real
@@ -23,7 +24,7 @@ const REMINDER_COLUMNS = [
   "rsvp_reminder_email_sent_at",
   "rsvp_reminder_email_sent_to",
 ];
-const SIGNATURE = "public.record_rsvp_reminder_email(uuid, uuid, text, text, text)";
+const SIGNATURE = "public.record_rsvp_reminder_email(uuid, uuid, text, text, text, uuid)";
 const SECRETS = "private.guest_invitation_capability_secrets";
 
 const createdWeddings: string[] = [];
@@ -86,7 +87,15 @@ const client = (actor: Actor) => (actor === "service" ? serviceRole : as[actor])
 
 function record(
   actor: Actor,
-  args: { weddingId: string; partyId: string; hash: string; recipient: string; providerId?: string },
+  args: {
+    weddingId: string;
+    partyId: string;
+    hash: string;
+    recipient: string;
+    providerId?: string;
+    /** LB-15: the member who sent it (default: the owner who created the wedding). */
+    actingUserId?: string;
+  },
 ) {
   return client(actor).rpc("record_rsvp_reminder_email", {
     target_wedding_id: args.weddingId,
@@ -94,6 +103,7 @@ function record(
     invitation_token_hash: args.hash,
     recipient: args.recipient,
     provider_message_id: args.providerId ?? "msg_reminder_0123",
+    acting_user_id: args.actingUserId ?? users.ownerA.id,
   });
 }
 
@@ -375,7 +385,7 @@ describe("record_rsvp_reminder_email: narrow even for service_role", () => {
     expect((await record("service", { ...oldLink, hash: fresh.hash })).error, "current hash").toBeNull();
 
     const revoked = await createParty("ownerA", weddingA, "Revocado", "revocado-rec@example.com");
-    await as.ownerA.from("guest_invitations").update({ revoked_at: new Date().toISOString() }).eq("id", revoked.id);
+    await as.ownerA.rpc("revoke_guest_invitation_link", { target_wedding_id: weddingA, target_invitation_id: revoked.id });
     expect(
       (await record("service", { weddingId: weddingA, partyId: revoked.id, hash: revoked.hash, recipient: "revocado-rec@example.com" })).error,
       "revoked",

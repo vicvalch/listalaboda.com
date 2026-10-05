@@ -76,6 +76,11 @@ function rotate(actor: keyof typeof as, weddingId: string, partyId: string, hash
   });
 }
 
+/** "Revocar acceso" through its one door (LB-15: revoke_guest_invitation_link). */
+function revokeLink(actor: keyof typeof as, weddingId: string, partyId: string) {
+  return as[actor].rpc("revoke_guest_invitation_link", { target_wedding_id: weddingId, target_invitation_id: partyId });
+}
+
 function getParty(actor: keyof typeof as, hash: string) {
   return as[actor].rpc("get_guest_invitation", { invitation_token_hash: hash });
 }
@@ -541,13 +546,16 @@ describe("link revocation and rotation", () => {
       .eq("id", party.id)
       .select("id");
     expect(rotateDirect.error?.code).toBe(PERMISSION_DENIED);
-    const revoke = await as.collabA
+    const revoke = await revokeLink("collabA", wedding, party.id);
+    expect(revoke.error?.code).toBe(PERMISSION_DENIED);
+    expect(revoke.error?.message).toBe("guest_link_owner_only");
+    // LB-15: the plain UPDATE door for revocation is closed for every client too.
+    const revokeDirect = await as.collabA
       .from("guest_invitations")
       .update({ revoked_at: new Date().toISOString() })
       .eq("id", party.id)
       .select("id");
-    expect(revoke.error?.code).toBe(PERMISSION_DENIED);
-    expect(revoke.error?.message).toBe("guest_link_owner_only");
+    expect(revokeDirect.error?.code).toBe(PERMISSION_DENIED);
     // Sneaking the hash in next to an allowed label change doesn't work either.
     const mixed = await as.collabA
       .from("guest_invitations")
@@ -575,12 +583,8 @@ describe("link revocation and rotation", () => {
     const next = newToken();
     const ownerRotate = await rotate("ownerA", wedding, party.id, next.hash);
     expect(ownerRotate.data).toBe(true);
-    const ownerRevoke = await as.ownerA
-      .from("guest_invitations")
-      .update({ revoked_at: new Date().toISOString() })
-      .eq("id", party.id)
-      .select("id");
-    expect(ownerRevoke.data).toHaveLength(1);
+    const ownerRevoke = await revokeLink("ownerA", wedding, party.id);
+    expect(ownerRevoke.data).toBe(true);
     expect((await getParty("anon", next.hash)).data).toEqual([]);
   });
 
@@ -588,13 +592,19 @@ describe("link revocation and rotation", () => {
     const party = await createParty("ownerA", wedding, "Revocado", ["Rita"]);
     await submit("anon", party.hash, [{ guest_id: party.guestIds[0], attending: true }]);
 
-    const { data } = await as.ownerA
+    // No client can send its own timestamp (LB-15: no revoked_at grant at all).
+    const forged = await as.ownerA
       .from("guest_invitations")
       .update({ revoked_at: "2000-01-01T00:00:00Z" })
       .eq("id", party.id)
       .select("revoked_at");
-    const revokedAt = new Date(data?.[0]?.revoked_at ?? 0).getTime();
-    expect(Math.abs(revokedAt - Date.now())).toBeLessThan(60_000);
+    expect(forged.error?.code).toBe(PERMISSION_DENIED);
+    expect((await revokeLink("ownerA", wedding, party.id)).data).toBe(true);
+    const [stored] = await sql<{ revoked_at: Date | null }>(
+      "select revoked_at from public.guest_invitations where id = $1",
+      [party.id],
+    );
+    expect(Math.abs((stored?.revoked_at?.getTime() ?? 0) - Date.now())).toBeLessThan(60_000);
 
     expect((await getParty("anon", party.hash)).data).toEqual([]);
     const write = await submit("anon", party.hash, [{ guest_id: party.guestIds[0], attending: false }]);
@@ -623,12 +633,16 @@ describe("link revocation and rotation", () => {
 
   it("a revoked link can't be reopened, only replaced", async () => {
     const party = await createParty("ownerA", wedding, "Sin reabrir", ["Raúl"]);
-    await as.ownerA.from("guest_invitations").update({ revoked_at: new Date().toISOString() }).eq("id", party.id);
+    await revokeLink("ownerA", wedding, party.id);
     const reopen = await as.ownerA
       .from("guest_invitations")
       .update({ revoked_at: null })
       .eq("id", party.id);
-    expect(reopen.error?.message).toBe("guest_invitation_revoked");
+    expect(reopen.error?.code).toBe(PERMISSION_DENIED);
+    // The link guard still refuses it for privileged writes.
+    await expect(
+      sql("update public.guest_invitations set revoked_at = null where id = $1", [party.id]),
+    ).rejects.toMatchObject({ message: "guest_invitation_revoked" });
     expect((await getParty("anon", party.hash)).data).toEqual([]);
   });
 
@@ -638,7 +652,7 @@ describe("link revocation and rotation", () => {
       { guest_id: party.guestIds[0], attending: true },
       { guest_id: party.guestIds[1], attending: false },
     ]);
-    await as.ownerA.from("guest_invitations").update({ revoked_at: new Date().toISOString() }).eq("id", party.id);
+    await revokeLink("ownerA", wedding, party.id);
     await backdateLink(party.id, 10);
 
     const next = newToken();

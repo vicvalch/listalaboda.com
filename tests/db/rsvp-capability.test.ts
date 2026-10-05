@@ -464,7 +464,7 @@ describe("hash + envelope atomicity", () => {
 
   it("rotation reopens a revoked party with a NEW recoverable link", async () => {
     const party = await createParty("ownerA", weddingA, "Revocada y renovada");
-    await as.ownerA.from("guest_invitations").update({ revoked_at: new Date().toISOString() }).eq("id", party.id);
+    await as.ownerA.rpc("revoke_guest_invitation_link", { target_wedding_id: weddingA, target_invitation_id: party.id });
     // Revoking keeps the envelope (recovery refuses it anyway).
     expect((await secretsOf(party.id))[0]?.token_ciphertext).toBe(party.envelope);
     const next = newToken();
@@ -503,7 +503,7 @@ describe("get_guest_invitation_recovery_envelope", () => {
 
   it("a revoked link is `unavailable`, with no hash or envelope", async () => {
     const party = await createParty("ownerA", weddingA, "Revocada");
-    await as.ownerA.from("guest_invitations").update({ revoked_at: new Date().toISOString() }).eq("id", party.id);
+    await as.ownerA.rpc("revoke_guest_invitation_link", { target_wedding_id: weddingA, target_invitation_id: party.id });
     expect((await recover("collabA", weddingA, party.id)).data).toEqual([
       { link_state: "unavailable", token_hash: null, token_ciphertext: null },
     ]);

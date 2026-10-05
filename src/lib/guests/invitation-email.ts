@@ -50,7 +50,9 @@ import { getWeddingDetail } from "@/lib/weddings/service";
  *   "not sent", which would invite a duplicate).
  *
  * Nothing is logged. The token and the link exist only in memory, the
- * email body and the returned fresh link.
+ * email body and the returned fresh link. A recorded send also appears in
+ * the wedding's activity history (LB-15), attributed to the authorized
+ * member, written by the same recorder call.
  */
 
 type Client = SupabaseClient<Database>;
@@ -178,6 +180,8 @@ async function deliver(
       tokenHash: hashCapabilityToken(token),
       recipient: party.recipient,
       providerMessageId: sent.messageId,
+      // LB-15: the member who sent it, from this action's own membership check.
+      actingUserId: access.userId,
     });
     if (!recorded.ok) return unrecorded;
     return { outcome: "sent", recipient: party.recipient, sentAt: recorded.sentAt };

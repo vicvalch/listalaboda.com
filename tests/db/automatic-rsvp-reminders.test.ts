@@ -7,6 +7,7 @@ import {
   PERMISSION_DENIED,
   addMember,
   as,
+  emailDeliveriesFor,
   createWedding as createFixtureWedding,
   serviceRole,
   shapedEnvelope,
@@ -163,7 +164,7 @@ async function begin(c: { id: string; token: string }, hash: string, recipient: 
   return data[0];
 }
 
-function record(c: { id: string; token: string }, hash: string, recipient: string, providerId = "msg-auto-1") {
+function record(c: { id: string; token: string }, hash: string, recipient: string, providerId = `msg-auto-${randomUUID()}`) {
   return serviceRole.rpc("record_automatic_rsvp_reminder_email", {
     target_occurrence_id: c.id,
     occurrence_claim_token: c.token,
@@ -1065,14 +1066,26 @@ describe("begin (the provider boundary)", () => {
 // ============================================================= record
 
 describe("record", () => {
-  it("atomically: latest-reminder metadata, a SYSTEM activity row (no user id), sending → sent", async () => {
+  it("atomically: latest-reminder metadata, a SYSTEM activity row (no user id), the ledger row, sending → sent", async () => {
     const weddingId = await dueWedding("Boda registrar");
     const party = await createParty(weddingId, "Familia Registra");
     const c = await toSending(party);
-    const { data, error } = await record(c, party.hash, "familia@example.com", "msg-auto-ok");
+    const providerId = `msg-auto-ok-${randomUUID()}`;
+    const { data, error } = await record(c, party.hash, "familia@example.com", providerId);
     expect(error).toBeNull();
     const meta = await reminderMetadata(party.id);
-    expect(meta).toMatchObject({ to: "familia@example.com", provider: "msg-auto-ok" });
+    expect(meta).toMatchObject({ to: "familia@example.com", provider: providerId });
+    // LB-18.1 (ADR-011): exactly one AUTOMATIC ledger row, same transaction and clock.
+    expect(await emailDeliveriesFor(party.id)).toEqual([
+      {
+        wedding_id: weddingId,
+        guest_invitation_id: party.id,
+        kind: "rsvp_reminder_automatic",
+        provider_message_id: providerId,
+        recipient: "familia@example.com",
+        accepted_at: meta.at,
+      },
+    ]);
     expect(meta.at?.toISOString()).toBe(new Date(data!).toISOString());
     expect(await activityFor(party.id)).toContainEqual({
       event_type: "rsvp_reminder_email_sent",
@@ -1105,11 +1118,14 @@ describe("record", () => {
     expect(await reminderMetadata(party.id)).toEqual({ at: null, to: null, provider: null });
     expect((await activityFor(party.id)).filter((a) => a.event_type === "rsvp_reminder_email_sent")).toEqual([]);
     expect((await occurrenceOf(party.id))?.state).toBe("sending");
+    // LB-18.1: no orphan ledger row for a send that couldn't be recorded.
+    expect(await emailDeliveriesFor(party.id)).toEqual([]);
 
     // The runner then reports it: sent_unrecorded, terminal, never claimed again.
     expect(await finish(c, "sent_unrecorded")).toBe("sent_unrecorded");
     expect(await claim()).toEqual([]);
     expect((await occurrenceOf(party.id))?.state).toBe("sent_unrecorded");
+    expect(await emailDeliveriesFor(party.id)).toEqual([]);
   });
 });
 

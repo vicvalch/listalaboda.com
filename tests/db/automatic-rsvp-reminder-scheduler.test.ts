@@ -8,7 +8,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { TEST_RSVP_CAPABILITY_KEY, WRONG_TEST_RSVP_CAPABILITY_KEY } from "@/test/fixtures/rsvp-capability-key";
 
 import type { TestUserKey } from "./context";
-import { addMember, createWedding as createFixtureWedding, ctx, sql, users } from "./support";
+import { addMember, createWedding as createFixtureWedding, ctx, emailDeliveriesFor, sql, users } from "./support";
 
 vi.mock("server-only", () => ({}));
 
@@ -170,6 +170,10 @@ describe("the scheduler, end to end", () => {
       [p.id],
     );
     expect(meta!.to).toBe(p.email);
+    // LB-18.1 (ADR-011): one automatic ledger row with the provider's id for that send.
+    expect((await emailDeliveriesFor(p.id)).map((d) => [d.kind, d.provider_message_id, d.recipient])).toEqual([
+      ["rsvp_reminder_automatic", meta!.provider, p.email],
+    ]);
     const activity = await sql<{ actor_kind: string; actor_user_id: string | null }>(
       "select actor_kind, actor_user_id from public.wedding_activity where guest_invitation_id = $1 and event_type = 'rsvp_reminder_email_sent'",
       [p.id],
@@ -257,6 +261,10 @@ describe("the scheduler, end to end", () => {
     expect(calls[0]!.key).toBe(calls[1]!.key);
     expect(delivered).toHaveLength(1);
     expect(await occurrence(p.id)).toMatchObject({ state: "sent", attempt_count: 2 });
+    // One email, one ledger row: the replay's (original) provider id.
+    const ledger = await emailDeliveriesFor(p.id);
+    expect(ledger).toHaveLength(1);
+    expect(ledger[0]).toMatchObject({ kind: "rsvp_reminder_automatic", recipient: p.email });
   });
 
   it("a provider timeout is retried later with the same key; a changed payload then ends unknown (idempotency_conflict)", async () => {
@@ -312,6 +320,7 @@ describe("the scheduler, end to end", () => {
       [p.id],
     );
     expect(history).toEqual([]);
+    expect(await emailDeliveriesFor(p.id)).toEqual([]);
   });
 
   it("an accepted send without a storable id is sent_unrecorded", async () => {

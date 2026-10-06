@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -7,6 +7,7 @@ import {
   PERMISSION_DENIED,
   addMember,
   as,
+  emailDeliveriesFor,
   createWedding as createFixtureWedding,
   serviceRole,
   sql,
@@ -107,7 +108,7 @@ function record(
     target_invitation_id: args.partyId,
     invitation_token_hash: args.hash,
     recipient: args.recipient,
-    provider_message_id: args.providerId ?? "msg_0123456789",
+    provider_message_id: args.providerId ?? `msg_${randomUUID()}`,
     acting_user_id: args.actingUserId ?? users.ownerA.id,
   });
 }
@@ -288,10 +289,12 @@ describe("send metadata: written only by record_guest_invitation_email, as servi
       expect(error?.code, actor).toBe(PERMISSION_DENIED);
     }
     expect((await row(party.id)).invitation_email_sent_at).toBeNull();
+    expect(await emailDeliveriesFor(party.id)).toEqual([]);
   });
 
   it("service_role records a send, on the database clock, touching nothing else", async () => {
     const party = await createParty("collabA", weddingA, "Registro", "registro@example.com");
+    const providerId = randomUUID();
     const before = await row(party.id);
     const startedAt = (await sql<{ now: Date }>("select now()"))[0]!.now;
 
@@ -300,14 +303,25 @@ describe("send metadata: written only by record_guest_invitation_email, as servi
       partyId: party.id,
       hash: party.hash,
       recipient: "registro@example.com",
-      providerId: "4ef9a417-02e9-4d39-ad75-9611e0fcc33c",
+      providerId,
     });
     expect(error).toBeNull();
     const stored = await row(party.id);
     expect(new Date(data as string)).toEqual(stored.invitation_email_sent_at);
     expect(stored.invitation_email_sent_at!.getTime()).toBeGreaterThanOrEqual(startedAt.getTime());
     expect(stored.invitation_email_sent_to).toBe("registro@example.com");
-    expect(stored.invitation_email_provider_id).toBe("4ef9a417-02e9-4d39-ad75-9611e0fcc33c");
+    expect(stored.invitation_email_provider_id).toBe(providerId);
+    // LB-18.1 (ADR-011): exactly one ledger row, same transaction and clock.
+    expect(await emailDeliveriesFor(party.id)).toEqual([
+      {
+        wedding_id: weddingA,
+        guest_invitation_id: party.id,
+        kind: "guest_invitation",
+        provider_message_id: providerId,
+        recipient: "registro@example.com",
+        accepted_at: stored.invitation_email_sent_at,
+      },
+    ]);
     // Recording never touches the link or the guests.
     expect(stored.token_hash).toBe(before.token_hash);
     expect(stored.token_issued_at).toEqual(before.token_issued_at);
@@ -336,6 +350,9 @@ describe("send metadata: written only by record_guest_invitation_email, as servi
     }
     expect((await row(party.id)).invitation_email_sent_at).toBeNull();
     expect((await row(other.id)).invitation_email_sent_at).toBeNull();
+    // LB-18.1: a refused record leaves no ledger row.
+    expect(await emailDeliveriesFor(party.id)).toEqual([]);
+    expect(await emailDeliveriesFor(other.id)).toEqual([]);
 
     // Removing the email means nothing can be recorded for it.
     await setEmail("ownerA", weddingA, party.id, null);

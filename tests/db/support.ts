@@ -102,3 +102,21 @@ export function shapedEnvelope(): string {
   const part = (bytes: number) => randomBytes(bytes).toString("base64url");
   return `v1.${part(12)}.${part(43)}.${part(16)}`;
 }
+
+/** LB-18.1 (ADR-011): one party's email ledger rows, oldest first (ground truth, regardless of RLS). */
+export type EmailDeliveryRow = {
+  wedding_id: string;
+  guest_invitation_id: string;
+  kind: string;
+  provider_message_id: string;
+  recipient: string;
+  accepted_at: Date;
+};
+
+export async function emailDeliveriesFor(partyId: string): Promise<EmailDeliveryRow[]> {
+  return sql<EmailDeliveryRow>(
+    `select wedding_id, guest_invitation_id, kind::text as kind, provider_message_id, recipient, accepted_at
+     from public.email_deliveries where guest_invitation_id = $1 order by accepted_at, id`,
+    [partyId],
+  );
+}

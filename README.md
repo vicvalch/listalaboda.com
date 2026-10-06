@@ -271,8 +271,17 @@ Actividad shows an automatic send as "Automático".
 
 See [ADR-010](docs/architecture/ADR-010-automatic-rsvp-reminder-scheduling.md).
 
-Still deferred: recurring or multi-stage reminders, per-party automation settings, delivery/bounce webhooks, and
-messaging APIs and phone numbers.
+**Email delivery ledger (LB-18.1, persistence foundation only).** "Sent" means the provider accepted an email; it
+doesn't mean it arrived. LB-18 will record what happened afterwards (delivered, delayed, bounced, spam complaint), in
+slices. LB-18.1 only lays the foundation: every invitation, RSVP confirmation, manual reminder and automatic reminder
+email that is successfully recorded now also gets one row in `email_deliveries`, with its kind, the provider's email
+id (unique) and the address it went to, written in the same database transaction as the existing "sent" status and
+activity row. Rows are immutable, visible only to the wedding's members (never the provider id) and deleted with their
+party or wedding. Nothing visible changes yet, and nothing is backfilled: emails sent before LB-18.1 have no row. See
+[ADR-011](docs/architecture/ADR-011-email-delivery-observability.md).
+
+Still deferred: recurring or multi-stage reminders, per-party automation settings, delivery/bounce webhooks and
+delivery status (LB-18.2+), and messaging APIs and phone numbers.
 
 ## Stack
 

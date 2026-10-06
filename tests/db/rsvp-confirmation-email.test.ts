@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -7,6 +7,7 @@ import {
   PERMISSION_DENIED,
   addMember,
   as,
+  emailDeliveriesFor,
   createWedding as createFixtureWedding,
   serviceRole,
   sql,
@@ -91,7 +92,7 @@ function record(
     target_invitation_id: args.partyId,
     invitation_token_hash: args.hash,
     recipient: args.recipient,
-    provider_message_id: args.providerId ?? "msg_confirm_0123",
+    provider_message_id: args.providerId ?? `msg_confirm_${randomUUID()}`,
   });
 }
 
@@ -342,6 +343,7 @@ describe("get_rsvp_confirmation_email_context: one live link, the minimum", () =
 describe("record_rsvp_confirmation_email: narrow even for service_role", () => {
   it("records on the database clock and changes ONLY the confirmation columns", async () => {
     const party = await createParty("ownerA", weddingA, "Registro", "registro-conf@example.com");
+    const providerId = randomUUID();
     await answer(party, false);
     await sql(
       `update public.guest_invitations set invitation_email_sent_at = now() - interval '1 day',
@@ -358,7 +360,7 @@ describe("record_rsvp_confirmation_email: narrow even for service_role", () => {
       partyId: party.id,
       hash: party.hash,
       recipient: "registro-conf@example.com",
-      providerId: "4ef9a417-02e9-4d39-ad75-9611e0fcc33c",
+      providerId,
     });
     expect(error).toBeNull();
 
@@ -366,7 +368,18 @@ describe("record_rsvp_confirmation_email: narrow even for service_role", () => {
     expect(new Date(data as string)).toEqual(after.party.rsvp_confirmation_email_sent_at);
     expect((after.party.rsvp_confirmation_email_sent_at as Date).getTime()).toBeGreaterThanOrEqual(startedAt.getTime());
     expect(after.party.rsvp_confirmation_email_sent_to).toBe("registro-conf@example.com");
-    expect(after.party.rsvp_confirmation_email_provider_id).toBe("4ef9a417-02e9-4d39-ad75-9611e0fcc33c");
+    expect(after.party.rsvp_confirmation_email_provider_id).toBe(providerId);
+    // LB-18.1 (ADR-011): exactly one ledger row, same transaction and clock.
+    expect(await emailDeliveriesFor(party.id)).toEqual([
+      {
+        wedding_id: weddingA,
+        guest_invitation_id: party.id,
+        kind: "rsvp_confirmation",
+        provider_message_id: providerId,
+        recipient: "registro-conf@example.com",
+        accepted_at: after.party.rsvp_confirmation_email_sent_at,
+      },
+    ]);
 
     const strip = (p: Record<string, unknown>) =>
       Object.fromEntries(Object.entries(p).filter(([k]) => !k.startsWith("rsvp_confirmation_email")));
@@ -377,12 +390,19 @@ describe("record_rsvp_confirmation_email: narrow even for service_role", () => {
     expect(weddingAfter).toEqual(wedding);
   });
 
-  it("a later confirmation replaces the latest one (no history)", async () => {
+  it("a later confirmation replaces the latest one; the ledger keeps both sends (LB-18.1)", async () => {
     const party = await createParty("ownerA", weddingA, "Reemplazo", "reemplazo@example.com");
     const base = { weddingId: weddingA, partyId: party.id, hash: party.hash, recipient: "reemplazo@example.com" };
-    await record("service", { ...base, providerId: "msg_primero" });
-    await record("service", { ...base, providerId: "msg_segundo" });
-    expect((await snapshot(party.id)).party.rsvp_confirmation_email_provider_id).toBe("msg_segundo");
+    const first = `msg_primero_${randomUUID()}`;
+    const second = `msg_segundo_${randomUUID()}`;
+    expect((await record("service", { ...base, providerId: first })).error).toBeNull();
+    expect((await record("service", { ...base, providerId: second })).error).toBeNull();
+    expect((await snapshot(party.id)).party.rsvp_confirmation_email_provider_id).toBe(second);
+    const ledger = await emailDeliveriesFor(party.id);
+    expect(ledger.map((d) => [d.kind, d.provider_message_id, d.recipient])).toEqual([
+      ["rsvp_confirmation", first, "reemplazo@example.com"],
+      ["rsvp_confirmation", second, "reemplazo@example.com"],
+    ]);
   });
 
   it("rejects the wrong wedding, another wedding's party, a made-up party, a different or missing recipient, a bad id", async () => {
@@ -409,6 +429,9 @@ describe("record_rsvp_confirmation_email: narrow even for service_role", () => {
     }
     expect((await snapshot(party.id)).party.rsvp_confirmation_email_sent_at).toBeNull();
     expect((await snapshot(other.id)).party.rsvp_confirmation_email_sent_at).toBeNull();
+    // LB-18.1: a refused record leaves no ledger row.
+    expect(await emailDeliveriesFor(party.id)).toEqual([]);
+    expect(await emailDeliveriesFor(other.id)).toEqual([]);
 
     // Without a current contact email nothing can be recorded.
     await setEmail(weddingA, party.id, null);

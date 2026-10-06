@@ -29,6 +29,9 @@ import type { Database } from "@/lib/supabase/database.types";
  * acting member's user id, taken by the caller from its own membership
  * check (`WeddingAccess.userId`, i.e. `auth.getUser()`), never from the
  * browser; the database re-checks that it is a member of the wedding.
+ * Since LB-18.1 (ADR-011) each record also inserts the send's
+ * `email_deliveries` ledger row in that same transaction (no new
+ * operation; nothing is written for a send that couldn't be recorded).
  *
  * Why recording is privileged: the database can't authenticate a provider
  * result coming from a client credential. A Server Action talks to Postgres

@@ -9,9 +9,8 @@ import { getAutomaticReminderRuntime } from "@/lib/scheduler/runtime";
  * §4). Called by the deployment's cron with GET (Vercel Cron's method) and
  * `Authorization: Bearer <CRON_SECRET>`.
  *
- * NOT ACTIVATED by this code: no cron schedule is configured in the
- * repository. Production activation (the cron entry and the secret) is a
- * separately approved deployment step.
+ * Scheduled hourly by `vercel.json` (LB-17A.2). Nothing is sent unless an
+ * owner has enabled a reminder policy; every production policy is OFF.
  *
  * - GET only; Next answers 405 for every other method (none is exported).
  * - The bearer secret is checked first, in `@/lib/scheduler/cron-auth`

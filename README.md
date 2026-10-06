@@ -262,8 +262,10 @@ Actividad shows an automatic send as "Automático".
 - **No session, narrow privilege.** The scheduler is a `GET /api/cron/rsvp-reminders` route protected by
   `CRON_SECRET` (Bearer header, timing-safe) that drives five service_role-only database functions through one
   server-only module. Responses carry counts only.
-- **Not activated yet.** No cron schedule is configured in this repository and no `CRON_SECRET` is provisioned:
-  production scheduling is a separately approved deployment step. Deploying or migrating alone never sends anything.
+- **Infrastructure only, no sends yet.** `vercel.json` schedules the route hourly (`0 * * * *`) and `CRON_SECRET` is
+  provisioned in Production (LB-17A.2), but automatic sending stays operationally disabled: every reminder policy is
+  OFF, and production email delivery is blocked until `listalaboda.com` is owned and verified with the email provider.
+  Deploying or migrating alone never sends anything.
 
 See [ADR-010](docs/architecture/ADR-010-automatic-rsvp-reminder-scheduling.md).
 
@@ -299,8 +301,8 @@ Without them, everything works except sending (RSVPs are still saved; they just 
 Automatic reminders (LB-17, optional locally): with the email settings above, set `CRON_SECRET` to a random value of
 at least 32 characters (generate one yourself, e.g. `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`;
 never commit it) and call the scheduler yourself:
-`curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/rsvp-reminders`. Nothing calls it on its
-own: no cron is configured. The E2E suite uses a fake, test-only secret.
+`curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/rsvp-reminders`. Locally nothing calls it on
+its own (the `vercel.json` cron runs only on Vercel). The E2E suite uses a fake, test-only secret.
 
 Local Supabase (requires Docker): `npx supabase start`. Then copy the API URL and publishable key
 from `npx supabase status` into `.env.local`. The project is not linked to any remote Supabase project.

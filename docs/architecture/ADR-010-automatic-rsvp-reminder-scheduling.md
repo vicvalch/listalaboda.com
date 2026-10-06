@@ -5,6 +5,10 @@ deployment approval** (§24)
 Implementation: LB-17 implements this decision (migration `20261012120000_lb_automatic_rsvp_reminders`); the
 production cron entry and `CRON_SECRET` are NOT activated by it. Three clarifications made during implementation are
 marked *Implementation note* below (§9 step 2, §10.1, §10.3).
+Activation (LB-17A.2, zero-send): the hourly `vercel.json` cron entry and a Production `CRON_SECRET` are the scheduler
+infrastructure only. Automatic sending stays operationally disabled: every reminder policy is OFF (none may be enabled
+in this step), and production email delivery is blocked until the sending domain (`listalaboda.com`) is owned and
+verified with the provider.
 Related: [ADR-002 §5, §6](ADR-002-auth-and-security-boundaries.md), [ADR-004](ADR-004-invitation-delivery-recorder.md),
 [ADR-005](ADR-005-rsvp-confirmation-email.md), [ADR-006](ADR-006-recoverable-rsvp-capability.md),
 [ADR-007](ADR-007-manual-rsvp-reminder-delivery.md), [ADR-008](ADR-008-basic-activity-history.md),
@@ -533,7 +537,8 @@ memory and the email body. Activity rows follow ADR-008 §9 unchanged.
 
 1. An owner's explicit opt-in for that wedding (zero policy rows after migration; default `false`).
 2. `CRON_SECRET` provisioned **and** the cron entry deployed. The `vercel.json` cron entry ships **last**, as a
-   separately approved deployment step; until then nothing invokes the route.
+   separately approved deployment step; until then nothing invokes the route. (Shipped in LB-17A.2 as an hourly
+   entry, `0 * * * *`, with every policy still OFF and production email still blocked; see the header.)
 3. `due_at ≥ enabled_at` for never-claimed parties and the 48 h window.
 4. Per-run caps and one boundary-crossing reminder per party.
 

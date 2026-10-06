@@ -357,8 +357,10 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   (≥ 32 bytes; query strings ignored); missing configuration → nothing runs. Counts only in responses; nothing logged.
   Runner budget 45 s, ≤ 2 sends/s; the runner passes `timeoutMs: 10_000` (and its key) to the provider. Timeouts and
   idempotency keys are opt-in per `EmailSender.send` call: manual email flows pass neither.
-- NOT ACTIVATED: there is no `vercel.json` cron entry and no provisioned `CRON_SECRET`. Production activation is a
-  separately approved deployment step. A migration or a deploy alone can never send (zero policy rows, default OFF).
+- Infrastructure only (LB-17A.2): `vercel.json` runs the route hourly and `CRON_SECRET` is provisioned in Production,
+  but sending stays disabled: every policy is OFF and production email is blocked until `listalaboda.com` is owned and
+  verified. Enabling a policy in production is a separate, explicitly approved step. A migration or a deploy alone can
+  never send (zero policy rows, default OFF).
 
 ## Commands
 

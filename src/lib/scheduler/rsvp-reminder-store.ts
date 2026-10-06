@@ -24,6 +24,9 @@ import type { Database } from "@/lib/supabase/database.types";
  * this file and the delivery recorder), never logged, returned or echoed;
  * missing or wrong configuration fails closed (`null`).
  *
+ * `record` also writes the send's `email_deliveries` ledger row (LB-18.1,
+ * ADR-011) inside the same database function and transaction.
+ *
  * Capability material (hash, envelope) passes through `prepare`'s result to
  * the runner's memory only; nothing here stores, logs or caches it.
  */

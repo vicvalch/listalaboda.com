@@ -17,6 +17,7 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - `docs/architecture/ADR-009-checklist-guest-work.md` (checklist item → guest party link)
 - `docs/architecture/ADR-010-automatic-rsvp-reminder-scheduling.md` (automatic RSVP reminders; the second
   service-role module)
+- `docs/architecture/ADR-011-email-delivery-observability.md` (email delivery ledger; staged LB-18)
 
 ## Product rules
 
@@ -34,9 +35,9 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   (`src/lib/email/delivery-recorder.ts`: recording provider-accepted invitation, RSVP confirmation and RSVP
   reminder emails, and reading a party's confirmation context by its link's hash); there is no generic
   service-role client. Since LB-15 each record RPC also appends that send's activity row in the same transaction
-  (ADR-008); that is not a new privileged operation. The SECOND and only other use is the ADR-010 scheduler store
-  (`src/lib/scheduler/rsvp-reminder-store.ts`: five named operations — claim, prepare, begin, record, finish — each
-  one fixed service_role-only RPC; LB-17 below).
+  (ADR-008), and since LB-18.1 its `email_deliveries` ledger row (ADR-011); neither is a new privileged operation.
+  The SECOND and only other use is the ADR-010 scheduler store (`src/lib/scheduler/rsvp-reminder-store.ts`: five
+  named operations — claim, prepare, begin, record, finish — each one fixed service_role-only RPC; LB-17 below).
   Any other use needs its own `server-only` module plus a written justification (ADR-002 §6).
   ESLint blocks `process.env.SUPABASE_SERVICE_ROLE_KEY` everywhere else, and `process.env.CRON_SECRET` everywhere but
   `src/lib/scheduler/cron-auth.ts`.
@@ -363,6 +364,31 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   production email is blocked until `listalaboda.com` is owned and verified. Enabling a policy in production is a
   separate, explicitly approved step. A migration or a deploy alone can never send (zero policy rows, default OFF).
 
+## Email delivery ledger rules (LB-18.1, ADR-011)
+
+- LB-18.1 is the persistence foundation ONLY: no webhook route, `RESEND_WEBHOOK_SECRET`, Svix verification,
+  `email_delivery_events`, delivery status, UI, suppression, `recipient_undeliverable` or `recently_reminded` change yet.
+- `public.email_deliveries` = one immutable identity row per provider-accepted email that was successfully recorded:
+  `wedding_id`, `guest_invitation_id` (same-wedding composite FK, `ON DELETE CASCADE`), `kind`, `provider_message_id`
+  (`UNIQUE`; the id `EmailSender.send` returned), `recipient` (the accepted address, `*_sent_to` CHECK), `accepted_at`
+  (database clock = the matching `*_sent_at`).
+- `email_delivery_kind` is closed and fixed by the record function: `guest_invitation`, `rsvp_confirmation`,
+  `rsvp_reminder_manual` (`record_rsvp_reminder_email`), `rsvp_reminder_automatic`
+  (`record_automatic_rsvp_reminder_email`). Never infer a kind.
+- Written ONLY inside the four record functions, in their transaction, via `private.record_email_delivery` (no client
+  grant). Never a second application write. A failed record (incl. a reused provider id → `email_delivery_not_recorded`)
+  leaves no row; `sent_but_unrecorded`/`sent_unrecorded` never have one.
+- Identity is immutable for every role (guard trigger); rows are deleted only by the party/wedding cascade. Future
+  delivery status columns (LB-18.2) will be the only updatable ones.
+- Members SELECT `id, wedding_id, guest_invitation_id, kind, recipient, accepted_at` (member RLS); no client reads
+  `provider_message_id`; anon nothing; no client writes. The latest-send `*_sent_at/_sent_to/_provider_id` columns are
+  unchanged business metadata. No backfill: pre-LB-18.1 sends have no row (delivery status unavailable).
+- Correlation is local only: provider email id → `email_deliveries` → party → Wedding; never trust provider-supplied
+  tenant data. Open tracking deferred; click tracking prohibited (it would rewrite `/rsvp/<token>` URLs).
+- Approved for later slices (ADR-011 §8–§10): delivery status never rewrites LB-17 execution state; bounced/suppressed/
+  complained blocks email to the SAME current address (editing it re-enables; link sharing always allowed; no override);
+  LB-18.4 adds `recipient_undeliverable` and scopes `recently_reminded` to the current address.
+
 ## Commands
 
 - `npm run verify`: lint, typecheck, unit tests, build (same as CI)
@@ -397,4 +423,6 @@ zero or one same-wedding party per item (composite FK, `ON DELETE SET NULL`), "R
 checklist and "Pendientes relacionados" on the party card (ADR-009; no status automation, no scheduler yet). LB-17 adds
 automatic RSVP reminders: an owner-enabled policy, one automatic reminder per unanswered party through a claim/lease
 state machine with a stable provider idempotency key, a second narrow service-role module and a `CRON_SECRET`-protected
-route (ADR-010; production cron NOT activated: a separately approved step). Don't implement ahead of the current prompt.
+route (ADR-010; production cron NOT activated: a separately approved step). LB-18 closes the email delivery lifecycle in
+slices (ADR-011); LB-18.1 adds only the `email_deliveries` ledger, one immutable row per recorded send written inside the
+four record functions (no webhooks, statuses, UI or suppression yet). Don't implement ahead of the current prompt.

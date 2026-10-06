@@ -117,6 +117,9 @@ Applies to two distinct token kinds:
   [ADR-007](ADR-007-manual-rsvp-reminder-delivery.md) (recording provider-accepted manual RSVP reminders;
   LB-14). All are in the same single server-only module. Since LB-15 ([ADR-008](ADR-008-basic-activity-history.md))
   each record also appends its activity-history row in the same transaction; no operation was added.
+- *Later note (LB-18.1):* [ADR-011](ADR-011-email-delivery-observability.md) makes each of the four record functions
+  (including ADR-010's automatic one) also insert one `email_deliveries` ledger row in the same transaction. No
+  service-role module, operation or RPC was added, and the ledger has no other writer.
 - *Later note (LB-17):* [ADR-010](ADR-010-automatic-rsvp-reminder-scheduling.md) accepts a **second** service-role
   module, `src/lib/scheduler/rsvp-reminder-store.ts`, for the automatic RSVP reminder scheduler, which runs with no
   session. It exposes exactly five named operations (claim, prepare, begin, record, finish), each one fixed

@@ -21,6 +21,8 @@ const TABLES = [
   // LB-17 (ADR-010)
   "wedding_rsvp_reminder_policies",
   "automatic_rsvp_reminders",
+  // LB-18.1 (ADR-011)
+  "email_deliveries",
 ];
 
 /**
@@ -125,12 +127,14 @@ describe("schema guarantees", () => {
       "private.enforce_guest_invitation_capability_secret",
       "private.enforce_guest_invitation_has_guest",
       "private.enforce_wedding_has_owner",
+      "private.guard_email_deliveries",
       "private.guard_guest_invitation_link",
       "private.guard_membership_invite_state",
       "private.guard_wedding_activity",
       "private.guest_invitation_expires_at",
       "private.has_wedding_role",
       "private.is_wedding_member",
+      "private.record_email_delivery",
       "private.record_guest_invitation_contact_email_change",
       "private.require_wedding_site_owner",
       "private.set_updated_at",

@@ -9,7 +9,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { TEST_RSVP_CAPABILITY_KEY } from "@/test/fixtures/rsvp-capability-key";
 
 import type { TestUserKey } from "./context";
-import { addMember, createWedding as createFixtureWedding, ctx, sql, users } from "./support";
+import { addMember, createWedding as createFixtureWedding, ctx, emailDeliveriesFor, sql, users } from "./support";
 
 vi.mock("server-only", () => ({}));
 /** LB-13: the server's (fake, test-only) link-encryption key. */
@@ -191,6 +191,10 @@ describe("sendGuestInvitationEmail (fresh link, any member)", () => {
     // Recorded once, by the privileged recorder, with the provider's own id.
     expect(counting.calls).toEqual([stored.provider_id]);
     expect(stored.sent_at).not.toBeNull();
+    // LB-18.1 (ADR-011): and one ledger row for that send, written by the same record.
+    expect((await emailDeliveriesFor(created.guestInvitationId)).map((d) => [d.kind, d.provider_message_id, d.recipient])).toEqual([
+      ["guest_invitation", stored.provider_id, "fresca@example.com"],
+    ]);
 
     const party = await getGuestPartyByToken(anonClient(), rsvpToken(email));
     expect(party.ok).toBe(true);
@@ -296,6 +300,7 @@ describe("sendGuestInvitationEmail (fresh link, any member)", () => {
     ).toEqual({ outcome: "sent_but_unrecorded", recipient: "sinregistro@example.com" });
     expect(sender.sent).toHaveLength(1);
     expect((await metadata(created.guestInvitationId)).sent_at).toBeNull();
+    expect(await emailDeliveriesFor(created.guestInvitationId)).toEqual([]);
   });
 
   it("links the public website only while it is published", async () => {

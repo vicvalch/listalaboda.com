@@ -117,6 +117,13 @@ Applies to two distinct token kinds:
   [ADR-007](ADR-007-manual-rsvp-reminder-delivery.md) (recording provider-accepted manual RSVP reminders;
   LB-14). All are in the same single server-only module. Since LB-15 ([ADR-008](ADR-008-basic-activity-history.md))
   each record also appends its activity-history row in the same transaction; no operation was added.
+- *Later note (LB-17):* [ADR-010](ADR-010-automatic-rsvp-reminder-scheduling.md) accepts a **second** service-role
+  module, `src/lib/scheduler/rsvp-reminder-store.ts`, for the automatic RSVP reminder scheduler, which runs with no
+  session. It exposes exactly five named operations (claim, prepare, begin, record, finish), each one fixed
+  service_role-only RPC, and reads a claimed party's capability envelope only while it is eligible. No generic
+  client. ESLint allows `SUPABASE_SERVICE_ROLE_KEY` only in that file and `delivery-recorder.ts`. Its route is
+  authenticated by `CRON_SECRET` (read only in `src/lib/scheduler/cron-auth.ts`); the production cron entry is a
+  separately approved deployment step.
 
 ### 7. Public / private boundary
 

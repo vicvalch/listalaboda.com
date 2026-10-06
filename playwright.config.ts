@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { E2E_CRON_SECRET } from "./e2e/support/cron";
 import { assertLocal, readLocalSupabase } from "./e2e/support/local-supabase";
 import { OUTBOX_DIR } from "./e2e/support/outbox";
 import { TEST_RSVP_CAPABILITY_KEY_ENV } from "./src/test/fixtures/rsvp-capability-key";
@@ -42,6 +43,12 @@ function capabilityEnv() {
   return { RSVP_CAPABILITY_ENCRYPTION_KEY: TEST_RSVP_CAPABILITY_KEY_ENV };
 }
 
+// LB-17: a FAKE, test-only secret so the journeys can call the scheduler
+// route themselves. No cron is configured anywhere; nothing calls it on its own.
+function cronEnv() {
+  return { CRON_SECRET: E2E_CRON_SECRET };
+}
+
 export default defineConfig({
   testDir: "./e2e",
   globalSetup: "./e2e/global-setup.ts",
@@ -59,6 +66,6 @@ export default defineConfig({
     url: baseURL,
     reuseExistingServer: false,
     timeout: 300_000,
-    env: { ...supabaseEnv(), ...emailEnv(), ...capabilityEnv() },
+    env: { ...supabaseEnv(), ...emailEnv(), ...capabilityEnv(), ...cronEnv() },
   },
 });

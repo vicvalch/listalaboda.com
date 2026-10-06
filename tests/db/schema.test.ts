@@ -18,6 +18,9 @@ const TABLES = [
   "rsvps",
   "content_sections",
   "wedding_publications",
+  // LB-17 (ADR-010)
+  "wedding_rsvp_reminder_policies",
+  "automatic_rsvp_reminders",
 ];
 
 /**
@@ -107,12 +110,18 @@ describe("schema guarantees", () => {
                                 'record_guest_invitation_email', 'get_rsvp_confirmation_email_context',
                                 'record_rsvp_confirmation_email', 'rotate_guest_invitation_link',
                                 'get_guest_invitation_recovery_envelope', 'record_rsvp_reminder_email',
-                                'revoke_guest_invitation_link', 'get_wedding_activity'))
+                                'revoke_guest_invitation_link', 'get_wedding_activity',
+                                'set_rsvp_reminder_policy', 'claim_automatic_rsvp_reminders',
+                                'prepare_automatic_rsvp_reminder', 'begin_automatic_rsvp_reminder_send',
+                                'record_automatic_rsvp_reminder_email', 'finish_automatic_rsvp_reminder'))
        order by 1`,
     );
 
     expect(rows.map((r) => r.name)).toEqual([
       "private.assign_checklist_item_sort_order",
+      "private.automatic_rsvp_reminder_due_at",
+      "private.automatic_rsvp_reminder_ineligibility",
+      "private.automatic_rsvp_reminder_party_due_at",
       "private.enforce_guest_invitation_capability_secret",
       "private.enforce_guest_invitation_has_guest",
       "private.enforce_wedding_has_owner",
@@ -128,8 +137,11 @@ describe("schema guarantees", () => {
       "private.stamp_checklist_item_completion",
       "private.validate_wedding_time_zone",
       "public.accept_membership_invite",
+      "public.begin_automatic_rsvp_reminder_send",
+      "public.claim_automatic_rsvp_reminders",
       "public.create_guest_invitation",
       "public.create_wedding",
+      "public.finish_automatic_rsvp_reminder",
       "public.get_guest_invitation",
       "public.get_guest_invitation_recovery_envelope",
       "public.get_guest_invitation_site_slug",
@@ -138,13 +150,16 @@ describe("schema guarantees", () => {
       "public.get_wedding_activity",
       "public.guest_invitation_link_is_current",
       "public.initialize_wedding_checklist",
+      "public.prepare_automatic_rsvp_reminder",
       "public.publish_wedding_site",
+      "public.record_automatic_rsvp_reminder_email",
       "public.record_guest_invitation_email",
       "public.record_rsvp_confirmation_email",
       "public.record_rsvp_reminder_email",
       "public.revoke_guest_invitation_link",
       "public.rotate_guest_invitation_link",
       "public.save_wedding_site_section",
+      "public.set_rsvp_reminder_policy",
       "public.set_wedding_display_name",
       "public.set_wedding_site_slug",
       "public.submit_guest_rsvp",
@@ -174,6 +189,8 @@ describe("schema guarantees", () => {
       "public.revoke_guest_invitation_link",
       "public.rotate_guest_invitation_link",
       "public.save_wedding_site_section",
+      // LB-17: owner-checked inside; the five scheduler functions are NOT here.
+      "public.set_rsvp_reminder_policy",
       "public.set_wedding_display_name",
       "public.set_wedding_site_slug",
       "public.submit_guest_rsvp",
@@ -205,6 +222,18 @@ describe("schema guarantees", () => {
     // writes the history row; the history read runs as the caller (RLS).
     expect(definer).toContain("public.revoke_guest_invitation_link");
     expect(definer).not.toContain("public.get_wedding_activity");
+    // LB-17 (ADR-010): the policy writer checks the owner role itself; the
+    // five scheduler functions are service_role-only state transitions.
+    for (const fn of [
+      "public.set_rsvp_reminder_policy",
+      "public.claim_automatic_rsvp_reminders",
+      "public.prepare_automatic_rsvp_reminder",
+      "public.begin_automatic_rsvp_reminder_send",
+      "public.record_automatic_rsvp_reminder_email",
+      "public.finish_automatic_rsvp_reminder",
+    ]) {
+      expect(definer).toContain(fn);
+    }
   });
 
   it("no function takes a caller-supplied user id", async () => {
@@ -222,11 +251,18 @@ describe("schema guarantees", () => {
                            'get_guest_invitation_site_slug', 'guest_invitation_link_is_current',
                            'record_guest_invitation_email', 'rotate_guest_invitation_link',
                            'get_guest_invitation_recovery_envelope', 'record_rsvp_reminder_email',
-                           'revoke_guest_invitation_link', 'get_wedding_activity')
+                           'revoke_guest_invitation_link', 'get_wedding_activity',
+                           'set_rsvp_reminder_policy', 'record_automatic_rsvp_reminder_email',
+                           'begin_automatic_rsvp_reminder_send')
        order by 1`,
     );
     expect(rows).toEqual([
       { name: "accept_membership_invite", args: "invite_token_hash text" },
+      // LB-17 (ADR-010 §2): the scheduler is the system; it never names a user.
+      {
+        name: "begin_automatic_rsvp_reminder_send",
+        args: "target_occurrence_id uuid, occurrence_claim_token uuid, expected_token_hash text, expected_recipient text",
+      },
       {
         name: "create_guest_invitation",
         args: "target_wedding_id uuid, party_label text, invitation_token_hash text, invitation_token_ciphertext text, guest_names text[], party_contact_email text",
@@ -251,6 +287,10 @@ describe("schema guarantees", () => {
       { name: "initialize_wedding_checklist", args: "target_wedding_id uuid" },
       { name: "is_wedding_member", args: "target_wedding_id uuid" },
       { name: "publish_wedding_site", args: "target_wedding_id uuid" },
+      {
+        name: "record_automatic_rsvp_reminder_email",
+        args: "target_occurrence_id uuid, occurrence_claim_token uuid, invitation_token_hash text, recipient text, provider_message_id text",
+      },
       // LB-15 (ADR-008): the ONE exception — the two service_role-only
       // recorders take the acting member for ATTRIBUTION (activity history),
       // never authority. Only the server can call them, it passes its own
@@ -271,6 +311,10 @@ describe("schema guarantees", () => {
       {
         name: "save_wedding_site_section",
         args: "target_wedding_id uuid, section_kind content_section_kind, section_title text, section_body text, section_visible boolean",
+      },
+      {
+        name: "set_rsvp_reminder_policy",
+        args: "target_wedding_id uuid, reminders_enabled boolean, reminder_days_before integer",
       },
       {
         name: "set_wedding_display_name",
@@ -427,10 +471,18 @@ describe("schema guarantees", () => {
        order by 1`,
     );
     expect(rows.map((r) => r.column_name)).toEqual([
+      // LB-17: a worker's lease id (a random uuid, never a capability), not
+      // readable by clients.
+      "automatic_rsvp_reminders.claim_token",
       "guest_invitations.token_hash",
       "guest_invitations.token_issued_at",
       "membership_invites.token_hash",
     ]);
+    const [lease] = await sql<{ data_type: string }>(
+      `select data_type from information_schema.columns
+       where table_schema = 'public' and table_name = 'automatic_rsvp_reminders' and column_name = 'claim_token'`,
+    );
+    expect(lease?.data_type).toBe("uuid");
   });
 
   it("only service_role can execute record_guest_invitation_email (ADR-004)", async () => {

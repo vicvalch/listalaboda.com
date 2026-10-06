@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   activityActorLabel,
   activityActorLine,
+  activityAttribution,
   activityEventLabel,
   activityPartyLabel,
   type ActivityEventType,
@@ -144,5 +145,24 @@ describe("listWeddingActivity", () => {
       typeof listWeddingActivity
     >[0];
     expect(await listWeddingActivity(throwing, access)).toBeNull();
+  });
+});
+
+describe("activityAttribution (LB-17)", () => {
+  const members = labelMembers([member("m-1", "owner", { displayName: "Ana", isCurrentUser: false })]);
+
+  it("an automatic reminder (system actor) reads 'Automático', never a person", () => {
+    expect(activityAttribution("rsvp_reminder_email_sent", "system", null, members)).toBe("Automático");
+    expect(activityAttribution("rsvp_reminder_email_sent", "system", "m-1", members)).toBe("Automático");
+  });
+
+  it("a manual reminder keeps its member attribution; other system events stay 'el sistema'", () => {
+    expect(activityAttribution("rsvp_reminder_email_sent", "member", "m-1", members)).toBe("Por Ana");
+    expect(activityAttribution("guest_invitation_contact_email_changed", "system", null, members)).toBe(
+      "Por el sistema",
+    );
+    expect(activityAttribution("guest_rsvp_submitted", "guest_capability", null, members)).toBe(
+      "Por el grupo, con su enlace personal",
+    );
   });
 });

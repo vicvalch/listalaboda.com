@@ -134,6 +134,18 @@ export type GuestListParty = Readonly<{
    * Id, title and status only: navigation back to the list, not a copy of it.
    */
   relatedChecklistItems: readonly RelatedChecklistItem[];
+  /**
+   * LB-17: the party's automatic reminder occurrence, if one was ever claimed
+   * (state, closed reason and times only; never claim tokens or worker data).
+   */
+  automaticReminder: AutomaticReminderOccurrence | null;
+}>;
+
+export type AutomaticReminderOccurrence = Readonly<{
+  state: Database["public"]["Enums"]["automatic_rsvp_reminder_state"];
+  outcomeReason: Database["public"]["Enums"]["automatic_rsvp_reminder_outcome_reason"] | null;
+  dueAt: string;
+  sentAt: string | null;
 }>;
 
 /**
@@ -152,7 +164,7 @@ export async function listGuestParties(
     const { data, error } = await supabase
       .from("guest_invitations")
       .select(
-        "id, label, token_issued_at, revoked_at, contact_email, invitation_email_sent_at, invitation_email_sent_to, rsvp_confirmation_email_sent_at, rsvp_confirmation_email_sent_to, rsvp_reminder_email_sent_at, rsvp_reminder_email_sent_to, created_at, guests(id, name, created_at, rsvps(attending, dietary_note)), checklist_items(id, title, status, sort_order, created_at)",
+        "id, label, token_issued_at, revoked_at, contact_email, invitation_email_sent_at, invitation_email_sent_to, rsvp_confirmation_email_sent_at, rsvp_confirmation_email_sent_to, rsvp_reminder_email_sent_at, rsvp_reminder_email_sent_to, created_at, guests(id, name, created_at, rsvps(attending, dietary_note)), checklist_items(id, title, status, sort_order, created_at), automatic_rsvp_reminders(state, outcome_reason, due_at, sent_at)",
       )
       .eq("wedding_id", access.weddingId)
       .order("created_at", { ascending: true })
@@ -197,6 +209,18 @@ export async function listGuestParties(
             (a.created_at === b.created_at ? (a.id < b.id ? -1 : 1) : a.created_at < b.created_at ? -1 : 1),
         )
         .map((item) => ({ id: item.id, title: item.title, status: item.status })),
+      // At most one (UNIQUE guest_invitation_id).
+      automaticReminder: (() => {
+        const occurrence = party.automatic_rsvp_reminders[0];
+        return occurrence
+          ? {
+              state: occurrence.state,
+              outcomeReason: occurrence.outcome_reason,
+              dueAt: occurrence.due_at,
+              sentAt: occurrence.sent_at,
+            }
+          : null;
+      })(),
     }));
   } catch {
     return null;

@@ -15,6 +15,8 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - `docs/architecture/ADR-006-recoverable-rsvp-capability.md` (recoverable RSVP link encryption)
 - `docs/architecture/ADR-008-basic-activity-history.md` (append-only wedding activity history)
 - `docs/architecture/ADR-009-checklist-guest-work.md` (checklist item → guest party link)
+- `docs/architecture/ADR-010-automatic-rsvp-reminder-scheduling.md` (automatic RSVP reminders; the second
+  service-role module)
 
 ## Product rules
 
@@ -32,9 +34,12 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   (`src/lib/email/delivery-recorder.ts`: recording provider-accepted invitation, RSVP confirmation and RSVP
   reminder emails, and reading a party's confirmation context by its link's hash); there is no generic
   service-role client. Since LB-15 each record RPC also appends that send's activity row in the same transaction
-  (ADR-008); that is not a new privileged operation.
+  (ADR-008); that is not a new privileged operation. The SECOND and only other use is the ADR-010 scheduler store
+  (`src/lib/scheduler/rsvp-reminder-store.ts`: five named operations — claim, prepare, begin, record, finish — each
+  one fixed service_role-only RPC; LB-17 below).
   Any other use needs its own `server-only` module plus a written justification (ADR-002 §6).
-  ESLint blocks `process.env.SUPABASE_SERVICE_ROLE_KEY` everywhere else.
+  ESLint blocks `process.env.SUPABASE_SERVICE_ROLE_KEY` everywhere else, and `process.env.CRON_SECRET` everywhere but
+  `src/lib/scheduler/cron-auth.ts`.
 - Browser code reads env only through `src/lib/env/public.ts` (`NEXT_PUBLIC_*` only).
 - Modules that touch cookies or secrets start with `import "server-only"`.
 - Migrations live in `supabase/migrations/`, named `YYYYMMDDHHMMSS_lb_<slug>.sql`; applied
@@ -213,7 +218,7 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - The guest page shows RSVP success first and at most one secondary sentence about the email (`?email=sent|failed`,
   fixed words); it never reveals the address. Organizers see the last confirmation's date and recipient,
   distinct from the invitation status and from the current contact email.
-- Still deferred: automatic/scheduled reminders, cron/queues/jobs, provider webhooks and activity history.
+- Still deferred: provider webhooks. (Activity history: LB-15; automatic reminders: LB-17 below.)
 
 ## Recoverable RSVP capability rules (LB-13, ADR-006)
 
@@ -255,11 +260,13 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   the LB-12 confirmation stays token-free. Never answers, notes, members, ids, hashes or envelopes in either.
 - Reminder metadata (`rsvp_reminder_email_sent_at/_sent_to/_provider_id`, latest only, all-or-none) is separate from
   `invitation_email_*` and `rsvp_confirmation_email_*`, written only by service_role-only `record_rsvp_reminder_email`
-  (current usable hash + current contact email) via the recorder's `recordRsvpReminder`.
+  (current usable hash + current contact email) via the recorder's `recordRsvpReminder` — and, since LB-17, by
+  `record_automatic_rsvp_reminder_email` (same rules) for automatic reminders: the latest reminder of either channel.
 - WhatsApp is MANUAL COPY ONLY: plain text (`@/lib/guests/rsvp-reminder-message`) returned by the action, shown and
   copied by the organizer. No API (WhatsApp Business/Meta/Twilio/SMS), no phone numbers, no `wa.me` share URL (token
   in a query string), no storage and no delivery metadata; the UI never says "Enviar WhatsApp" or "enviado".
-- No scheduler, cron, queue, recurring or automatic reminders (activity history: LB-15 below).
+- Manual reminders stay as they are; one owner-enabled automatic reminder per party is LB-17 below (no recurring
+  reminders, generic queues or messaging APIs).
 
 ## Wedding activity history rules (LB-15, ADR-008)
 
@@ -269,7 +276,8 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   Adding an event is a migration plus an exhaustive label in `@/lib/activity/presentation` (`es.activity`); copy is
   never stored. No JSON/free-text payload, no snapshots.
 - Write the row INSIDE the database function that performs the fact, in the same transaction (create, rotate,
-  `revoke_guest_invitation_link`, the contact-email trigger, `submit_guest_rsvp`, the three recorder RPCs). Never from
+  `revoke_guest_invitation_link`, the contact-email trigger, `submit_guest_rsvp`, the three recorder RPCs, and
+  since LB-17 `record_automatic_rsvp_reminder_email` with actor `system`). Never from
   the app, React or a separate call; there is no `appendActivity`/generic writer and no client-executable function
   takes an event type.
 - No client role may INSERT/UPDATE/DELETE it (members SELECT via RLS); a guard trigger refuses edits and deletes for
@@ -290,8 +298,8 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   returns the party's CURRENT label and the actor's membership id only.
 - Deletion: wedding → history cascades; party → rows stay with `guest_invitation_id` null ("Grupo eliminado");
   account → `actor_user_id` null. No fabricated backfill: history begins at LB-15.
-- Activity can answer "was a reminder recorded for this party?" but it is not a scheduler, dedupe key or lock;
-  automatic reminders remain deferred.
+- Activity can answer "was a reminder recorded for this party?" but it is not a scheduler, dedupe key or lock
+  (LB-17's scheduler has its own occurrence table for that).
 
 ## Checklist ↔ guest work rules (LB-16, ADR-009)
 
@@ -312,7 +320,45 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   A link whose party is gone renders as unlinked, never as a broken link.
 - Routes come from `@/lib/checklist/guest-work` (ids + app paths + `#item-`/`#party-` anchors); no query strings.
   Reads stay batched: party options in one query, related items nested in `listGuestParties`' single select.
-- No activity events for link/unlink. Scheduling (automatic reminders, cron, queues, jobs) remains deferred.
+- No activity events for link/unlink. Guest events never complete or create checklist items (LB-17 doesn't either).
+
+## Automatic RSVP reminder rules (LB-17, ADR-010)
+
+- ONE automatic reminder email per unanswered party, `days_before` ∈ {14, 21, 30} (default 21) days before the wedding
+  at 10:00 in `weddings.time_zone`, sendable for 48 h. Due times are computed just in time from the CURRENT policy, date
+  and zone (`private.automatic_rsvp_reminder_due_at`; UI mirror `@/lib/scheduler/timing`); never a stored calendar.
+  No date or no zone → nothing is due. Never server, browser or UTC time.
+- Authority = an owner's opt-in + the trusted deployment scheduler, never a member session or a fabricated member.
+  `public.wedding_rsvp_reminder_policies`: no row = OFF; written only by the owner-only `set_rsvp_reminder_policy`
+  (service `@/lib/scheduler/policy` + database role check); enabling needs date + zone; off → on stamps `enabled_at`;
+  no never-claimed party is sent a reminder due before `enabled_at`. Collaborators read the status only.
+- `public.automatic_rsvp_reminders`: one row per party (`UNIQUE guest_invitation_id`, same-wedding composite FK), closed
+  `state` and `outcome_reason` enums tied together by CHECKs. A row existing ≠ the opportunity consumed: it is consumed
+  once `attempt_count ≥ 1`. It never stores tokens, hashes, envelopes, recipients, provider ids, bodies or answers.
+  Clients only SELECT display columns (never `claim_token`); every write is a service_role-only function.
+- Protocol (`@/lib/scheduler/rsvp-reminder-runner`): claim (sweep → due-time skips → SKIP LOCKED claims under caps
+  50/run, 25/wedding, fresh `claim_token`, 10-min lease) → prepare (current truth; returns the CURRENT capability and
+  render context; no attempt) → decrypt/verify/render in the app (no lock open) → begin (locks the party, re-checks,
+  claimed → sending, `attempt_count + 1`: THE provider boundary) → ONE provider call with the stable key
+  `lb-auto-rsvp-reminder:<occurrence id>` → record (metadata + `system` activity + sent, atomically) or finish.
+  No database lock is ever held across the provider call.
+- `sending` = an email MAY have gone out. Replays only with the same key, ≤ 3 attempts, before
+  `first_attempt_at + 23 h` (Resend keeps keys 24 h). Same payload → the provider suppresses the duplicate; a changed
+  payload → `unknown (idempotency_conflict)`. Never snapshot a body, recipient or capability to force a match.
+  `sent_unrecorded` and `unknown` ("cannot prove no email was sent") are terminal: never resent automatically.
+- Only `skipped` rows (attempt 0) are reactivated, and only for `no_contact_email`, `link_unrecoverable`,
+  `link_unavailable`, `policy_disabled`, `out_of_window`, when every current check passes. `answered` and
+  `recently_reminded` (a reminder or invitation email recorded within 7 days) are final. Manual reminders are never
+  blocked by automation.
+- `rsvp_reminder_email_*` = the latest reminder email of either channel. Activity: the existing
+  `rsvp_reminder_email_sent` with actor `system`, labelled "Automático"; no rows for claims, skips or failures.
+- Route `GET /api/cron/rsvp-reminders` (GET only, `force-dynamic`, `no-store`, `maxDuration = 60`, excluded from the
+  session proxy): `Authorization: Bearer <CRON_SECRET>` checked first, timing-safe, in `@/lib/scheduler/cron-auth`
+  (≥ 32 bytes; query strings ignored); missing configuration → nothing runs. Counts only in responses; nothing logged.
+  Runner budget 45 s, ≤ 2 sends/s; the runner passes `timeoutMs: 10_000` (and its key) to the provider. Timeouts and
+  idempotency keys are opt-in per `EmailSender.send` call: manual email flows pass neither.
+- NOT ACTIVATED: there is no `vercel.json` cron entry and no provisioned `CRON_SECRET`. Production activation is a
+  separately approved deployment step. A migration or a deploy alone can never send (zero policy rows, default OFF).
 
 ## Commands
 
@@ -345,5 +391,7 @@ no scheduling or activity history yet). LB-15 adds the basic wedding activity hi
 "Actividad" page of GuestInvitation/RSVP facts, each written in the same transaction as the fact (owner-only revoke RPC,
 member-attributed recorder events; ADR-008; no backfill, no scheduler yet). LB-16 links checklist items to guest work:
 zero or one same-wedding party per item (composite FK, `ON DELETE SET NULL`), "Relacionado con / Ver grupo" on the
-checklist and "Pendientes relacionados" on the party card (ADR-009; no status automation, no scheduler yet). Don't
-implement ahead of the current prompt.
+checklist and "Pendientes relacionados" on the party card (ADR-009; no status automation, no scheduler yet). LB-17 adds
+automatic RSVP reminders: an owner-enabled policy, one automatic reminder per unanswered party through a claim/lease
+state machine with a stable provider idempotency key, a second narrow service-role module and a `CRON_SECRET`-protected
+route (ADR-010; production cron NOT activated: a separately approved step). Don't implement ahead of the current prompt.

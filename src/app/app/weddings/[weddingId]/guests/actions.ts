@@ -37,6 +37,7 @@ import {
   getRsvpCapabilityEncryptionSettings,
   type RsvpCapabilityEncryptionSettings,
 } from "@/lib/security/rsvp-capability-encryption";
+import { setAutomaticReminderPolicy } from "@/lib/scheduler/policy";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
@@ -629,5 +630,51 @@ export async function prepareReminderMessageAction(
       return { status: "failed", message: copy.linkNotConfigured, nonce };
     default:
       return { status: "failed", message: await handleFailure(weddingId, result), nonce };
+  }
+}
+
+// ------------------------------------------------- automatic reminders
+
+export type AutomaticReminderPolicyState =
+  | Readonly<{ ok: true; message: string; nonce: string }>
+  | Readonly<{ ok: false; message: string; nonce: string }>
+  | null;
+
+/**
+ * LB-17 (ADR-010 §5): turns the wedding's automatic RSVP reminder on or off
+ * and picks 14, 21 or 30 days. Owners only: the service checks the role
+ * first and the database function checks it again; a collaborator posting
+ * this directly changes nothing. The form carries the wedding id (a lookup
+ * key), a checkbox and the chosen days; nothing else.
+ */
+export async function saveAutomaticReminderPolicyAction(
+  _prev: AutomaticReminderPolicyState,
+  formData: FormData,
+): Promise<AutomaticReminderPolicyState> {
+  const weddingId = formText(formData, "weddingId");
+  await requireUser(guestsPath(weddingId));
+  const copy = getMessages().guests.automaticReminders;
+  const nonce = crypto.randomUUID();
+
+  const result = await setAutomaticReminderPolicy(await createSupabaseServerClient(), weddingId, {
+    enabled: formText(formData, "enabled") === "on",
+    daysBefore: Number(formText(formData, "daysBefore")),
+  });
+  if (result.ok) {
+    revalidatePath(guestsPath(weddingId));
+    return { ok: true, message: copy.saved, nonce };
+  }
+  switch (result.reason) {
+    case "forbidden":
+      return { ok: false, message: copy.errors.forbidden, nonce };
+    case "needs_date":
+      return { ok: false, message: copy.errors.needsDate, nonce };
+    case "invalid":
+      return { ok: false, message: copy.errors.invalid, nonce };
+    case "unauthenticated":
+    case "not_found":
+      return { ok: false, message: await handleFailure(weddingId, result), nonce };
+    default:
+      return { ok: false, message: copy.errors.failed, nonce };
   }
 }

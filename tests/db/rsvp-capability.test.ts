@@ -266,12 +266,26 @@ describe("capability secret privacy", () => {
        order by 1`,
     );
     expect(writers).toEqual([
+      // LB-17 (ADR-010): the scheduler's eligibility check (E8: an envelope
+      // bound to the current hash exists). Reads only; no client may call it.
+      { name: "private.automatic_rsvp_reminder_ineligibility", definer: false, anon: false, authenticated: false },
       // Trigger-only (no client may call it); it reads, never writes.
       { name: "private.enforce_guest_invitation_capability_secret", definer: true, anon: false, authenticated: false },
       { name: "public.create_guest_invitation", definer: true, anon: false, authenticated: true },
       { name: "public.get_guest_invitation_recovery_envelope", definer: true, anon: false, authenticated: true },
+      // LB-17 (ADR-010 §21): service_role-only; returns one claimed, eligible
+      // party's current envelope to the scheduler. Reads only.
+      { name: "public.prepare_automatic_rsvp_reminder", definer: true, anon: false, authenticated: false },
       { name: "public.rotate_guest_invitation_link", definer: true, anon: false, authenticated: true },
     ]);
+    // The LB-17 readers never write the envelopes.
+    const lb17 = await sql<{ src: string }>(
+      `select p.prosrc as src from pg_proc p
+       where p.proname in ('automatic_rsvp_reminder_ineligibility', 'prepare_automatic_rsvp_reminder')`,
+    );
+    for (const { src } of lb17) {
+      expect(src).not.toMatch(/(insert\s+into|update|delete\s+from)\s+private\.guest_invitation_capability_secrets/i);
+    }
     expect(await sql("select 1 from pg_proc where proname = 'store_guest_invitation_capability_secret'")).toEqual([]);
     // In `private`, clients can execute only the two RLS helpers.
     const privateCallable = await sql<{ name: string }>(

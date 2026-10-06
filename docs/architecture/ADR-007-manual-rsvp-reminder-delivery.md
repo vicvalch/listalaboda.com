@@ -6,6 +6,11 @@ Related: [ADR-002 §5, §6](ADR-002-auth-and-security-boundaries.md), [ADR-004](
 > Later note (LB-15): [ADR-008](ADR-008-basic-activity-history.md): `record_rsvp_reminder_email` also appends
 > `rsvp_reminder_email_sent` in the same transaction and takes the acting member (`acting_user_id`, from the action's
 > own session check, re-checked as a member) for attribution only. §7's "activity history" is no longer deferred.
+> LB-17: [ADR-010](ADR-010-automatic-rsvp-reminder-scheduling.md) adds ONE automatic reminder per unanswered party,
+> owner opt-in, with the same capability rules (current link recovered, never rotated; current contact email). Its
+> authority is the owner's policy plus a trusted deployment scheduler, never a member session; its sends are recorded
+> by `record_automatic_rsvp_reminder_email` with actor `system`. `rsvp_reminder_email_*` (§4) now means the latest
+> reminder email of either channel. Manual reminders are unchanged and never blocked by automation.
 
 ## Context
 
@@ -131,7 +136,10 @@ The organizer copies it and sends it themselves.
 ### 7. Still deferred
 
 Automatic or scheduled reminders, reminder policies, background workers, queues, retries, messaging APIs,
-phone numbers, delivery webhooks and activity history are deferred. A future scheduler must reuse this same
+phone numbers, delivery webhooks and activity history are deferred. *(Later: activity history is LB-15/ADR-008;
+one owner-enabled automatic reminder per party, its policy, claims, leases and bounded idempotent retries are
+LB-17/[ADR-010](ADR-010-automatic-rsvp-reminder-scheduling.md). Messaging APIs, phone numbers, delivery webhooks,
+recurring reminders and generic queues remain deferred.)* A future scheduler must reuse this same
 order and capability rule (recover, never rotate). It will also need its own decision on authority, because
 nobody's session is present at 3 a.m.
 

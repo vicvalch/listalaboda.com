@@ -244,8 +244,31 @@ status), each linking back to the item on the checklist.
 
 See [ADR-009](docs/architecture/ADR-009-checklist-guest-work.md).
 
-Still deferred: automatic or scheduled reminders (no cron, queue, jobs, policies or retries), and messaging APIs
-and phone numbers.
+**Automatic RSVP reminders (LB-17).** An owner can turn on **one automatic reminder email** per party that hasn't
+answered yet, 14, 21 or 30 days before the wedding (default 21) at 10:00 in the wedding's time zone. It's off by
+default, needs the wedding's date and time zone, and shows the send date before saving; collaborators see the status
+but can't change it. Each party card says "Recordatorio automático: programado para … / enviado el … / no se enviará: …"
+(already answered, no contact email, link not recoverable or not active, emailed in the last 7 days, date passed), and
+Actividad shows an automatic send as "Automático".
+
+- **Same capability rules as manual reminders.** The email carries the party's CURRENT link (recovered, never rotated)
+  to its CURRENT contact email, all re-checked right before the send; a party that answers in the meantime gets nothing.
+- **At most one per party, never twice on purpose.** A claim/lease state machine in the database
+  (`automatic_rsvp_reminders`, one row per party) plus a stable provider idempotency key per occurrence. A send that may
+  have gone out is only ever replayed with that same key (≤ 3 attempts, within 23 h); anything uncertain stops for good
+  and is shown for review instead of being resent.
+- **Manual first.** A manual reminder or invitation email in the last 7 days suppresses the automatic one; manual
+  reminders are never blocked.
+- **No session, narrow privilege.** The scheduler is a `GET /api/cron/rsvp-reminders` route protected by
+  `CRON_SECRET` (Bearer header, timing-safe) that drives five service_role-only database functions through one
+  server-only module. Responses carry counts only.
+- **Not activated yet.** No cron schedule is configured in this repository and no `CRON_SECRET` is provisioned:
+  production scheduling is a separately approved deployment step. Deploying or migrating alone never sends anything.
+
+See [ADR-010](docs/architecture/ADR-010-automatic-rsvp-reminder-scheduling.md).
+
+Still deferred: recurring or multi-stage reminders, per-party automation settings, delivery/bounce webhooks, and
+messaging APIs and phone numbers.
 
 ## Stack
 
@@ -272,6 +295,12 @@ local `SECRET_KEY` from `npx supabase status`; used only for email delivery meta
 real invitation, RSVP confirmation and RSVP reminder emails,
 or `EMAIL_TRANSPORT=outbox` with an absolute `EMAIL_OUTBOX_DIR` (localhost `APP_ORIGIN` only) to write them to files.
 Without them, everything works except sending (RSVPs are still saved; they just get no confirmation email).
+
+Automatic reminders (LB-17, optional locally): with the email settings above, set `CRON_SECRET` to a random value of
+at least 32 characters (generate one yourself, e.g. `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`;
+never commit it) and call the scheduler yourself:
+`curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/rsvp-reminders`. Nothing calls it on its
+own: no cron is configured. The E2E suite uses a fake, test-only secret.
 
 Local Supabase (requires Docker): `npx supabase start`. Then copy the API URL and publishable key
 from `npx supabase status` into `.env.local`. The project is not linked to any remote Supabase project.
@@ -327,6 +356,7 @@ one later.
 - [ADR-007 — Manual RSVP reminder delivery](docs/architecture/ADR-007-manual-rsvp-reminder-delivery.md)
 - [ADR-008 — Basic wedding activity history](docs/architecture/ADR-008-basic-activity-history.md)
 - [ADR-009 — Checklist ↔ guest work](docs/architecture/ADR-009-checklist-guest-work.md)
+- [ADR-010 — Automatic RSVP reminder scheduling](docs/architecture/ADR-010-automatic-rsvp-reminder-scheduling.md)
 
 Database migrations live in `supabase/migrations/` and are named `YYYYMMDDHHMMSS_lb_<slug>.sql`.
 After changing the schema, run `npm run db:reset && npm run db:types` and commit the regenerated types.

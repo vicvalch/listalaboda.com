@@ -76,8 +76,10 @@ statement. It records *that* the address was set, changed or removed, never the 
 - `member` — a signed-in member of that wedding. `actor_user_id` is required at insert (guard trigger).
 - `guest_capability` — the holder of a party's RSVP link. No user id, and the token is never stored as an
   identity.
-- `system` — no person. Only privileged maintenance outside the app's member flows produces it today (e.g. a
-  contact-email change with no member session). It is never shown as `service_role`.
+- `system` — no person: an automatic RSVP reminder sent under an owner-enabled policy (LB-17,
+  [ADR-010](ADR-010-automatic-rsvp-reminder-scheduling.md); `rsvp_reminder_email_sent`, shown as "Automático"), or
+  privileged maintenance outside the app's member flows (e.g. a contact-email change with no member session). It is
+  never shown as `service_role`, and it never carries a user id: nobody clicked it.
 
 `CHECK (actor_kind = 'member' or actor_user_id is null)`: guests and the system never carry a user id.
 
@@ -183,6 +185,13 @@ overwritten, revocation times say nothing about who), so inventing them would be
 **Activity history begins when LB-15 is deployed.** The empty state says so.
 
 ### 12. Future scheduler (LB-16) compatibility — and what this is not
+
+*Later note (LB-17):* the scheduler is [ADR-010](ADR-010-automatic-rsvp-reminder-scheduling.md). As this section
+required, it brings its own policy, due calculation, identity (`system`), dedupe key (`UNIQUE` occurrence per party),
+claims and leases in `public.automatic_rsvp_reminders`; activity history is still never read as a lock or dedupe key.
+An automatic send appends the existing `rsvp_reminder_email_sent` event with actor `system`, written only by
+`record_automatic_rsvp_reminder_email` in the same transaction as the metadata. Claims, skips, retries, failures and
+uncertain outcomes write no history. No new event type was added.
 
 *Later note (LB-16):* LB-16 became checklist ↔ guest work ([ADR-009](ADR-009-checklist-guest-work.md)), which adds
 no events. The scheduler below is still deferred, to a later prompt.

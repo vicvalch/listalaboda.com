@@ -1,5 +1,5 @@
 import { createClient, type SupportedStorage } from "@supabase/supabase-js";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DeliveryRecordResult, DeliveryRecorder, RsvpReminderRecord } from "@/lib/email/delivery-recorder";
 import type { EmailSendResult, EmailSender, OutgoingEmail } from "@/lib/email/provider";
@@ -7,6 +7,17 @@ import type { Database } from "@/lib/supabase/database.types";
 import { TEST_RSVP_CAPABILITY_KEY, WRONG_TEST_RSVP_CAPABILITY_KEY } from "@/test/fixtures/rsvp-capability-key";
 
 vi.mock("server-only", () => ({}));
+
+// LB-17: the provider timeout and idempotency key are opt-in per call, owned
+// by the automatic scheduler. This manual flow passes no options at all, so
+// its provider behavior is exactly what it was before LB-17.
+const sendOptions: unknown[][] = [];
+beforeEach(() => {
+  sendOptions.length = 0;
+});
+afterEach(() => {
+  for (const options of sendOptions) expect(options).toEqual([]);
+});
 
 // Every way a link could be minted or replaced, spied: a reminder must
 // never reach any of them (ADR-007 §1).
@@ -175,7 +186,8 @@ function fakeDelivery(
   const records: RsvpReminderRecord[] = [];
   const order: string[] = [];
   const sender: EmailSender = {
-    async send(email) {
+    async send(email, ...options: unknown[]) {
+      sendOptions.push(options);
       sent.push(email);
       order.push("SEND");
       if (result === "throw") throw new Error("network down");

@@ -31,6 +31,12 @@ describe("server-only boundary", () => {
     "@/lib/guests/link-recovery",
     "@/lib/guests/link-config",
     "@/lib/activity/service",
+    // LB-17 (ADR-010)
+    "@/lib/scheduler/rsvp-reminder-store",
+    "@/lib/scheduler/rsvp-reminder-runner",
+    "@/lib/scheduler/cron-auth",
+    "@/lib/scheduler/runtime",
+    "@/lib/scheduler/policy",
   ])("refuses to load %s outside a server runtime", async (specifier) => {
     await expect(import(/* @vite-ignore */ specifier)).rejects.toThrow(
       /cannot be imported from a Client Component/,

@@ -4,12 +4,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { Notice } from "@/components/ui/Notice";
 import { textLinkClass } from "@/components/ui/styles";
-import {
-  activityActorLabel,
-  activityActorLine,
-  activityEventLabel,
-  activityPartyLabel,
-} from "@/lib/activity/presentation";
+import { activityAttribution, activityEventLabel, activityPartyLabel } from "@/lib/activity/presentation";
 import { ACTIVITY_LIMIT, listWeddingActivity } from "@/lib/activity/service";
 import { loginPath } from "@/lib/auth/redirect";
 import { requireUser } from "@/lib/auth/session";
@@ -89,7 +84,7 @@ export default async function ActivityPage({ params }: PageProps<"/app/weddings/
                 </p>
                 <p className="text-muted text-sm">
                   <span data-testid="activity-actor">
-                    {activityActorLine(activityActorLabel(entry.actorKind, entry.actorMembershipId, labeled))}
+                    {activityAttribution(entry.eventType, entry.actorKind, entry.actorMembershipId, labeled)}
                   </span>
                   {" · "}
                   <time dateTime={entry.occurredAt}>{formatWeddingTimestamp(entry.occurredAt, wedding.timeZone)}</time>

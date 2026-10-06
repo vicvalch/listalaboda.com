@@ -8,9 +8,13 @@ const SERVICE_ROLE_MESSAGE =
 const CAPABILITY_KEY_MESSAGE =
   "RSVP_CAPABILITY_ENCRYPTION_KEY is read only in src/lib/security/rsvp-capability-encryption.ts (ADR-006).";
 
+const CRON_SECRET_MESSAGE =
+  "CRON_SECRET is read only in src/lib/scheduler/cron-auth.ts (ADR-010 §4).";
+
 const restrictedEnvKeys = [
   ["SUPABASE_SERVICE_ROLE_KEY", SERVICE_ROLE_MESSAGE],
   ["RSVP_CAPABILITY_ENCRYPTION_KEY", CAPABILITY_KEY_MESSAGE],
+  ["CRON_SECRET", CRON_SECRET_MESSAGE],
 ];
 
 /** `process.env.NAME` and `process.env["NAME"]`, except where `allowed` lists the name. */
@@ -40,10 +44,21 @@ const eslintConfig = defineConfig([
     },
   },
   {
-    // ADR-004/ADR-005: the one sanctioned service-role use — email delivery
-    // metadata (invitation and RSVP confirmation emails). Nowhere else.
+    // ADR-004/ADR-005/ADR-007: the first sanctioned service-role use — email
+    // delivery metadata (invitation, RSVP confirmation and reminder emails).
     files: ["src/lib/email/delivery-recorder.ts"],
     rules: { "no-restricted-syntax": ["error", ...envKeyRestrictions(["SUPABASE_SERVICE_ROLE_KEY"])] },
+  },
+  {
+    // ADR-010 §21: the automatic RSVP reminder scheduler's store, the second
+    // and last sanctioned service-role use. Nowhere else.
+    files: ["src/lib/scheduler/rsvp-reminder-store.ts"],
+    rules: { "no-restricted-syntax": ["error", ...envKeyRestrictions(["SUPABASE_SERVICE_ROLE_KEY"])] },
+  },
+  {
+    // ADR-010 §4: the one module that reads the scheduler route's secret.
+    files: ["src/lib/scheduler/cron-auth.ts"],
+    rules: { "no-restricted-syntax": ["error", ...envKeyRestrictions(["CRON_SECRET"])] },
   },
   {
     // ADR-006: the one module that reads the RSVP capability encryption key.

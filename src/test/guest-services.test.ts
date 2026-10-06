@@ -428,6 +428,10 @@ describe("listGuestParties", () => {
               ],
               // LB-16: the checklist items about this party (none here).
               checklist_items: [],
+              // LB-17: its automatic reminder occurrence (at most one).
+              automatic_rsvp_reminders: [
+                { state: "sent", outcome_reason: null, due_at: "2026-10-04T15:00:00Z", sent_at: "2026-10-04T15:05:00Z" },
+              ],
             },
           ],
         },
@@ -451,10 +455,19 @@ describe("listGuestParties", () => {
           { id: GUEST_2, name: "Carlos", rsvp: null },
         ],
         relatedChecklistItems: [],
+        automaticReminder: {
+          state: "sent",
+          outcomeReason: null,
+          dueAt: "2026-10-04T15:00:00Z",
+          sentAt: "2026-10-04T15:05:00Z",
+        },
       },
     ]);
     const reads = requests.filter((r) => r.url.pathname.startsWith("/rest/v1/"));
     expect(reads).toHaveLength(1);
+    // LB-17: display columns only; never the worker's lease token or timing.
+    const automatic = /automatic_rsvp_reminders\(([^)]*)\)/.exec(reads[0]?.url.searchParams.get("select") ?? "")?.[1];
+    expect(automatic?.split(",").map((c) => c.trim())).toEqual(["state", "outcome_reason", "due_at", "sent_at"]);
     expect(reads[0]?.url.searchParams.get("select")).not.toContain("token_hash");
     // The provider's message id is operational data the page never needs.
     expect(reads[0]?.url.searchParams.get("select")).not.toContain("provider_id");

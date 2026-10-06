@@ -73,3 +73,19 @@ export function activityActorLabel(
 export function activityActorLine(actorLabel: string): string {
   return actorLabel === es.members.you ? copy.byYou : interpolate(copy.by, { actor: actorLabel });
 }
+
+/**
+ * The full attribution line for one entry. An automatic RSVP reminder (LB-17,
+ * ADR-010 §20: `rsvp_reminder_email_sent` by the `system` actor) reads
+ * "Automático" — never a person, since nobody clicked it. A manual reminder
+ * keeps its member attribution; everything else is `activityActorLine`.
+ */
+export function activityAttribution(
+  eventType: string,
+  actorKind: string,
+  actorMembershipId: string | null,
+  members: readonly LabeledMember[],
+): string {
+  if (eventType === "rsvp_reminder_email_sent" && actorKind === "system") return copy.automatic;
+  return activityActorLine(activityActorLabel(actorKind, actorMembershipId, members));
+}

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { createClient } from "@supabase/supabase-js";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { EmailDelivery } from "@/lib/email/delivery";
 import type {
@@ -14,6 +14,17 @@ import { es } from "@/lib/i18n/messages/es";
 import type { Database } from "@/lib/supabase/database.types";
 
 vi.mock("server-only", () => ({}));
+
+// LB-17: the provider timeout and idempotency key are opt-in per call, owned
+// by the automatic scheduler. This manual flow passes no options at all, so
+// its provider behavior is exactly what it was before LB-17.
+const sendOptions: unknown[][] = [];
+beforeEach(() => {
+  sendOptions.length = 0;
+});
+afterEach(() => {
+  for (const options of sendOptions) expect(options).toEqual([]);
+});
 
 const { submitRsvpWithConfirmation } = await import("@/lib/rsvp/confirmation");
 
@@ -100,7 +111,8 @@ function fakeDelivery(fakes: Fakes, log: string[], state: { saved: boolean }) {
   const delivery: EmailDelivery = {
     appOrigin: APP_ORIGIN,
     sender: {
-      async send(email) {
+      async send(email, ...options: unknown[]) {
+        sendOptions.push(options);
         log.push("SEND");
         // The RSVP must already be persisted when the provider is reached.
         savedWhenSent.push(state.saved);

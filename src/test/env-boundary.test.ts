@@ -49,6 +49,14 @@ describe("public env", () => {
     expect(JSON.stringify(getPublicEnv())).not.toContain("capability-secret-placeholder");
   });
 
+  it("does not pick up the scheduler's CRON_SECRET (LB-17) from process.env", () => {
+    vi.stubEnv(URL_VAR, validSource[URL_VAR]);
+    vi.stubEnv(KEY_VAR, validSource[KEY_VAR]);
+    vi.stubEnv("CRON_SECRET", "cron-secret-placeholder-0123456789abcdef");
+
+    expect(JSON.stringify(getPublicEnv())).not.toContain("cron-secret-placeholder");
+  });
+
   it.each([URL_VAR, KEY_VAR])("fails clearly when %s is missing", (name) => {
     const source = { ...validSource, [name]: "  " };
     expect(() => parsePublicEnv(source)).toThrow(EnvError);

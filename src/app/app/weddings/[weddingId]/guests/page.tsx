@@ -14,6 +14,9 @@ import { listGuestParties, type GuestListParty } from "@/lib/guests/service";
 import { guestResponseStatus, summarizeGuests, type GuestSummary } from "@/lib/guests/summary";
 import { GUEST_NAME_MAX_LENGTH, PARTY_LABEL_MAX_LENGTH } from "@/lib/guests/validation";
 import { formatDate, formatNumber, getMessages, interpolate } from "@/lib/i18n";
+import { automaticReminderPartyStatus, type AutomaticReminderPartyStatus } from "@/lib/scheduler/party-status";
+import { getAutomaticReminderPolicy, type AutomaticReminderPolicy } from "@/lib/scheduler/policy";
+import { AUTOMATIC_REMINDER_DAYS_BEFORE, automaticReminderDueAt } from "@/lib/scheduler/timing";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatWeddingTimestamp } from "@/lib/weddings/format";
 import { getWeddingDetail } from "@/lib/weddings/service";
@@ -28,6 +31,7 @@ import {
   updateGuestNameAction,
   updatePartyLabelAction,
 } from "./actions";
+import { AutomaticReminderForm } from "./AutomaticReminderForm";
 import { ConfirmButton } from "./ConfirmButton";
 import { NewPartyForm } from "./NewPartyForm";
 import { PersonalLinkPanel } from "./PersonalLinkPanel";
@@ -65,14 +69,31 @@ export default async function GuestsPage({
     notFound();
   }
 
-  const [wedding, parties] = await Promise.all([
+  const [wedding, parties, policy] = await Promise.all([
     getWeddingDetail(supabase, access.access.weddingId),
     listGuestParties(supabase, access.access),
+    getAutomaticReminderPolicy(supabase, access.access),
   ]);
   if (!wedding) notFound();
 
-  // One server clock read per request, used only to label links.
+  // One server clock read per request, used only to label links and
+  // automatic reminder statuses.
   const now = new Date();
+  const automaticStatus = (party: GuestListParty): AutomaticReminderPartyStatus | null =>
+    policy
+      ? automaticReminderPartyStatus({
+          policy,
+          weddingDate: wedding.weddingDate,
+          weddingTimeZone: wedding.timeZone,
+          answered: party.guests.some((guest) => guest.rsvp !== null),
+          hasContactEmail: party.contactEmail !== null,
+          linkState: guestLinkState(party, wedding.weddingDate, now),
+          lastReminderEmailAt: party.rsvpReminderEmail?.sentAt ?? null,
+          lastInvitationEmailAt: party.invitationEmail?.sentAt ?? null,
+          occurrence: party.automaticReminder,
+          now,
+        })
+      : null;
   const { done } = await searchParams;
   const copy = getMessages().guests;
 
@@ -93,6 +114,18 @@ export default async function GuestsPage({
       </header>
 
       {parties ? <SummarySection summary={summarizeGuests(parties)} /> : null}
+
+      {policy ? (
+        <AutomaticRemindersSection
+          weddingId={wedding.id}
+          weddingDate={wedding.weddingDate}
+          weddingTimeZone={wedding.timeZone}
+          policy={policy}
+          statuses={(parties ?? []).map(automaticStatus)}
+          isOwner={access.access.role === "owner"}
+          now={now}
+        />
+      ) : null}
 
       <section className={`${cardClass} space-y-4`} aria-labelledby="new-party-title">
         <h2 id="new-party-title" className="text-xl font-semibold">
@@ -123,6 +156,7 @@ export default async function GuestsPage({
                   party={party}
                   now={now}
                   canAdministerLink={access.access.role === "owner"}
+                  automaticStatus={automaticStatus(party)}
                 />
               </li>
             ))}
@@ -176,6 +210,8 @@ type PartyCardProps = {
   now: Date;
   /** Owner: may replace or revoke the link. Cosmetic; the server re-checks. */
   canAdministerLink: boolean;
+  /** LB-17: null when the policy couldn't be read. */
+  automaticStatus: AutomaticReminderPartyStatus | null;
 };
 
 function PartyCard({
@@ -185,6 +221,7 @@ function PartyCard({
   party,
   now,
   canAdministerLink,
+  automaticStatus,
 }: PartyCardProps) {
   const copy = getMessages().guests;
   const checklistStatus = getMessages().checklist.status;
@@ -341,6 +378,10 @@ function PartyCard({
         party={party}
         canAdministerLink={canAdministerLink}
       />
+
+      {automaticStatus && automaticStatus.kind !== "off" ? (
+        <AutomaticReminderLine status={automaticStatus} weddingTimeZone={weddingTimeZone} />
+      ) : null}
 
       <div className="space-y-3 border-t border-border pt-4">
         {/* LB-13: the current link only on an explicit request; this page
@@ -521,5 +562,132 @@ function ContactEmailSection({ weddingId, weddingTimeZone, party, canAdministerL
         </p>
       )}
     </div>
+  );
+}
+
+/** The send date of a due instant, in the wedding's zone (never the server's). */
+function dueDateLabel(dueAt: Date, weddingTimeZone: string | null): string {
+  return formatDate(dueAt, { dateStyle: "long", timeZone: weddingTimeZone ?? "UTC" });
+}
+
+type AutomaticRemindersSectionProps = {
+  weddingId: string;
+  weddingDate: string | null;
+  weddingTimeZone: string | null;
+  policy: AutomaticReminderPolicy;
+  statuses: readonly (AutomaticReminderPartyStatus | null)[];
+  isOwner: boolean;
+  now: Date;
+};
+
+/**
+ * LB-17 (ADR-010 §5, §26): the wedding's automatic RSVP reminder. Owners turn
+ * it on or off and choose 14, 21 or 30 days (the server and the database
+ * re-check the role); collaborators see the status, read-only. Off by
+ * default. Shows when it would go out and how many parties qualify today,
+ * and a notice when any automatic reminder needs review.
+ */
+function AutomaticRemindersSection({
+  weddingId,
+  weddingDate,
+  weddingTimeZone,
+  policy,
+  statuses,
+  isOwner,
+  now,
+}: AutomaticRemindersSectionProps) {
+  const copy = getMessages().guests.automaticReminders;
+  const hasDate = weddingDate !== null && weddingTimeZone !== null;
+  const qualifying = statuses.filter((s) => s?.kind === "scheduled").length;
+  const needsReview = statuses.filter((s) => s?.kind === "review").length;
+  const previewDates = Object.fromEntries(
+    AUTOMATIC_REMINDER_DAYS_BEFORE.map((days) => {
+      const due = automaticReminderDueAt(weddingDate, weddingTimeZone, days);
+      return [String(days), due && due.getTime() > now.getTime() ? dueDateLabel(due, weddingTimeZone) : null];
+    }),
+  );
+
+  return (
+    <section
+      className={`${cardClass} space-y-3`}
+      aria-labelledby="automatic-reminders-title"
+      data-testid="automatic-reminders"
+    >
+      <h2 id="automatic-reminders-title" className="text-xl font-semibold">
+        {copy.title}
+      </h2>
+      <p className="text-muted text-sm">{copy.intro}</p>
+      <p className="text-sm font-semibold" data-testid="automatic-reminder-status">
+        {policy.enabled
+          ? interpolate(copy.statusOn, { days: String(policy.daysBefore) })
+          : copy.statusOff}
+      </p>
+      {needsReview > 0 ? (
+        <Notice tone="error">
+          {needsReview === 1 ? copy.problemsOne : interpolate(copy.problems, { count: formatNumber(needsReview) })}
+        </Notice>
+      ) : null}
+      {policy.enabled ? (
+        <p className="text-muted text-sm" data-testid="automatic-reminder-count">
+          {qualifying === 1 ? copy.previewCountOne : interpolate(copy.previewCount, { count: formatNumber(qualifying) })}
+        </p>
+      ) : null}
+      {!isOwner ? (
+        <p className="text-muted text-sm" data-testid="automatic-reminder-owner-only">
+          {copy.ownerOnly}
+        </p>
+      ) : !hasDate && !policy.enabled ? (
+        <p className="text-muted text-sm" data-testid="automatic-reminder-needs-date">
+          {copy.needsDate}{" "}
+          <Link href={`/app/weddings/${weddingId}/settings`} className={textLinkClass}>
+            {copy.needsDateLink}
+          </Link>
+        </p>
+      ) : (
+        <AutomaticReminderForm
+          weddingId={weddingId}
+          enabled={policy.enabled}
+          daysBefore={policy.daysBefore}
+          previewDates={previewDates}
+        />
+      )}
+    </section>
+  );
+}
+
+/** One party's automatic reminder line (LB-17). Never enum names or provider details. */
+function AutomaticReminderLine({
+  status,
+  weddingTimeZone,
+}: {
+  status: Exclude<AutomaticReminderPartyStatus, { kind: "off" }>;
+  weddingTimeZone: string | null;
+}) {
+  const copy = getMessages().guests.automaticReminders.party;
+  let text: string;
+  switch (status.kind) {
+    case "scheduled":
+      text = interpolate(copy.scheduled, { date: dueDateLabel(status.dueAt, weddingTimeZone) });
+      break;
+    case "in_progress":
+      text = copy.inProgress;
+      break;
+    case "sent":
+      text = interpolate(copy.sent, { date: formatWeddingTimestamp(status.sentAt, weddingTimeZone) });
+      break;
+    case "not_sending":
+      text = copy.notSending[status.reason];
+      break;
+    case "review":
+      text = copy.review[status.reason];
+      break;
+  }
+  return (
+    <p className="border-t border-border pt-4 text-sm" data-testid="party-automatic-reminder">
+      <span className="font-semibold">{copy.label}:</span>{" "}
+      <span data-testid="party-automatic-reminder-status" data-kind={status.kind}>
+        {text}
+      </span>
+    </p>
   );
 }

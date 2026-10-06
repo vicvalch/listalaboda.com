@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { createClient, type SupportedStorage } from "@supabase/supabase-js";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DeliveryRecordResult, DeliveryRecorder, InvitationRecord } from "@/lib/email/delivery-recorder";
 import type { EmailSendResult, EmailSender, OutgoingEmail } from "@/lib/email/provider";
@@ -9,6 +9,17 @@ import type { Database } from "@/lib/supabase/database.types";
 import { TEST_RSVP_CAPABILITY_KEY } from "@/test/fixtures/rsvp-capability-key";
 
 vi.mock("server-only", () => ({}));
+
+// LB-17: the provider timeout and idempotency key are opt-in per call, owned
+// by the automatic scheduler. This manual flow passes no options at all, so
+// its provider behavior is exactly what it was before LB-17.
+const sendOptions: unknown[][] = [];
+beforeEach(() => {
+  sendOptions.length = 0;
+});
+afterEach(() => {
+  for (const options of sendOptions) expect(options).toEqual([]);
+});
 
 const { rotateLinkAndSendInvitation, sendGuestInvitationEmail } = await import("@/lib/guests/invitation-email");
 
@@ -135,7 +146,8 @@ function fakeSender(
   const records: InvitationRecord[] = [];
   const order: string[] = [];
   const sender: EmailSender = {
-    async send(email) {
+    async send(email, ...options: unknown[]) {
+      sendOptions.push(options);
       sent.push(email);
       order.push("SEND");
       return result;

@@ -287,6 +287,7 @@ describe("checklist ↔ guest work reads", () => {
         { id: "b", title: "Segundo", status: "pending", sort_order: 20, created_at: "2026-10-01T00:00:00Z" },
         { id: "a", title: "Primero", status: "done", sort_order: 10, created_at: "2026-10-02T00:00:00Z" },
       ],
+      automatic_rsvp_reminders: [],
     };
     const { supabase, requests } = clientFor({ get: { guest_invitations: { status: 200, body: [party] } } });
     const parties = await listGuestParties(supabase, access);

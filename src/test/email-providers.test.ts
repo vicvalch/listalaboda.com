@@ -40,6 +40,8 @@ describe("Resend adapter", () => {
     const sender = createResendSender({ apiKey: "re_test", from: "Lista <inv@example.com>" });
     expect(await sender.send(email)).toEqual({ ok: true, messageId: "4ef9a417-02e9-4d39-ad75-9611e0fcc33c" });
     expect(resendConstructor).toHaveBeenCalledWith("re_test");
+    // Without options (every manual flow), the call is exactly the pre-LB-17
+    // one: no request options, no abort signal, no idempotency key.
     expect(resendSend).toHaveBeenCalledWith({
       from: "Lista <inv@example.com>",
       to: ["familia@example.com"],
@@ -47,6 +49,7 @@ describe("Resend adapter", () => {
       text: email.text,
       html: email.html,
     });
+    expect(resendSend.mock.calls[0]).toHaveLength(1);
   });
 
   it("normalizes provider errors; raw messages never leave the adapter", async () => {
@@ -89,6 +92,57 @@ describe("Resend adapter", () => {
     expect(mapResendError(undefined)).toBe("unknown");
     expect(mapResendError("missing_api_key")).toBe("configuration");
     expect(mapResendError("daily_quota_exceeded")).toBe("provider_failure");
+    // LB-17 (ADR-010 §12): the two idempotency answers are their own categories.
+    expect(mapResendError("invalid_idempotent_request")).toBe("idempotency_conflict");
+    expect(mapResendError("concurrent_idempotent_requests")).toBe("idempotency_in_progress");
+  });
+
+  it("passes an idempotency key through unchanged (LB-17)", async () => {
+    resendSend.mockResolvedValue({ data: { id: "4ef9a417-02e9-4d39-ad75-9611e0fcc33c" }, error: null, headers: {} });
+    const sender = createResendSender({ apiKey: "re_test", from: "inv@example.com" });
+    await sender.send(email, { idempotencyKey: "lb-auto-rsvp-reminder:6a1f1c2e-3b4d-4e5f-8a9b-0c1d2e3f4a5b" });
+    // A key alone installs no deadline.
+    expect(resendSend.mock.calls[0]![1]).toEqual({
+      idempotencyKey: "lb-auto-rsvp-reminder:6a1f1c2e-3b4d-4e5f-8a9b-0c1d2e3f4a5b",
+    });
+  });
+
+  it("without timeoutMs no deadline is installed: a slow provider is simply awaited", async () => {
+    vi.useFakeTimers();
+    try {
+      let answer: (value: unknown) => void = () => {};
+      resendSend.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+      const sender = createResendSender({ apiKey: "re_test", from: "inv@example.com" });
+      let settled = false;
+      const pending = sender.send(email).then((r) => ((settled = true), r));
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(settled).toBe(false);
+      expect(resendSend.mock.calls[0]).toHaveLength(1);
+      answer({ data: { id: "4ef9a417-02e9-4d39-ad75-9611e0fcc33c" }, error: null, headers: {} });
+      expect(await pending).toEqual({ ok: true, messageId: "4ef9a417-02e9-4d39-ad75-9611e0fcc33c" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("with an explicit timeoutMs it gives up then (a timeout proves nothing about delivery) and aborts", async () => {
+    vi.useFakeTimers();
+    try {
+      let signal: AbortSignal | undefined;
+      resendSend.mockImplementation((_payload: unknown, options: { signal: AbortSignal }) => {
+        signal = options.signal;
+        return new Promise(() => {});
+      });
+      const sender = createResendSender({ apiKey: "re_test", from: "inv@example.com" });
+      const pending = sender.send(email, { timeoutMs: 10_000 });
+      await vi.advanceTimersByTimeAsync(9_999);
+      expect(signal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await pending).toEqual({ ok: false, reason: "timeout" });
+      expect(signal?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -119,6 +173,20 @@ describe("local outbox (tests / local development)", () => {
     const stored = JSON.parse(await readFile(join(dir, "nested", files[0]!), "utf8"));
     expect(stored).toMatchObject(email);
     expect(result.ok && stored.messageId === result.messageId).toBe(true);
+  });
+
+  it("honours an idempotency key like the provider: same payload → same id, one file; different → conflict", async () => {
+    const outbox = createOutboxSender(dir);
+    const key = "lb-auto-rsvp-reminder:6a1f1c2e-3b4d-4e5f-8a9b-0c1d2e3f4a5b";
+    const first = await outbox.send(email, { idempotencyKey: key });
+    const again = await outbox.send(email, { idempotencyKey: key });
+    expect(first.ok && again.ok && first.messageId === again.messageId).toBe(true);
+    expect(await readdir(dir)).toHaveLength(1);
+    expect(await outbox.send({ ...email, text: "otro" }, { idempotencyKey: key })).toEqual({
+      ok: false,
+      reason: "idempotency_conflict",
+    });
+    expect(await readdir(dir)).toHaveLength(1);
   });
 
   it("refuses the test failure domain deterministically, writing nothing", async () => {

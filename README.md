@@ -262,10 +262,12 @@ Actividad shows an automatic send as "Automático".
 - **No session, narrow privilege.** The scheduler is a `GET /api/cron/rsvp-reminders` route protected by
   `CRON_SECRET` (Bearer header, timing-safe) that drives five service_role-only database functions through one
   server-only module. Responses carry counts only.
-- **Infrastructure only, no sends yet.** `vercel.json` schedules the route hourly (`0 * * * *`) and `CRON_SECRET` is
-  provisioned in Production (LB-17A.2), but automatic sending stays operationally disabled: every reminder policy is
-  OFF, and production email delivery is blocked until `listalaboda.com` is owned and verified with the email provider.
-  Deploying or migrating alone never sends anything.
+- **Infrastructure only, no sends yet.** `vercel.json` schedules the route once daily (`0 15 * * *`, 15:00 UTC;
+  Vercel Hobby allows only daily crons) and `CRON_SECRET` is provisioned in Production (LB-17A.2). The 48 h send
+  window is unchanged, so a daily run still reaches every due reminder, up to ~24 h late (see ADR-010 §3). Automatic
+  sending stays operationally disabled: every reminder policy is OFF (the default), and production email delivery is
+  blocked until `listalaboda.com` is owned and verified with the email provider. Deploying or migrating alone never
+  sends anything.
 
 See [ADR-010](docs/architecture/ADR-010-automatic-rsvp-reminder-scheduling.md).
 

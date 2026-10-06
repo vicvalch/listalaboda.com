@@ -357,10 +357,11 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   (≥ 32 bytes; query strings ignored); missing configuration → nothing runs. Counts only in responses; nothing logged.
   Runner budget 45 s, ≤ 2 sends/s; the runner passes `timeoutMs: 10_000` (and its key) to the provider. Timeouts and
   idempotency keys are opt-in per `EmailSender.send` call: manual email flows pass neither.
-- Infrastructure only (LB-17A.2): `vercel.json` runs the route hourly and `CRON_SECRET` is provisioned in Production,
-  but sending stays disabled: every policy is OFF and production email is blocked until `listalaboda.com` is owned and
-  verified. Enabling a policy in production is a separate, explicitly approved step. A migration or a deploy alone can
-  never send (zero policy rows, default OFF).
+- Infrastructure only (LB-17A.2): `vercel.json` runs the route once daily (`0 15 * * *`, 15:00 UTC; Vercel Hobby
+  allows only daily crons; the 48 h window is unchanged, but retries can't fit the 23 h replay limit and end `unknown`,
+  ADR-010 §3) and `CRON_SECRET` is provisioned in Production, but sending stays disabled: every policy is OFF and
+  production email is blocked until `listalaboda.com` is owned and verified. Enabling a policy in production is a
+  separate, explicitly approved step. A migration or a deploy alone can never send (zero policy rows, default OFF).
 
 ## Commands
 

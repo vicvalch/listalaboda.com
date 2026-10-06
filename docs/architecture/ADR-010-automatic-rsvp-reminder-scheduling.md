@@ -5,10 +5,10 @@ deployment approval** (§24)
 Implementation: LB-17 implements this decision (migration `20261012120000_lb_automatic_rsvp_reminders`); the
 production cron entry and `CRON_SECRET` are NOT activated by it. Three clarifications made during implementation are
 marked *Implementation note* below (§9 step 2, §10.1, §10.3).
-Activation (LB-17A.2, zero-send): the hourly `vercel.json` cron entry and a Production `CRON_SECRET` are the scheduler
-infrastructure only. Automatic sending stays operationally disabled: every reminder policy is OFF (none may be enabled
-in this step), and production email delivery is blocked until the sending domain (`listalaboda.com`) is owned and
-verified with the provider.
+Activation (LB-17A.2, zero-send): the daily `vercel.json` cron entry (`0 15 * * *`, 15:00 UTC, Vercel Hobby-compatible;
+see the §3 note) and a Production `CRON_SECRET` are the scheduler infrastructure only. Automatic sending stays
+operationally disabled: every reminder policy is OFF (none may be enabled in this step), and production email
+delivery is blocked until the sending domain (`listalaboda.com`) is owned and verified with the provider.
 Related: [ADR-002 §5, §6](ADR-002-auth-and-security-boundaries.md), [ADR-004](ADR-004-invitation-delivery-recorder.md),
 [ADR-005](ADR-005-rsvp-confirmation-email.md), [ADR-006](ADR-006-recoverable-rsvp-capability.md),
 [ADR-007](ADR-007-manual-rsvp-reminder-delivery.md), [ADR-008](ADR-008-basic-activity-history.md),
@@ -77,6 +77,12 @@ scheduler never claims a human clicked anything.
 - Vercel Cron issues GET and sends `Authorization: Bearer <CRON_SECRET>` when `CRON_SECRET` is set. These semantics
   and hourly scheduling on the intended Pro deployment are treated as **verified external assumptions**.
 - Rejected: database-native scheduling (pg_cron/pg_net, Edge Functions); see Rejected alternatives.
+- *Deployment note (LB-17A.2):* the deployment is on Vercel Hobby, which allows only daily cron jobs, so production
+  runs once daily (`0 15 * * *`, 15:00 UTC) instead of hourly. The due-time model, the 48 h send window and the state
+  machine are unchanged; every 48 h window contains at least one daily run. Consequences: a reminder goes out up to
+  ~24 h after its due time; caps apply per daily run; and since the next run is always past `first_attempt_at + 23 h`,
+  a `retry_wait` or expired `sending` occurrence is never replayed and ends `unknown (replay_window_expired)`: shown
+  for review, never resent. Hourly scheduling (as designed) needs a plan that allows it.
 
 ### 4. Scheduler endpoint security
 
@@ -452,7 +458,7 @@ remains their explicit choice.
 | Run time budget | 45 s, then no new claim, prepare or begin starts |
 | Sending | sequential, at most 2 per second (500 ms spacing), under the Resend account rate limit |
 | Lease | 10 min |
-| Retry spacing | `next_attempt_at = now() + 1 h` (next hourly run) |
+| Retry spacing | `next_attempt_at = now() + 1 h` (next hourly run; with the daily Hobby schedule, see §3) |
 | Suppression after a manual reminder or invitation email | 7 days (§18) |
 
 These are constants in the claim function and runner, changed only by a reviewed migration or code change.
@@ -537,8 +543,8 @@ memory and the email body. Activity rows follow ADR-008 §9 unchanged.
 
 1. An owner's explicit opt-in for that wedding (zero policy rows after migration; default `false`).
 2. `CRON_SECRET` provisioned **and** the cron entry deployed. The `vercel.json` cron entry ships **last**, as a
-   separately approved deployment step; until then nothing invokes the route. (Shipped in LB-17A.2 as an hourly
-   entry, `0 * * * *`, with every policy still OFF and production email still blocked; see the header.)
+   separately approved deployment step; until then nothing invokes the route. (Shipped in LB-17A.2 as a daily
+   entry, `0 15 * * *`, with every policy still OFF and production email still blocked; see the header.)
 3. `due_at ≥ enabled_at` for never-claimed parties and the 48 h window.
 4. Per-run caps and one boundary-crossing reminder per party.
 

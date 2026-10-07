@@ -297,11 +297,19 @@ reminder email buttons are disabled and the server refuses them before anything 
 confirmation is quietly skipped (the RSVP is always saved). Addresses are compared ignoring case and surrounding spaces
 (a case-only edit is the same address; dots and `+tags` still count). Delayed and failed never block. Changing the contact
 email to a different address makes sending possible again; sharing the link
-("Mostrar enlace", the WhatsApp text) is never blocked; there is no override. Automatic reminders are unchanged
-(LB-18.4), and no production webhook is configured.
+("Mostrar enlace", the WhatsApp text) is never blocked; there is no override. No production webhook is configured.
 
-Still deferred: recurring or multi-stage reminders, per-party automation settings, bounce-based automatic reminder
-suppression (LB-18.4), production webhook activation (LB-18.5), and messaging APIs and phone numbers.
+**Automatic reminders and undeliverable addresses (LB-18.4).** The automatic reminder follows the same rule: it is not
+sent to a CURRENT contact email that bounced, was suppressed or marked an email as spam in this wedding ("No se
+enviará automáticamente a esta dirección porque tuvo un problema de entrega."). It is checked when the reminder is
+picked up and again right before sending, so a bounce that arrives in between still stops it; nothing is consumed
+(the one automatic reminder is still available). Changing the contact email to a genuinely different address brings it
+back; a case-only edit doesn't. "Recently reminded" now only counts invitations and reminders sent to the current
+address: an email to an old address no longer delays the reminder to a new one. A bounce of a reminder that was already
+sent never changes it. The production webhook is still not configured, so nothing is suppressed in production yet.
+
+Still deferred: recurring or multi-stage reminders, per-party automation settings, production webhook activation
+(LB-18.5), and messaging APIs and phone numbers.
 
 ## Stack
 

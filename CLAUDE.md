@@ -353,8 +353,9 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   payload → `unknown (idempotency_conflict)`. Never snapshot a body, recipient or capability to force a match.
   `sent_unrecorded` and `unknown` ("cannot prove no email was sent") are terminal: never resent automatically.
 - Only `skipped` rows (attempt 0) are reactivated, and only for `no_contact_email`, `link_unrecoverable`,
-  `link_unavailable`, `policy_disabled`, `out_of_window`, when every current check passes. `answered` and
-  `recently_reminded` (a reminder or invitation email recorded within 7 days) are final. Manual reminders are never
+  `link_unavailable`, `policy_disabled`, `out_of_window` (and, since LB-18.4, `recipient_undeliverable`), when every
+  current check passes. `answered` and `recently_reminded` (a reminder or invitation email recorded within 7 days; to
+  the current address since LB-18.4) are final. Manual reminders are never
   blocked by automation.
 - `rsvp_reminder_email_*` = the latest reminder email of either channel. Activity: the existing
   `rsvp_reminder_email_sent` with actor `system`, labelled "Automático"; no rows for claims, skips or failures.
@@ -439,8 +440,20 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   / `recipient_complained` and zero side effects. "Mostrar enlace" and the WhatsApp text are never blocked.
 - RSVP confirmation: `get_rsvp_confirmation_email_context` also returns `contact_email_block`; blocked →
   `skipped_undeliverable` (no send, no note to the guest). The RSVP save never depends on it.
-- Not here: automatic reminder suppression / `recipient_undeliverable` / `recently_reminded` per address (LB-18.4),
-  activity rows for delivery outcomes, production webhook (LB-18.5).
+- Not here: activity rows for delivery outcomes, production webhook (LB-18.5). Automatic reminders: LB-18.4 below.
+
+## Automatic reminder suppression (LB-18.4, ADR-010 §27, ADR-011 §10)
+
+- One shared check, `private.automatic_rsvp_reminder_ineligibility` (claim, prepare, begin): never add a separate
+  scheduler-side or app-side eligibility path.
+- E11 `recipient_undeliverable`: current `contact_email` blocked in the SAME wedding by `private.email_recipient_block`
+  (LB-18.3's rule, so the warning, the manual guard and the scheduler agree). Pre-provider: `skipped`, attempt 0, no
+  begin/provider/metadata/activity/ledger. Remediable by a genuinely different, clean address (comparison form; a
+  case-only edit is the same address).
+- E9 `recently_reminded` counts only invitation/reminder sends (latest-send metadata + the party's ledger rows of those
+  kinds) TO the current address, comparison form. Never broaden its channels; it stays final once recorded.
+- Precedence: answered → policy_disabled → out_of_window → link_unavailable → link_unrecoverable → no_contact_email →
+  recipient_undeliverable → recently_reminded. Delivery status never rewrites an occurrence (`sent` stays `sent`).
 
 ## Commands
 
@@ -483,5 +496,6 @@ ingestion: delivery status with a rank rule, the append-only `email_delivery_eve
 through a third narrow service-role module and `POST /api/webhooks/resend` (no UI, suppression or production webhook).
 LB-18.3 shows delivery status to members on the party card and blocks manual emails (and skips RSVP confirmations) to a
 current address that bounced, was suppressed or complained in the same wedding; editing the address re-enables it
-(automatic reminder suppression is LB-18.4; no production webhook).
+(no production webhook). LB-18.4 applies the same rule to automatic reminders (`recipient_undeliverable`, a remediable
+pre-provider skip) and scopes `recently_reminded` to sends to the current address (no production webhook).
 Don't implement ahead of the current prompt.

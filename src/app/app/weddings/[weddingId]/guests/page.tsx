@@ -90,6 +90,10 @@ export default async function GuestsPage({
   // One server clock read per request, used only to label links and
   // automatic reminder statuses.
   const now = new Date();
+  // LB-18.3: the same-address rule is wedding-wide, so the warning (and, in
+  // LB-18.4, the automatic reminder line) looks at every party's recorded
+  // emails (already loaded with the list).
+  const weddingDeliveries = (parties ?? []).flatMap((party) => party.deliveries);
   const automaticStatus = (party: GuestListParty): AutomaticReminderPartyStatus | null =>
     policy
       ? automaticReminderPartyStatus({
@@ -97,19 +101,22 @@ export default async function GuestsPage({
           weddingDate: wedding.weddingDate,
           weddingTimeZone: wedding.timeZone,
           answered: party.guests.some((guest) => guest.rsvp !== null),
-          hasContactEmail: party.contactEmail !== null,
+          contactEmail: party.contactEmail,
+          contactEmailBlocked: recipientBlock(weddingDeliveries, party.contactEmail) !== "none",
           linkState: guestLinkState(party, wedding.weddingDate, now),
-          lastReminderEmailAt: party.rsvpReminderEmail?.sentAt ?? null,
-          lastInvitationEmailAt: party.invitationEmail?.sentAt ?? null,
+          recordedEmails: [
+            ...(party.rsvpReminderEmail ? [party.rsvpReminderEmail] : []),
+            ...(party.invitationEmail ? [party.invitationEmail] : []),
+            ...party.deliveries
+              .filter((d) => INVITATION_KINDS.includes(d.kind) || REMINDER_KINDS.includes(d.kind))
+              .map((d) => ({ sentAt: d.acceptedAt, sentTo: d.recipient })),
+          ],
           occurrence: party.automaticReminder,
           now,
         })
       : null;
   const { done } = await searchParams;
   const copy = getMessages().guests;
-  // LB-18.3: the same-address rule is wedding-wide, so the warning looks at
-  // every party's recorded emails (already loaded with the list).
-  const weddingDeliveries = (parties ?? []).flatMap((party) => party.deliveries);
 
   return (
     <div className="space-y-8">

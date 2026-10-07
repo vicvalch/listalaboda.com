@@ -361,6 +361,7 @@ describe("schema and grants", () => {
       "recently_reminded",
       "policy_disabled",
       "out_of_window",
+      "recipient_undeliverable",
       "recipient_rejected",
       "ineligible_after_attempt",
       "idempotency_conflict",
@@ -1281,6 +1282,7 @@ describe("reactivation matrix (skipped, attempt_count = 0)", () => {
     ["link_unavailable", true],
     ["policy_disabled", true],
     ["out_of_window", true],
+    ["recipient_undeliverable", true],
     ["recently_reminded", false],
     ["answered", false],
   ] as const)("%s → reactivatable: %s (when every current check passes)", async (reason, reactivatable) => {

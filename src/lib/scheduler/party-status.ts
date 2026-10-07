@@ -1,3 +1,4 @@
+import { normalizeEmailForComparison } from "@/lib/guests/contact-email";
 import type { GuestLinkState } from "@/lib/guests/link";
 import {
   AUTOMATIC_REMINDER_SUPPRESSION_DAYS,
@@ -12,6 +13,11 @@ import type { Database } from "@/lib/supabase/database.types";
  * the party's current state and its occurrence (if any). The database stays
  * authoritative; this only labels. Never exposes enum names, claim data or
  * provider details.
+ *
+ * LB-18.4 (ADR-010 §7 E9/E11): like the database, a current address that is
+ * known undeliverable in this wedding stops it (`recipient_undeliverable`),
+ * and only invitation/reminder emails sent TO the current address (compared
+ * case-insensitively) count as "recently reminded".
  */
 
 type OccurrenceState = Database["public"]["Enums"]["automatic_rsvp_reminder_state"];
@@ -29,10 +35,20 @@ export type AutomaticReminderPartyInput = Readonly<{
   weddingTimeZone: string | null;
   /** Any current guest has a saved answer. */
   answered: boolean;
-  hasContactEmail: boolean;
+  /** The party's CURRENT contact email. */
+  contactEmail: string | null;
+  /**
+   * LB-18.3's block of the current address in this wedding (suppressed,
+   * bounced or complained): the same rule as the members' warning.
+   */
+  contactEmailBlocked: boolean;
   linkState: GuestLinkState;
-  lastReminderEmailAt: string | null;
-  lastInvitationEmailAt: string | null;
+  /**
+   * The party's recorded invitation and reminder emails (either channel),
+   * each with the address it went to: the latest-send metadata and the
+   * ledger rows of those kinds. Never RSVP confirmations.
+   */
+  recordedEmails: readonly RecordedEmail[];
   occurrence: Readonly<{
     state: OccurrenceState;
     outcomeReason: OutcomeReason | null;
@@ -41,11 +57,14 @@ export type AutomaticReminderPartyInput = Readonly<{
   now: Date;
 }>;
 
+export type RecordedEmail = Readonly<{ sentAt: string; sentTo: string }>;
+
 export type NotSendingReason =
   | "answered"
   | "no_contact_email"
   | "link_unavailable"
   | "link_unrecoverable"
+  | "recipient_undeliverable"
   | "recently_reminded"
   | "date_passed"
   | "needs_date";
@@ -69,6 +88,7 @@ const REACTIVATABLE: ReadonlySet<OutcomeReason> = new Set([
   "link_unavailable",
   "policy_disabled",
   "out_of_window",
+  "recipient_undeliverable",
 ]);
 
 export function automaticReminderPartyStatus(input: AutomaticReminderPartyInput): AutomaticReminderPartyStatus {
@@ -119,15 +139,30 @@ export function automaticReminderPartyStatus(input: AutomaticReminderPartyInput)
   if (reactivatable && occurrence?.outcomeReason === "link_unrecoverable") {
     return { kind: "not_sending", reason: "link_unrecoverable" };
   }
-  if (!input.hasContactEmail) return { kind: "not_sending", reason: "no_contact_email" };
+  if (!input.contactEmail) return { kind: "not_sending", reason: "no_contact_email" };
+  if (input.contactEmailBlocked) return { kind: "not_sending", reason: "recipient_undeliverable" };
 
-  const suppressedUntil = Math.max(
-    input.lastReminderEmailAt ? new Date(input.lastReminderEmailAt).getTime() : 0,
-    input.lastInvitationEmailAt ? new Date(input.lastInvitationEmailAt).getTime() : 0,
-  ) + AUTOMATIC_REMINDER_SUPPRESSION_DAYS * DAY_MS;
+  const lastToCurrent = lastEmailTo(input.recordedEmails, input.contactEmail);
+  const suppressedUntil = (lastToCurrent ?? 0) + AUTOMATIC_REMINDER_SUPPRESSION_DAYS * DAY_MS;
   if (window === "open" && suppressedUntil > now.getTime()) {
     return { kind: "not_sending", reason: "recently_reminded" };
   }
 
   return { kind: "scheduled", dueAt };
+}
+
+/**
+ * When the latest of `emails` sent to `recipient` (comparison form: trim +
+ * lowercase, so a case variant is the same address) went out, in ms; null if
+ * none did. A send to another address never counts.
+ */
+export function lastEmailTo(emails: readonly RecordedEmail[], recipient: string): number | null {
+  const target = normalizeEmailForComparison(recipient);
+  let latest: number | null = null;
+  for (const email of emails) {
+    if (normalizeEmailForComparison(email.sentTo) !== target) continue;
+    const at = new Date(email.sentAt).getTime();
+    if (latest === null || at > latest) latest = at;
+  }
+  return latest;
 }

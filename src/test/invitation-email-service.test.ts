@@ -44,6 +44,7 @@ const SENT_AT = "2026-10-03T12:00:00+00:00";
 /** LB-13: the server's (fake, test-only) link-encryption key. */
 const ENCRYPTION = { key: TEST_RSVP_CAPABILITY_KEY };
 const ROTATE_RPC = "POST /rest/v1/rpc/rotate_guest_invitation_link";
+const BLOCK_RPC = "POST /rest/v1/rpc/get_guest_invitation_email_block";
 
 type Recorded = { method: string; url: URL; body: unknown };
 type Reply = { status: number; body: unknown };
@@ -85,6 +86,8 @@ const PARTY_ROW = { id: PARTY_ID, label: "Familia Pérez", contact_email: "famil
 function happyReplies(overrides: Record<string, Reply> = {}): Record<string, Reply> {
   return {
     "GET /rest/v1/guest_invitations": { status: 200, body: [PARTY_ROW] },
+    // LB-18.3: the same-address delivery guard; "none" = sendable.
+    [BLOCK_RPC]: { status: 200, body: "none" },
     "POST /rest/v1/rpc/guest_invitation_link_is_current": { status: 200, body: true },
     "GET /rest/v1/weddings": {
       status: 200,
@@ -454,6 +457,84 @@ describe("rotateLinkAndSendInvitation", () => {
     expect(await rotateLinkAndSendInvitation(supabase, WEDDING_ID, PARTY_ID, fake.delivery, ENCRYPTION)).toEqual({
       outcome: "failed",
       reason: "forbidden",
+    });
+    expect(fake.sent).toHaveLength(0);
+  });
+});
+
+// LB-18.3 (ADR-011 §9): the same-address delivery guard. The database answers
+// for the party's CURRENT contact email in the authorized wedding; a blocked
+// address stops everything before the provider (and before any rotation).
+describe("same-address delivery guard (LB-18.3)", () => {
+  const blocked = (block: string): Record<string, Reply> => ({ [BLOCK_RPC]: { status: 200, body: block } });
+
+  it("asks about the party's current address, scoped to the authorized wedding, as the member", async () => {
+    const { supabase, requests } = clientFor({ role: "collaborator", replies: happyReplies() });
+    await sendGuestInvitationEmail(supabase, WEDDING_ID, PARTY_ID, TOKEN, fakeSender().delivery);
+    const check = requests.find((r) => `${r.method} ${r.url.pathname}` === BLOCK_RPC);
+    expect(check?.body).toEqual({
+      target_wedding_id: WEDDING_ID,
+      target_invitation_id: PARTY_ID,
+      target_recipient: "familia@example.com",
+    });
+    // Before the link check and the provider.
+    const calls = dataCalls(requests);
+    expect(calls.indexOf(BLOCK_RPC)).toBeLessThan(calls.indexOf("POST /rest/v1/rpc/guest_invitation_link_is_current"));
+  });
+
+  it.each([
+    ["bounced", "recipient_undeliverable"],
+    ["suppressed", "recipient_undeliverable"],
+    ["complained", "recipient_complained"],
+  ] as const)("fresh link, current address %s → %s: provider 0, recorder 0", async (block, reason) => {
+    const { supabase, requests } = clientFor({ role: "owner", replies: happyReplies(blocked(block)) });
+    const fake = fakeSender();
+    expect(await sendGuestInvitationEmail(supabase, WEDDING_ID, PARTY_ID, TOKEN, fake.delivery)).toEqual({
+      outcome: "failed",
+      reason,
+    });
+    expect(fake.sent).toHaveLength(0);
+    expect(fake.records).toHaveLength(0);
+    expect(fake.order).toEqual([]);
+    const calls = dataCalls(requests);
+    expect(calls).not.toContain("POST /rest/v1/rpc/guest_invitation_link_is_current");
+    expect(calls).not.toContain(RECORD_RPC);
+    expect(calls.filter((c) => !c.startsWith("GET ") && c !== BLOCK_RPC)).toEqual([]);
+  });
+
+  it.each(["bounced", "suppressed", "complained"] as const)(
+    "rotate and send, current address %s: nothing rotated, nothing sent, no link returned",
+    async (block) => {
+      const { supabase, requests } = clientFor({ role: "owner", replies: happyReplies(blocked(block)) });
+      const fake = fakeSender();
+      const outcome = await rotateLinkAndSendInvitation(supabase, WEDDING_ID, PARTY_ID, fake.delivery, ENCRYPTION);
+      expect(outcome.outcome).toBe("failed");
+      expect(outcome.link).toBeUndefined();
+      expect(dataCalls(requests)).not.toContain(ROTATE_RPC);
+      expect(fake.sent).toHaveLength(0);
+      expect(fake.records).toHaveLength(0);
+    },
+  );
+
+  it("none (clean, delayed, failed, delivered or an edited address) → sent and recorded", async () => {
+    const { supabase } = clientFor({ role: "owner", replies: happyReplies(blocked("none")) });
+    const fake = fakeSender();
+    expect(await sendGuestInvitationEmail(supabase, WEDDING_ID, PARTY_ID, TOKEN, fake.delivery)).toMatchObject({
+      outcome: "sent",
+    });
+    expect(fake.order).toEqual(["SEND", "RECORD"]);
+  });
+
+  it.each([
+    ["null (address changed in between, or not visible)", { status: 200, body: null }],
+    ["an unknown value", { status: 200, body: "maybe" }],
+    ["a database error", { status: 500, body: { code: "XX000", message: "boom" } }],
+  ])("fails closed on %s: provider 0", async (_label, reply) => {
+    const { supabase } = clientFor({ role: "owner", replies: happyReplies({ [BLOCK_RPC]: reply }) });
+    const fake = fakeSender();
+    expect(await sendGuestInvitationEmail(supabase, WEDDING_ID, PARTY_ID, TOKEN, fake.delivery)).toEqual({
+      outcome: "failed",
+      reason: "error",
     });
     expect(fake.sent).toHaveLength(0);
   });

@@ -432,6 +432,11 @@ describe("listGuestParties", () => {
               automatic_rsvp_reminders: [
                 { state: "sent", outcome_reason: null, due_at: "2026-10-04T15:00:00Z", sent_at: "2026-10-04T15:05:00Z" },
               ],
+              // LB-18.3: its recorded emails' delivery status (any order from the API).
+              email_deliveries: [
+                { kind: "guest_invitation", recipient: "familia@example.com", accepted_at: "2026-10-02T10:00:00Z", status: "delivered" },
+                { kind: "rsvp_reminder_manual", recipient: "familia@example.com", accepted_at: "2026-10-04T08:00:00Z", status: "bounced" },
+              ],
             },
           ],
         },
@@ -461,6 +466,11 @@ describe("listGuestParties", () => {
           dueAt: "2026-10-04T15:00:00Z",
           sentAt: "2026-10-04T15:05:00Z",
         },
+        // Newest first; never a provider id.
+        deliveries: [
+          { kind: "rsvp_reminder_manual", recipient: "familia@example.com", acceptedAt: "2026-10-04T08:00:00Z", status: "bounced" },
+          { kind: "guest_invitation", recipient: "familia@example.com", acceptedAt: "2026-10-02T10:00:00Z", status: "delivered" },
+        ],
       },
     ]);
     const reads = requests.filter((r) => r.url.pathname.startsWith("/rest/v1/"));
@@ -468,6 +478,12 @@ describe("listGuestParties", () => {
     // LB-17: display columns only; never the worker's lease token or timing.
     const automatic = /automatic_rsvp_reminders\(([^)]*)\)/.exec(reads[0]?.url.searchParams.get("select") ?? "")?.[1];
     expect(automatic?.split(",").map((c) => c.trim())).toEqual(["state", "outcome_reason", "due_at", "sent_at"]);
+    // LB-18.3: kind, recipient, acceptance and status only — never the
+    // provider id, the event time or the provider event history.
+    const deliveries = /email_deliveries\(([^)]*)\)/.exec(reads[0]?.url.searchParams.get("select") ?? "")?.[1];
+    expect(deliveries?.split(",").map((c) => c.trim())).toEqual(["kind", "recipient", "accepted_at", "status"]);
+    expect(reads[0]?.url.searchParams.get("select")).not.toContain("email_delivery_events");
+    expect(reads[0]?.url.searchParams.get("select")).not.toContain("status_event_at");
     expect(reads[0]?.url.searchParams.get("select")).not.toContain("token_hash");
     // The provider's message id is operational data the page never needs.
     expect(reads[0]?.url.searchParams.get("select")).not.toContain("provider_id");

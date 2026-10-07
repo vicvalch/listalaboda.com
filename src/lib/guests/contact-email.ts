@@ -54,6 +54,18 @@ export function normalizeContactEmail(value: string): string | null {
   return `${local}@${domain}`;
 }
 
+/**
+ * LB-18.3 (ADR-011 §14): the form two addresses are COMPARED in for delivery
+ * safety (bounced / suppressed / complained blocks, the warning, and "the
+ * address changed"): trimmed and lowercased as a whole. Comparison only:
+ * stored and displayed values keep their casing, and nothing provider-specific
+ * is applied (dots and `+tags` stay significant). The database's twin is
+ * `private.email_comparison_form`.
+ */
+export function normalizeEmailForComparison(email: string): string {
+  return email.trim().toLowerCase();
+}
+
 /** True when `value` is already in stored form (what the database accepts). */
 export function isStoredContactEmail(value: string): boolean {
   return normalizeContactEmail(value) === value;

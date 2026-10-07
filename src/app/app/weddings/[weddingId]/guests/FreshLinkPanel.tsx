@@ -19,6 +19,12 @@ type Props = {
   status: string;
   /** Offer "Enviar invitación por correo" with this link. */
   canSend: boolean;
+  /**
+   * LB-18.3: the party's current address bounced, was suppressed or
+   * complained: the email button is disabled (copying the link isn't). The
+   * server refuses the send anyway.
+   */
+  emailBlocked?: boolean;
 };
 
 /**
@@ -27,7 +33,7 @@ type Props = {
  * token lives only in this component's props and the send form's body;
  * nothing is stored in the browser. After a reload it is gone for good.
  */
-export function FreshLinkPanel({ weddingId, fresh, partyLabel, id, status, canSend }: Props) {
+export function FreshLinkPanel({ weddingId, fresh, partyLabel, id, status, canSend, emailBlocked = false }: Props) {
   const copy = getMessages().guests;
   return (
     <div className="space-y-3 rounded-xl border border-success/40 bg-success-soft p-4">
@@ -40,12 +46,20 @@ export function FreshLinkPanel({ weddingId, fresh, partyLabel, id, status, canSe
         id={id}
         testId="guest-link"
       />
-      {canSend ? <SendInvitationForm weddingId={weddingId} fresh={fresh} /> : null}
+      {canSend ? <SendInvitationForm weddingId={weddingId} fresh={fresh} emailBlocked={emailBlocked} /> : null}
     </div>
   );
 }
 
-function SendInvitationForm({ weddingId, fresh }: { weddingId: string; fresh: FreshLinkData }) {
+function SendInvitationForm({
+  weddingId,
+  fresh,
+  emailBlocked,
+}: {
+  weddingId: string;
+  fresh: FreshLinkData;
+  emailBlocked: boolean;
+}) {
   const [state, formAction] = useActionState<SendInvitationState, FormData>(sendInvitationAction, null);
   const copy = getMessages().guests.invitationEmail;
 
@@ -55,7 +69,7 @@ function SendInvitationForm({ weddingId, fresh }: { weddingId: string; fresh: Fr
       <input type="hidden" name="guestInvitationId" value={fresh.guestInvitationId} />
       <input type="hidden" name="token" value={fresh.token} />
       <p className="text-muted text-sm">{copy.sendFreshHint}</p>
-      <SubmitButton label={copy.sendFresh} pendingLabel={copy.sending} variant="secondary" />
+      <SubmitButton label={copy.sendFresh} pendingLabel={copy.sending} variant="secondary" disabled={emailBlocked} />
       {state ? (
         <div key={state.nonce} data-testid="invitation-email-result">
           <Notice tone={state.tone}>{state.message}</Notice>

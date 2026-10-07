@@ -15,6 +15,8 @@ type Props = {
   /** Lookup key only. */
   guestInvitationId: string;
   partyLabel: string;
+  /** LB-18.3: the new link can be copied, but not emailed to a blocked address. */
+  emailBlocked?: boolean;
 };
 
 /**
@@ -22,7 +24,7 @@ type Props = {
  * then shows the new link once, to copy. After a reload only the link's
  * state is shown: the plaintext is never stored, so it can't be shown again.
  */
-export function RotateLinkButton({ weddingId, guestInvitationId, partyLabel }: Props) {
+export function RotateLinkButton({ weddingId, guestInvitationId, partyLabel, emailBlocked = false }: Props) {
   const [state, formAction] = useActionState<RotateLinkState, FormData>(rotateLinkAction, null);
   const created = state?.ok ? state.data : null;
   // The confirmation belongs to the link shown when it was opened: once a
@@ -83,6 +85,7 @@ export function RotateLinkButton({ weddingId, guestInvitationId, partyLabel }: P
           id={`guest-link-${guestInvitationId}`}
           status={copy.link.created}
           canSend
+          emailBlocked={emailBlocked}
         />
       ) : null}
     </div>

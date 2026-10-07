@@ -6,6 +6,7 @@ import { requireWeddingMembership, type WeddingAccess } from "@/lib/authz/weddin
 import type { EmailDelivery } from "@/lib/email/delivery";
 import { renderRsvpReminderEmail } from "@/lib/email/rsvp-reminder";
 import { isStoredContactEmail } from "@/lib/guests/contact-email";
+import { checkContactEmailBlock } from "@/lib/guests/email-block";
 import { guestRsvpUrl } from "@/lib/guests/link";
 import type { GuestLinkConfig } from "@/lib/guests/link-config";
 import { recoverCurrentCapability, type RecoverCapabilityResult } from "@/lib/guests/link-recovery";
@@ -38,11 +39,19 @@ import { getWeddingDetail } from "@/lib/weddings/service";
  *
  * Email order: authorize (the user's own session) → validate → email
  * configuration and link key → the party and its current recipient (scoped
- * to the authorized wedding) → recover the current link → wedding context →
+ * to the authorized wedding) → the same-address delivery guard (LB-18.3) →
+ * recover the current link → wedding context →
  * render → ONE provider call → only after the provider accepted, the
  * privileged recorder (`delivery.recorder`, ADR-007). The provider is never
  * called before every check passed and the recorder never before the
  * provider accepted; neither authorizes. No automatic retries.
+ *
+ * LB-18.3 (ADR-011 §9): automation never blocks a manual reminder, but
+ * delivery safety does: when the party's CURRENT contact email already
+ * bounced, was suppressed or complained in this wedding, the EMAIL is not
+ * sent (`recipient_undeliverable` / `recipient_complained`) — no provider
+ * call, metadata, activity or ledger row. Editing the address lifts it. The
+ * WhatsApp text and "Mostrar enlace" are never blocked.
  *
  * Nothing is logged. The token exists only in memory, the email body and
  * the prepared text; the recorder gets its hash.
@@ -68,6 +77,10 @@ export type ReminderSendOutcome =
         | "email_not_configured"
         | ReminderLinkFailure
         | "recipient_rejected"
+        /** LB-18.3: this exact current address bounced or was suppressed in this wedding. */
+        | "recipient_undeliverable"
+        /** LB-18.3: this exact current address marked an email as spam. */
+        | "recipient_complained"
         | "provider_failed";
     }>
   | Readonly<{ outcome: "failed"; reason: ReminderAccessFailure }>;
@@ -147,6 +160,17 @@ export async function sendRsvpReminderEmail(
   // a provider recipient.
   if (!isStoredContactEmail(party.contactEmail)) return { outcome: "recipient_rejected" };
   const recipient = party.contactEmail;
+
+  switch (await checkContactEmailBlock(supabase, access, party.id, recipient)) {
+    case "sendable":
+      break;
+    case "undeliverable":
+      return { outcome: "recipient_undeliverable" };
+    case "complained":
+      return { outcome: "recipient_complained" };
+    case "error":
+      return { outcome: "failed", reason: "error" };
+  }
 
   const recovered = await recoverCurrentCapability(supabase, access, party.id, encryption);
   if (!recovered.ok) {

@@ -13,8 +13,9 @@ import { E2E_RESEND_WEBHOOK_SECRET } from "./support/webhook";
 // LB-18.2 (ADR-011 §7): the signed Resend webhook against the production
 // build. The app writes emails to the local outbox; the journey signs a
 // delivery event for that send with a FAKE test-only secret and posts it
-// like the provider would. There is no delivery UI yet, so the outcome is
-// read from local Postgres (test tooling only, never the action under test).
+// like the provider would. The outcome is read from local Postgres (test
+// tooling only, never the action under test); the LB-18.3 delivery status UI
+// has its own journey (delivery-status.spec.ts).
 // Guest links are bearer credentials: assertions on them are redacted.
 
 const guests = es.guests;

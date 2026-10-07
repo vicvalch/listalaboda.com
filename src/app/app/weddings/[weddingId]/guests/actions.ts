@@ -419,6 +419,8 @@ async function sendOutcomeMessage(
     configuration_error: copy.errors.notConfigured,
     link_configuration_error: getMessages().guests.errors.linkNotConfigured,
     recipient_rejected: copy.errors.recipientRejected,
+    recipient_undeliverable: copy.errors.recipientUndeliverable,
+    recipient_complained: copy.errors.recipientComplained,
     provider_failed: copy.errors.providerFailed,
     forbidden: copy.ownerRequired,
   };
@@ -588,6 +590,10 @@ export async function sendReminderAction(
       return { tone: "error", message: copy.errors.linkUnavailable, nonce };
     case "recipient_rejected":
       return { tone: "error", message: copy.errors.recipientRejected, nonce };
+    case "recipient_undeliverable":
+      return { tone: "error", message: copy.errors.recipientUndeliverable, nonce };
+    case "recipient_complained":
+      return { tone: "error", message: copy.errors.recipientComplained, nonce };
     case "provider_failed":
       return { tone: "error", message: copy.errors.providerFailed, nonce };
     case "failed":

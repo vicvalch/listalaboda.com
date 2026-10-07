@@ -88,6 +88,7 @@ describe("submitRsvpAction", () => {
     ["provider_failed", "/rsvp?saved=1&email=failed"],
     ["not_sent", "/rsvp?saved=1&email=failed"],
     ["skipped_no_email", "/rsvp?saved=1"],
+    ["skipped_undeliverable", "/rsvp?saved=1"],
     ["not_configured", "/rsvp?saved=1"],
   ])("saved + %s → %s (always a success)", async (confirmation, url) => {
     submitRsvpWithConfirmation.mockResolvedValue({ rsvp: "saved", party: {}, confirmation });

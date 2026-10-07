@@ -9,6 +9,17 @@ import { requireUser } from "@/lib/auth/session";
 import { requireWeddingMembership } from "@/lib/authz/wedding";
 import { checklistItemHref, guestPartyAnchor } from "@/lib/checklist/guest-work";
 import { CONTACT_EMAIL_MAX_LENGTH } from "@/lib/guests/contact-email";
+import {
+  CONFIRMATION_KINDS,
+  INVITATION_KINDS,
+  REMINDER_KINDS,
+  deliveryForSend,
+  deliveryStatusLabel,
+  recipientBlock,
+  recipientWarning,
+  type PartyDelivery,
+  type RecipientWarning,
+} from "@/lib/guests/delivery-status";
 import { guestLinkExpiresAt, guestLinkState } from "@/lib/guests/link";
 import { listGuestParties, type GuestListParty } from "@/lib/guests/service";
 import { guestResponseStatus, summarizeGuests, type GuestSummary } from "@/lib/guests/summary";
@@ -96,6 +107,9 @@ export default async function GuestsPage({
       : null;
   const { done } = await searchParams;
   const copy = getMessages().guests;
+  // LB-18.3: the same-address rule is wedding-wide, so the warning looks at
+  // every party's recorded emails (already loaded with the list).
+  const weddingDeliveries = (parties ?? []).flatMap((party) => party.deliveries);
 
   return (
     <div className="space-y-8">
@@ -154,6 +168,7 @@ export default async function GuestsPage({
                   weddingDate={wedding.weddingDate}
                   weddingTimeZone={wedding.timeZone}
                   party={party}
+                  weddingDeliveries={weddingDeliveries}
                   now={now}
                   canAdministerLink={access.access.role === "owner"}
                   automaticStatus={automaticStatus(party)}
@@ -207,6 +222,8 @@ type PartyCardProps = {
   weddingDate: string | null;
   weddingTimeZone: string | null;
   party: GuestListParty;
+  /** LB-18.3: every recorded email of this wedding (for the current-address warning). */
+  weddingDeliveries: readonly PartyDelivery[];
   now: Date;
   /** Owner: may replace or revoke the link. Cosmetic; the server re-checks. */
   canAdministerLink: boolean;
@@ -219,6 +236,7 @@ function PartyCard({
   weddingDate,
   weddingTimeZone,
   party,
+  weddingDeliveries,
   now,
   canAdministerLink,
   automaticStatus,
@@ -227,6 +245,9 @@ function PartyCard({
   const checklistStatus = getMessages().checklist.status;
   const titleId = `party-${party.id}-title`;
   const linkState = guestLinkState(party, weddingDate, now);
+  // LB-18.3: the CURRENT address's delivery block (wedding-wide, compared
+  // case-insensitively). Disables the email buttons; the server decides.
+  const emailWarning = recipientWarning(recipientBlock(weddingDeliveries, party.contactEmail));
   const expiresAt = guestLinkExpiresAt(party.tokenIssuedAt, weddingDate);
   const onlyGuest = party.guests.length === 1;
   const partyKeys = { weddingId, guestInvitationId: party.id };
@@ -376,6 +397,7 @@ function PartyCard({
         weddingId={weddingId}
         weddingTimeZone={weddingTimeZone}
         party={party}
+        emailWarning={emailWarning}
         canAdministerLink={canAdministerLink}
       />
 
@@ -402,6 +424,7 @@ function PartyCard({
               partyLabel={party.label}
               contactEmail={party.contactEmail}
               canAdministerLink={canAdministerLink}
+              emailBlockedMessage={emailWarning ? copy.delivery.warning[emailWarning] : null}
             />
           </>
         ) : (
@@ -415,7 +438,12 @@ function PartyCard({
           </div>
         )}
         {canAdministerLink ? (
-          <RotateLinkButton weddingId={weddingId} guestInvitationId={party.id} partyLabel={party.label} />
+          <RotateLinkButton
+            weddingId={weddingId}
+            guestInvitationId={party.id}
+            partyLabel={party.label}
+            emailBlocked={emailWarning !== null}
+          />
         ) : null}
         <div className="flex flex-wrap items-start gap-2">
           {canAdministerLink && linkState !== "revoked" ? (
@@ -450,6 +478,8 @@ type ContactEmailSectionProps = {
   weddingId: string;
   weddingTimeZone: string | null;
   party: GuestListParty;
+  /** LB-18.3: null = the current address may be emailed. */
+  emailWarning: RecipientWarning;
   canAdministerLink: boolean;
 };
 
@@ -464,8 +494,20 @@ type ContactEmailSectionProps = {
  * creating or replacing it, with its own send button) or, for an owner,
  * "Generar nuevo enlace y enviar". A collaborator is told an owner must
  * generate the new link; the server enforces it either way.
+ *
+ * LB-18.3: each "last sent" line also shows what happened to THAT email
+ * (its address is on the line), and a warning appears only when the CURRENT
+ * contact email already bounced, was suppressed or complained in this
+ * wedding — editing the address clears it. Sending is refused by the server
+ * in that case; this page never decides it.
  */
-function ContactEmailSection({ weddingId, weddingTimeZone, party, canAdministerLink }: ContactEmailSectionProps) {
+function ContactEmailSection({
+  weddingId,
+  weddingTimeZone,
+  party,
+  emailWarning: warning,
+  canAdministerLink,
+}: ContactEmailSectionProps) {
   const copy = getMessages().guests;
   const partyKeys = { weddingId, guestInvitationId: party.id };
   const sent = party.invitationEmail;
@@ -492,6 +534,12 @@ function ContactEmailSection({ weddingId, weddingTimeZone, party, canAdministerL
                 })
               : copy.invitationEmail.never}
           </span>
+          {sent ? (
+            <DeliveryStatusText
+              testId="party-invitation-delivery-status"
+              delivery={deliveryForSend(party.deliveries, INVITATION_KINDS, sent.sentAt)}
+            />
+          ) : null}
         </p>
         {linkChangedSince ? <p className="text-muted">{copy.invitationEmail.linkChangedSince}</p> : null}
         <p>
@@ -504,6 +552,12 @@ function ContactEmailSection({ weddingId, weddingTimeZone, party, canAdministerL
                 })
               : copy.rsvpConfirmationEmail.never}
           </span>
+          {confirmed ? (
+            <DeliveryStatusText
+              testId="party-rsvp-confirmation-delivery-status"
+              delivery={deliveryForSend(party.deliveries, CONFIRMATION_KINDS, confirmed.sentAt)}
+            />
+          ) : null}
         </p>
         <p>
           <span className="font-semibold">{copy.reminder.emailStatusTitle}:</span>{" "}
@@ -515,8 +569,24 @@ function ContactEmailSection({ weddingId, weddingTimeZone, party, canAdministerL
                 })
               : copy.reminder.never}
           </span>
+          {reminded ? (
+            <DeliveryStatusText
+              testId="party-reminder-delivery-status"
+              delivery={deliveryForSend(party.deliveries, REMINDER_KINDS, reminded.sentAt)}
+            />
+          ) : null}
         </p>
       </div>
+      {warning ? (
+        // Standing page state, not a fresh error: styled like one, not announced as one.
+        <p
+          className="rounded-lg border border-danger/40 bg-danger-soft px-4 py-3 text-sm font-medium text-danger"
+          data-testid="party-contact-email-warning"
+          data-warning={warning}
+        >
+          {copy.delivery.warning[warning]}
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-start gap-2">
         <TextEditForm
           action={saveContactEmailAction}
@@ -554,6 +624,7 @@ function ContactEmailSection({ weddingId, weddingTimeZone, party, canAdministerL
             guestInvitationId={party.id}
             partyLabel={party.label}
             contactEmail={party.contactEmail}
+            emailBlocked={warning !== null}
           />
         </div>
       ) : (
@@ -562,6 +633,21 @@ function ContactEmailSection({ weddingId, weddingTimeZone, party, canAdministerL
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * LB-18.3: what happened to the email on the line before it. Status words only
+ * (never provider ids, event times or technical terms); an automatic reminder
+ * says so. `null` = the send predates the delivery ledger.
+ */
+function DeliveryStatusText({ delivery, testId }: { delivery: PartyDelivery | null; testId: string }) {
+  const copy = getMessages().guests.delivery;
+  return (
+    <span className="text-muted" data-testid={testId} data-status={delivery?.status ?? "unavailable"}>
+      {" "}
+      · {copy.label}: {deliveryStatusLabel(delivery)}
+    </span>
   );
 }
 

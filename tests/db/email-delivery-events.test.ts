@@ -473,11 +473,16 @@ describe("privileges", () => {
     expect(await eventsOf(deliveryId)).toHaveLength(1);
   });
 
-  it("clients still can't read the status or the provider id, nor update a delivery", async () => {
+  it("members read the status (LB-18.3), never status_event_at or the provider id, and can't update a delivery", async () => {
     const { party, deliveryId } = await recordedSend(weddingA);
     for (const actor of ["ownerA", "collabA"] as const) {
       const status = await as[actor].from("email_deliveries").select("status").eq("guest_invitation_id", party.id);
-      expect(status.error?.code, actor).toBe(PERMISSION_DENIED);
+      expect(status.error, actor).toBeNull();
+      expect(status.data, actor).toEqual([{ status: "accepted" }]);
+      for (const column of ["status_event_at", "provider_message_id"]) {
+        const hidden = await as[actor].from("email_deliveries").select(column).eq("guest_invitation_id", party.id);
+        expect(hidden.error?.code, `${actor} ${column}`).toBe(PERMISSION_DENIED);
+      }
       const updated = await as[actor].from("email_deliveries").update({ status: "delivered" }).eq("id", deliveryId);
       expect(updated.error?.code, actor).toBe(PERMISSION_DENIED);
     }

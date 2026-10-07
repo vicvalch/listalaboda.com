@@ -8,7 +8,8 @@
  * - sent / sent_but_unrecorded → "También enviamos un correo…" (the provider
  *   accepted it; a missing status record is the organizers' concern);
  * - provider_failed / not_sent → a soft "no pudimos enviar el correo";
- * - skipped_no_email / not_configured → nothing (no email was expected).
+ * - skipped_no_email / skipped_undeliverable / not_configured → nothing (no
+ *   email was expected, or it was deliberately not sent).
  *
  * It travels in the redirect as a fixed word (`?saved=1&email=sent`), never
  * data. Anyone can type it; it only changes that one sentence.
@@ -19,6 +20,9 @@
  * - `sent_but_unrecorded`: the provider accepted it (it may well arrive) but
  *   the status couldn't be recorded. Never "not sent"; never resent.
  * - `skipped_no_email`: the party has no contact email; nothing to send.
+ * - `skipped_undeliverable`: LB-18.3 — the party's current address already
+ *   bounced, was suppressed or complained in this wedding; deliberately not
+ *   sent. The guest sees no note (the RSVP is what matters).
  * - `not_configured`: email isn't configured; nothing was attempted.
  * - `provider_failed`: the provider refused or failed; nothing recorded.
  * - `not_sent`: the email couldn't even be prepared (the private context
@@ -28,6 +32,7 @@ export type ConfirmationOutcome =
   | "sent"
   | "sent_but_unrecorded"
   | "skipped_no_email"
+  | "skipped_undeliverable"
   | "not_configured"
   | "provider_failed"
   | "not_sent";
@@ -43,6 +48,7 @@ export function confirmationNoticeOf(outcome: ConfirmationOutcome): Confirmation
     case "not_sent":
       return "failed";
     case "skipped_no_email":
+    case "skipped_undeliverable":
     case "not_configured":
       return null;
   }

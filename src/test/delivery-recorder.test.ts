@@ -220,6 +220,7 @@ describe("createDeliveryRecorder: RSVP confirmation (ADR-005)", () => {
           wedding_name: "Boda",
           wedding_date: null,
           wedding_city: null,
+          contact_email_block: "none",
         },
       ],
       error: null,
@@ -230,6 +231,7 @@ describe("createDeliveryRecorder: RSVP confirmation (ADR-005)", () => {
         weddingId: entry.weddingId,
         guestInvitationId: entry.guestInvitationId,
         recipient: "familia@example.com",
+        recipientBlocked: false,
         weddingName: "Boda",
         weddingDate: null,
         weddingCity: null,
@@ -238,6 +240,48 @@ describe("createDeliveryRecorder: RSVP confirmation (ADR-005)", () => {
     expect(rpc).toHaveBeenCalledTimes(1);
     expect(rpc).toHaveBeenCalledWith("get_rsvp_confirmation_email_context", { invitation_token_hash: entry.tokenHash });
     expect(from).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["suppressed", true],
+    ["bounced", true],
+    ["complained", true],
+    ["none", false],
+  ] as const)("readRsvpConfirmationContext: contact_email_block %s → recipientBlocked %s (LB-18.3)", async (block, blocked) => {
+    rpc.mockResolvedValue({
+      data: [
+        {
+          wedding_id: entry.weddingId,
+          guest_invitation_id: entry.guestInvitationId,
+          contact_email: "familia@example.com",
+          wedding_name: "Boda",
+          wedding_date: null,
+          wedding_city: null,
+          contact_email_block: block,
+        },
+      ],
+      error: null,
+    });
+    const read = await recorder().readRsvpConfirmationContext(entry.tokenHash);
+    expect(read.ok && read.context.recipientBlocked).toBe(blocked);
+  });
+
+  it("readRsvpConfirmationContext: an unknown block value fails closed (LB-18.3)", async () => {
+    rpc.mockResolvedValue({
+      data: [
+        {
+          wedding_id: entry.weddingId,
+          guest_invitation_id: entry.guestInvitationId,
+          contact_email: "familia@example.com",
+          wedding_name: "Boda",
+          wedding_date: null,
+          wedding_city: null,
+          contact_email_block: null,
+        },
+      ],
+      error: null,
+    });
+    expect(await recorder().readRsvpConfirmationContext(entry.tokenHash)).toEqual({ ok: false });
   });
 
   it("readRsvpConfirmationContext refuses anything but a SHA-256 hex hash (never a plaintext token)", async () => {

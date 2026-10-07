@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { es } from "@/lib/i18n/messages/es";
+
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ notFound: vi.fn(), redirect: vi.fn() }));
@@ -71,6 +73,22 @@ describe("invitation email actions", () => {
     // No key in this test environment: null, never a value from the form.
     expect(rotateLinkAndSendInvitation).toHaveBeenCalledWith(userClient, "w-1", "p-1", delivery, null);
     expect(state).toMatchObject({ tone: "error", canRetry: false });
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  // LB-18.3: a blocked current address gets the fixed catalog message; no
+  // link is handed over (nothing was rotated), and nothing is recorded.
+  it.each([
+    ["recipient_undeliverable", es.guests.invitationEmail.errors.recipientUndeliverable],
+    ["recipient_complained", es.guests.invitationEmail.errors.recipientComplained],
+  ] as const)("%s → its catalog message, for both entry points", async (reason, message) => {
+    sendGuestInvitationEmail.mockResolvedValueOnce({ outcome: "failed", reason } as never);
+    const sent = await sendInvitationAction(null, forgedForm({ weddingId: "w-1", guestInvitationId: "p-1", token: "T".repeat(43) }));
+    expect(sent).toMatchObject({ tone: "error", message });
+    rotateLinkAndSendInvitation.mockResolvedValueOnce({ outcome: "failed", reason } as never);
+    const rotated = await rotateAndSendAction(null, forgedForm({ weddingId: "w-1", guestInvitationId: "p-1" }));
+    expect(rotated).toMatchObject({ tone: "error", message, canRetry: false });
+    expect(rotated?.link).toBeUndefined();
     expect(record).not.toHaveBeenCalled();
   });
 });

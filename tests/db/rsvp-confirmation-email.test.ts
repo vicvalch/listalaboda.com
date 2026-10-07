@@ -301,7 +301,7 @@ describe("only service_role can execute the confirmation functions (ADR-005)", (
 // ------------------------------------------------------- narrow context read
 
 describe("get_rsvp_confirmation_email_context: one live link, the minimum", () => {
-  it("returns the party's ids, contact email and wedding name/date/city — nothing else", async () => {
+  it("returns the party's ids, contact email (+ its LB-18.3 block) and wedding name/date/city — nothing else", async () => {
     const party = await createParty("collabA", weddingA, "Contexto", "contexto@example.com");
     await answer(party, true);
     const { data, error } = await readContext("service", party.hash);
@@ -314,6 +314,8 @@ describe("get_rsvp_confirmation_email_context: one live link, the minimum", () =
         wedding_name: "Boda Confirmación A",
         wedding_date: "2090-06-01",
         wedding_city: "Ciudad Ejemplo",
+        // LB-18.3 (ADR-011 §14): the current address's send block (closed value).
+        contact_email_block: "none",
       },
     ]);
     expect(JSON.stringify(data)).not.toContain("nota privada");

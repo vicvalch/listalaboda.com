@@ -23,6 +23,8 @@ const TABLES = [
   "automatic_rsvp_reminders",
   // LB-18.1 (ADR-011)
   "email_deliveries",
+  // LB-18.2 (ADR-011 §7)
+  "email_delivery_events",
 ];
 
 /**
@@ -115,7 +117,8 @@ describe("schema guarantees", () => {
                                 'revoke_guest_invitation_link', 'get_wedding_activity',
                                 'set_rsvp_reminder_policy', 'claim_automatic_rsvp_reminders',
                                 'prepare_automatic_rsvp_reminder', 'begin_automatic_rsvp_reminder_send',
-                                'record_automatic_rsvp_reminder_email', 'finish_automatic_rsvp_reminder'))
+                                'record_automatic_rsvp_reminder_email', 'finish_automatic_rsvp_reminder',
+                                'ingest_email_delivery_event'))
        order by 1`,
     );
 
@@ -124,10 +127,12 @@ describe("schema guarantees", () => {
       "private.automatic_rsvp_reminder_due_at",
       "private.automatic_rsvp_reminder_ineligibility",
       "private.automatic_rsvp_reminder_party_due_at",
+      "private.email_delivery_status_rank",
       "private.enforce_guest_invitation_capability_secret",
       "private.enforce_guest_invitation_has_guest",
       "private.enforce_wedding_has_owner",
       "private.guard_email_deliveries",
+      "private.guard_email_delivery_events",
       "private.guard_guest_invitation_link",
       "private.guard_membership_invite_state",
       "private.guard_wedding_activity",
@@ -153,6 +158,7 @@ describe("schema guarantees", () => {
       "public.get_rsvp_confirmation_email_context",
       "public.get_wedding_activity",
       "public.guest_invitation_link_is_current",
+      "public.ingest_email_delivery_event",
       "public.initialize_wedding_checklist",
       "public.prepare_automatic_rsvp_reminder",
       "public.publish_wedding_site",
@@ -216,6 +222,8 @@ describe("schema guarantees", () => {
     expect(definer).toContain("public.record_rsvp_confirmation_email");
     // LB-14 (ADR-007): service_role-only, scoped to one party's live link.
     expect(definer).toContain("public.record_rsvp_reminder_email");
+    // LB-18.2 (ADR-011 §7): service_role-only, provider-signature-authenticated.
+    expect(definer).toContain("public.ingest_email_delivery_event");
     // LB-13 (ADR-006): no client role can read or write token_hash/envelopes,
     // so the two writers and the recovery read check membership themselves.
     expect(definer).toContain("public.get_guest_invitation_recovery_envelope");

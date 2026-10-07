@@ -280,8 +280,16 @@ activity row. Rows are immutable, visible only to the wedding's members (never t
 party or wedding. Nothing visible changes yet, and nothing is backfilled: emails sent before LB-18.1 have no row. See
 [ADR-011](docs/architecture/ADR-011-email-delivery-observability.md).
 
-Still deferred: recurring or multi-stage reminders, per-party automation settings, delivery/bounce webhooks and
-delivery status (LB-18.2+), and messaging APIs and phone numbers.
+**Signed delivery webhooks (LB-18.2, passive ingestion foundation only).** `POST /api/webhooks/resend` accepts Resend's
+signed delivery events (delivered, delayed, failed, suppressed, bounced, spam complaint), verified with the Standard
+Webhooks/Svix signature over the raw body and `RESEND_WEBHOOK_SECRET`. Each event is matched to its recorded email only
+by the provider's email id, deduplicated by its event id, kept as internal history (`email_delivery_events`, no client
+access) and advances that email's delivery status by a fixed rank, so duplicates and out-of-order events never move it
+backwards. Opens and clicks are never processed. Nothing is visible yet, nothing blocks sending, and no production
+webhook or secret is configured (a separately approved step).
+
+Still deferred: recurring or multi-stage reminders, per-party automation settings, delivery status UI, bounce-based
+send blocking and production webhook activation (LB-18.3+), and messaging APIs and phone numbers.
 
 ## Stack
 
@@ -314,6 +322,10 @@ at least 32 characters (generate one yourself, e.g. `node -e "console.log(requir
 never commit it) and call the scheduler yourself:
 `curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/rsvp-reminders`. Locally nothing calls it on
 its own (the `vercel.json` cron runs only on Vercel). The E2E suite uses a fake, test-only secret.
+
+Delivery webhooks (LB-18.2, optional locally): set `RESEND_WEBHOOK_SECRET` (a `whsec_…` signing secret) only when
+exercising `POST /api/webhooks/resend`; without it the route answers 503 and records nothing. It also needs
+`SUPABASE_SERVICE_ROLE_KEY`. The tests sign events with fake, test-only secrets; no real webhook is involved.
 
 Local Supabase (requires Docker): `npx supabase start`. Then copy the API URL and publishable key
 from `npx supabase status` into `.env.local`. The project is not linked to any remote Supabase project.

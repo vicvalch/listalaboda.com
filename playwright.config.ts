@@ -3,6 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 import { E2E_CRON_SECRET } from "./e2e/support/cron";
 import { assertLocal, readLocalSupabase } from "./e2e/support/local-supabase";
 import { OUTBOX_DIR } from "./e2e/support/outbox";
+import { E2E_RESEND_WEBHOOK_SECRET } from "./e2e/support/webhook";
 import { TEST_RSVP_CAPABILITY_KEY_ENV } from "./src/test/fixtures/rsvp-capability-key";
 
 const PORT = 3100;
@@ -49,6 +50,12 @@ function cronEnv() {
   return { CRON_SECRET: E2E_CRON_SECRET };
 }
 
+// LB-18.2: a FAKE, test-only webhook signing secret so the journeys can post
+// signed delivery events themselves. No provider webhook points anywhere.
+function webhookEnv() {
+  return { RESEND_WEBHOOK_SECRET: E2E_RESEND_WEBHOOK_SECRET };
+}
+
 export default defineConfig({
   testDir: "./e2e",
   globalSetup: "./e2e/global-setup.ts",
@@ -66,6 +73,6 @@ export default defineConfig({
     url: baseURL,
     reuseExistingServer: false,
     timeout: 300_000,
-    env: { ...supabaseEnv(), ...emailEnv(), ...capabilityEnv(), ...cronEnv() },
+    env: { ...supabaseEnv(), ...emailEnv(), ...capabilityEnv(), ...cronEnv(), ...webhookEnv() },
   },
 });

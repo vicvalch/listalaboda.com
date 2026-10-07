@@ -120,13 +120,13 @@ isOneToOne: false
                   ]
                 },"email_deliveries": {
                   Row: {
-                    "accepted_at": string,"guest_invitation_id": string,"id": string,"kind": Database["public"]['Enums']["email_delivery_kind"],"provider_message_id": string,"recipient": string,"wedding_id": string
+                    "accepted_at": string,"guest_invitation_id": string,"id": string,"kind": Database["public"]['Enums']["email_delivery_kind"],"provider_message_id": string,"recipient": string,"status": Database["public"]['Enums']["email_delivery_status"],"status_event_at": string | null,"wedding_id": string
                   }
                   Insert: {
-                    "accepted_at"?: string,"guest_invitation_id": string,"id"?: string,"kind": Database["public"]['Enums']["email_delivery_kind"],"provider_message_id": string,"recipient": string,"wedding_id": string
+                    "accepted_at"?: string,"guest_invitation_id": string,"id"?: string,"kind": Database["public"]['Enums']["email_delivery_kind"],"provider_message_id": string,"recipient": string,"status"?: Database["public"]['Enums']["email_delivery_status"],"status_event_at"?: string | null,"wedding_id": string
                   }
                   Update: {
-                    "accepted_at"?: string,"guest_invitation_id"?: string,"id"?: string,"kind"?: Database["public"]['Enums']["email_delivery_kind"],"provider_message_id"?: string,"recipient"?: string,"wedding_id"?: string
+                    "accepted_at"?: string,"guest_invitation_id"?: string,"id"?: string,"kind"?: Database["public"]['Enums']["email_delivery_kind"],"provider_message_id"?: string,"recipient"?: string,"status"?: Database["public"]['Enums']["email_delivery_status"],"status_event_at"?: string | null,"wedding_id"?: string
                   }
                   Relationships: [
                     {
@@ -141,6 +141,25 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "weddings"
       referencedColumns: ["id"]
+    }
+                  ]
+                },"email_delivery_events": {
+                  Row: {
+                    "bounce_type": Database["public"]['Enums']["email_bounce_type"] | null,"delivery_id": string,"event_type": Database["public"]['Enums']["email_delivery_event_type"],"id": string,"occurred_at": string,"provider_event_id": string,"received_at": string,"wedding_id": string
+                  }
+                  Insert: {
+                    "bounce_type"?: Database["public"]['Enums']["email_bounce_type"] | null,"delivery_id": string,"event_type": Database["public"]['Enums']["email_delivery_event_type"],"id"?: string,"occurred_at": string,"provider_event_id": string,"received_at"?: string,"wedding_id": string
+                  }
+                  Update: {
+                    "bounce_type"?: Database["public"]['Enums']["email_bounce_type"] | null,"delivery_id"?: string,"event_type"?: Database["public"]['Enums']["email_delivery_event_type"],"id"?: string,"occurred_at"?: string,"provider_event_id"?: string,"received_at"?: string,"wedding_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "email_delivery_events_delivery_same_wedding"
+      columns: ["delivery_id","wedding_id"]
+isOneToOne: false
+      referencedRelation: "email_deliveries"
+      referencedColumns: ["id","wedding_id"]
     }
                   ]
                 },"guest_invitations": {
@@ -414,6 +433,9 @@ isOneToOne: true
 "guest_invitation_link_is_current":
 { Args: { "invitation_token_hash": string,"target_invitation_id": string,"target_wedding_id": string }; Returns: boolean
                            },
+"ingest_email_delivery_event":
+{ Args: { "bounce_type"?: Database["public"]['Enums']["email_bounce_type"],"event_type": Database["public"]['Enums']["email_delivery_event_type"],"occurred_at": string,"provider_event_id": string,"provider_message_id": string }; Returns: Database["public"]['Enums']["email_delivery_ingest_outcome"]
+                           },
 "initialize_wedding_checklist":
 { Args: { "target_wedding_id": string }; Returns: {
               "already_initialized": boolean,"item_count": number,"template_key": string,"template_version": number
@@ -467,7 +489,7 @@ isOneToOne: true
                            }
           }
           Enums: {
-            "automatic_rsvp_reminder_finish_outcome": "link_unrecoverable"|"sent_unrecorded"|"retry"|"recipient_rejected"|"idempotency_conflict","automatic_rsvp_reminder_outcome_reason": "answered"|"no_contact_email"|"link_unavailable"|"link_unrecoverable"|"recently_reminded"|"policy_disabled"|"out_of_window"|"recipient_rejected"|"ineligible_after_attempt"|"idempotency_conflict"|"attempts_exhausted"|"replay_window_expired","automatic_rsvp_reminder_state": "claimed"|"sending"|"retry_wait"|"sent"|"sent_unrecorded"|"skipped"|"failed"|"unknown","checklist_category": "first_steps"|"venue_and_date"|"vendors"|"attire"|"invitations"|"ceremony"|"reception"|"final_preparations"|"after_wedding","checklist_item_status": "pending"|"done"|"not_applicable","checklist_timing_mode": "none"|"relative_to_wedding"|"absolute","content_section_kind": "intro"|"ceremony"|"reception"|"schedule"|"dress_code"|"faq"|"rsvp","email_delivery_kind": "guest_invitation"|"rsvp_confirmation"|"rsvp_reminder_manual"|"rsvp_reminder_automatic","wedding_activity_actor": "member"|"guest_capability"|"system","wedding_activity_event": "guest_invitation_created"|"guest_invitation_link_rotated"|"guest_invitation_revoked"|"guest_invitation_contact_email_changed"|"guest_invitation_email_sent"|"guest_rsvp_submitted"|"guest_rsvp_updated"|"rsvp_confirmation_email_sent"|"rsvp_reminder_email_sent","wedding_role": "owner"|"collaborator"
+            "automatic_rsvp_reminder_finish_outcome": "link_unrecoverable"|"sent_unrecorded"|"retry"|"recipient_rejected"|"idempotency_conflict","automatic_rsvp_reminder_outcome_reason": "answered"|"no_contact_email"|"link_unavailable"|"link_unrecoverable"|"recently_reminded"|"policy_disabled"|"out_of_window"|"recipient_rejected"|"ineligible_after_attempt"|"idempotency_conflict"|"attempts_exhausted"|"replay_window_expired","automatic_rsvp_reminder_state": "claimed"|"sending"|"retry_wait"|"sent"|"sent_unrecorded"|"skipped"|"failed"|"unknown","checklist_category": "first_steps"|"venue_and_date"|"vendors"|"attire"|"invitations"|"ceremony"|"reception"|"final_preparations"|"after_wedding","checklist_item_status": "pending"|"done"|"not_applicable","checklist_timing_mode": "none"|"relative_to_wedding"|"absolute","content_section_kind": "intro"|"ceremony"|"reception"|"schedule"|"dress_code"|"faq"|"rsvp","email_bounce_type": "permanent"|"transient"|"undetermined","email_delivery_event_type": "delivered"|"delivery_delayed"|"failed"|"suppressed"|"bounced"|"complained","email_delivery_ingest_outcome": "applied"|"no_change"|"duplicate"|"unknown_message","email_delivery_kind": "guest_invitation"|"rsvp_confirmation"|"rsvp_reminder_manual"|"rsvp_reminder_automatic","email_delivery_status": "accepted"|"delayed"|"failed"|"delivered"|"suppressed"|"bounced"|"complained","wedding_activity_actor": "member"|"guest_capability"|"system","wedding_activity_event": "guest_invitation_created"|"guest_invitation_link_rotated"|"guest_invitation_revoked"|"guest_invitation_contact_email_changed"|"guest_invitation_email_sent"|"guest_rsvp_submitted"|"guest_rsvp_updated"|"rsvp_confirmation_email_sent"|"rsvp_reminder_email_sent","wedding_role": "owner"|"collaborator"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -583,7 +605,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "automatic_rsvp_reminder_finish_outcome": ["link_unrecoverable", "sent_unrecorded", "retry", "recipient_rejected", "idempotency_conflict"],"automatic_rsvp_reminder_outcome_reason": ["answered", "no_contact_email", "link_unavailable", "link_unrecoverable", "recently_reminded", "policy_disabled", "out_of_window", "recipient_rejected", "ineligible_after_attempt", "idempotency_conflict", "attempts_exhausted", "replay_window_expired"],"automatic_rsvp_reminder_state": ["claimed", "sending", "retry_wait", "sent", "sent_unrecorded", "skipped", "failed", "unknown"],"checklist_category": ["first_steps", "venue_and_date", "vendors", "attire", "invitations", "ceremony", "reception", "final_preparations", "after_wedding"],"checklist_item_status": ["pending", "done", "not_applicable"],"checklist_timing_mode": ["none", "relative_to_wedding", "absolute"],"content_section_kind": ["intro", "ceremony", "reception", "schedule", "dress_code", "faq", "rsvp"],"email_delivery_kind": ["guest_invitation", "rsvp_confirmation", "rsvp_reminder_manual", "rsvp_reminder_automatic"],"wedding_activity_actor": ["member", "guest_capability", "system"],"wedding_activity_event": ["guest_invitation_created", "guest_invitation_link_rotated", "guest_invitation_revoked", "guest_invitation_contact_email_changed", "guest_invitation_email_sent", "guest_rsvp_submitted", "guest_rsvp_updated", "rsvp_confirmation_email_sent", "rsvp_reminder_email_sent"],"wedding_role": ["owner", "collaborator"]
+            "automatic_rsvp_reminder_finish_outcome": ["link_unrecoverable", "sent_unrecorded", "retry", "recipient_rejected", "idempotency_conflict"],"automatic_rsvp_reminder_outcome_reason": ["answered", "no_contact_email", "link_unavailable", "link_unrecoverable", "recently_reminded", "policy_disabled", "out_of_window", "recipient_rejected", "ineligible_after_attempt", "idempotency_conflict", "attempts_exhausted", "replay_window_expired"],"automatic_rsvp_reminder_state": ["claimed", "sending", "retry_wait", "sent", "sent_unrecorded", "skipped", "failed", "unknown"],"checklist_category": ["first_steps", "venue_and_date", "vendors", "attire", "invitations", "ceremony", "reception", "final_preparations", "after_wedding"],"checklist_item_status": ["pending", "done", "not_applicable"],"checklist_timing_mode": ["none", "relative_to_wedding", "absolute"],"content_section_kind": ["intro", "ceremony", "reception", "schedule", "dress_code", "faq", "rsvp"],"email_bounce_type": ["permanent", "transient", "undetermined"],"email_delivery_event_type": ["delivered", "delivery_delayed", "failed", "suppressed", "bounced", "complained"],"email_delivery_ingest_outcome": ["applied", "no_change", "duplicate", "unknown_message"],"email_delivery_kind": ["guest_invitation", "rsvp_confirmation", "rsvp_reminder_manual", "rsvp_reminder_automatic"],"email_delivery_status": ["accepted", "delayed", "failed", "delivered", "suppressed", "bounced", "complained"],"wedding_activity_actor": ["member", "guest_capability", "system"],"wedding_activity_event": ["guest_invitation_created", "guest_invitation_link_rotated", "guest_invitation_revoked", "guest_invitation_contact_email_changed", "guest_invitation_email_sent", "guest_rsvp_submitted", "guest_rsvp_updated", "rsvp_confirmation_email_sent", "rsvp_reminder_email_sent"],"wedding_role": ["owner", "collaborator"]
           }
         }
 } as const

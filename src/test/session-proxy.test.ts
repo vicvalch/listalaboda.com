@@ -1,7 +1,9 @@
+import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { REQUEST_PATH_HEADER, refreshSession } from "@/lib/supabase/proxy";
+import { config } from "@/proxy";
 
 // The session-refresh proxy must stay narrow: no redirects, no authorization,
 // and its forwarded path header can't be spoofed by the client.
@@ -34,5 +36,21 @@ describe("refreshSession (proxy)", () => {
     expect(response.headers.get(`x-middleware-request-${REQUEST_PATH_HEADER}`)).toBe(
       "/app/weddings/new?x=1",
     );
+  });
+});
+
+describe("proxy matcher", () => {
+  const matches = (path: string) => unstable_doesMiddlewareMatch({ config, url: `http://localhost${path}` });
+
+  it("runs on app and guest pages", () => {
+    for (const path of ["/", "/app/weddings/new", "/rsvp", "/boda/ana-y-luis", "/api/webhooks/resend-other", "/api/webhooks/other"]) {
+      expect(matches(path), path).toBe(true);
+    }
+  });
+
+  it("never runs on the scheduler route (LB-17) or the Resend webhook (LB-18.2)", () => {
+    for (const path of ["/api/cron/rsvp-reminders", "/api/webhooks/resend"]) {
+      expect(matches(path), path).toBe(false);
+    }
   });
 });

@@ -103,7 +103,7 @@ describe("shape", () => {
     ]);
   });
 
-  it("stores identity only: no status, payload, body, token or link columns yet", async () => {
+  it("stores identity plus LB-18.2's delivery status: no payload, body, token or link columns", async () => {
     const rows = await sql<{ column_name: string }>(
       `select column_name from information_schema.columns
        where table_schema = 'public' and table_name = 'email_deliveries' order by ordinal_position`,
@@ -116,6 +116,8 @@ describe("shape", () => {
       "provider_message_id",
       "recipient",
       "accepted_at",
+      "status",
+      "status_event_at",
     ]);
   });
 });

@@ -127,6 +127,18 @@ Applies to two distinct token kinds:
   client. ESLint allows `SUPABASE_SERVICE_ROLE_KEY` only in that file and `delivery-recorder.ts`. Its route is
   authenticated by `CRON_SECRET` (read only in `src/lib/scheduler/cron-auth.ts`); the production cron entry is a
   separately approved deployment step.
+- *Later note (LB-18.2):* [ADR-011 §7](ADR-011-email-delivery-observability.md) accepts a **third** service-role
+  module, `src/lib/email/delivery-event-store.ts`, for provider delivery webhooks: a **provider-signature-authenticated
+  privileged write**. No session exists to authorize a webhook and no client may fabricate a delivery event, so the
+  route `POST /api/webhooks/resend` first verifies the Standard Webhooks/Svix signature over the raw body with
+  `RESEND_WEBHOOK_SECRET` (read only in `src/lib/email/webhook-auth.ts`), and only then calls the store's single
+  operation, `ingest`, which calls one fixed service_role-only SECURITY DEFINER function
+  (`ingest_email_delivery_event`). It takes the provider's event id and normalized event only — never a raw payload,
+  Wedding, party or delivery id, or recipient — and the database correlates by the provider's email id itself. The
+  three modules stay separate because their authorities differ: the delivery recorder writes provider results the
+  application obtained after a user's own credential authorized the send; the scheduler store acts on the deployment
+  scheduler's authority; the event store acts on the provider's signature. No generic client. ESLint allows
+  `SUPABASE_SERVICE_ROLE_KEY` only in those three files.
 
 ### 7. Public / private boundary
 

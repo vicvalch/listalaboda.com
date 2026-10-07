@@ -123,11 +123,13 @@ describe("assignment schema", () => {
   });
 
   it("there is exactly one assignee column and no assignment side table", async () => {
-    const tables = await sql(
-      `select 1 from information_schema.tables
+    // LB-19's seating_assignments (guest → table, ADR-012) is a different
+    // domain; no checklist assignment side table exists.
+    const tables = await sql<{ table_name: string }>(
+      `select table_name from information_schema.tables
        where table_schema = 'public' and table_name ilike '%assign%'`,
     );
-    expect(tables).toEqual([]);
+    expect(tables.map((t) => t.table_name)).toEqual(["seating_assignments"]);
   });
 
   it("authenticated may UPDATE only role on memberships (display names go through the RPC)", async () => {

@@ -238,6 +238,50 @@ isOneToOne: false
       referencedColumns: ["id","wedding_id"]
     }
                   ]
+                },"seating_assignments": {
+                  Row: {
+                    "created_at": string,"guest_id": string,"seating_table_id": string,"updated_at": string,"wedding_id": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"guest_id": string,"seating_table_id": string,"updated_at"?: string,"wedding_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"guest_id"?: string,"seating_table_id"?: string,"updated_at"?: string,"wedding_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "seating_assignments_guest_same_wedding"
+      columns: ["guest_id","wedding_id"]
+isOneToOne: false
+      referencedRelation: "guests"
+      referencedColumns: ["id","wedding_id"]
+    },{
+      foreignKeyName: "seating_assignments_table_same_wedding"
+      columns: ["seating_table_id","wedding_id"]
+isOneToOne: false
+      referencedRelation: "seating_tables"
+      referencedColumns: ["id","wedding_id"]
+    }
+                  ]
+                },"seating_tables": {
+                  Row: {
+                    "capacity": number,"created_at": string,"created_by": string | null,"id": string,"name": string,"sort_order": number,"updated_at": string,"wedding_id": string
+                  }
+                  Insert: {
+                    "capacity": number,"created_at"?: string,"created_by"?: string | null,"id"?: string,"name": string,"sort_order"?: number,"updated_at"?: string,"wedding_id": string
+                  }
+                  Update: {
+                    "capacity"?: number,"created_at"?: string,"created_by"?: string | null,"id"?: string,"name"?: string,"sort_order"?: number,"updated_at"?: string,"wedding_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "seating_tables_wedding_id_fkey"
+      columns: ["wedding_id"]
+isOneToOne: false
+      referencedRelation: "weddings"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"wedding_activity": {
                   Row: {
                     "actor_kind": Database["public"]['Enums']["wedding_activity_actor"],"actor_user_id": string | null,"event_type": Database["public"]['Enums']["wedding_activity_event"],"guest_invitation_id": string | null,"id": string,"occurred_at": string,"wedding_id": string

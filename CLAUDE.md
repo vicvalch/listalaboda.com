@@ -19,6 +19,7 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   service-role module)
 - `docs/architecture/ADR-011-email-delivery-observability.md` (email delivery ledger and signed delivery webhooks;
   staged LB-18; the third service-role module)
+- `docs/architecture/ADR-012-seating-plan-domain-model.md` (seating tables and one-table-per-guest assignments)
 
 ## Product rules
 
@@ -455,6 +456,30 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - Precedence: answered → policy_disabled → out_of_window → link_unavailable → link_unrecoverable → no_contact_email →
   recipient_undeliverable → recently_reminded. Delivery status never rewrites an occurrence (`sent` stays `sent`).
 
+## Seating plan rules (LB-19, ADR-012)
+
+- The seating unit is `public.guests` (one person, stable id). No attendee/person copy, no seating column on `guests`,
+  no backfill, no plus-ones/`max_guests`/placeholder seats, no child/adult fields. Assignment is per person, never per party.
+- `seating_tables` (name 1–80 trimmed plain text, not unique; capacity 1–50; `sort_order` appended by trigger, read
+  `sort_order, created_at, id`) and `seating_assignments` (`guest_id` PK = at most one table per guest; no row =
+  unassigned). Both references are same-wedding composite FKs, `ON DELETE CASCADE`: deleting a table, guest, party or
+  wedding removes assignments, never guests or tables on the other side.
+- Capacity is enforced in the database: `private.enforce_seating_assignment` locks the destination table row
+  (`FOR UPDATE`) and counts EVERY assignment row (attending, pending, declined-but-seated); `seating_table_full`.
+  `private.enforce_seating_table_capacity` refuses a capacity below the seated count (`seating_capacity_below_assigned`).
+  Never weaken this to app-only checks; the UI's free seats = capacity − assignment count, never confirmed answers.
+- Declined (`rsvps.attending = false`) guests can't be newly seated or moved (`seating_guest_declined`); pending and
+  attending can. A guest who declines AFTER being seated keeps the assignment: never modify `submit_guest_rsvp` or make
+  the RSVP depend on seating; never auto-unseat. The page flags it ("No asistirá" + summary warning); organizers unseat.
+- Owners and collaborators have identical seating rights, member RLS only (`private.is_wedding_member`); anon nothing.
+  Client-writable columns: tables INSERT `wedding_id, name, capacity` / UPDATE `name, capacity`; assignments INSERT
+  `guest_id, wedding_id, seating_table_id` / UPDATE `seating_table_id`. Trigger functions are SECURITY INVOKER, pinned
+  `search_path`, not client-executable. No service role, no RPC, no public/RSVP/published-site exposure.
+- Writes go through `@/lib/seating/service` (membership first, wedding-scoped, closed reasons; raw SQL never reaches the
+  UI). The page reads in two batched queries (`getSeatingData`) and derives everything in `@/lib/seating/plan`.
+- No activity events for seating (ADR-008 unchanged); no checklist link (`reception.layout` stays unlinked). No drag
+  and drop, floor plan, coordinates, shapes, chairs or auto-seating (LB-20+).
+
 ## Commands
 
 - `npm run verify`: lint, typecheck, unit tests, build (same as CI)
@@ -497,5 +522,8 @@ through a third narrow service-role module and `POST /api/webhooks/resend` (no U
 LB-18.3 shows delivery status to members on the party card and blocks manual emails (and skips RSVP confirmations) to a
 current address that bounced, was suppressed or complained in the same wedding; editing the address re-enables it
 (no production webhook). LB-18.4 applies the same rule to automatic reminders (`recipient_undeliverable`, a remediable
-pre-provider skip) and scopes `recently_reminded` to sends to the current address (no production webhook).
+pre-provider skip) and scopes `recently_reminded` to sends to the current address (no production webhook). LB-19 adds the
+seating plan foundation: `seating_tables` and one-table-per-guest `seating_assignments` (same-wedding composite FKs,
+database capacity under a table row lock, declined guests not seatable, decline-after-seating preserved and flagged) and
+the "Mesas" page with plain forms (ADR-012; no floor plan, drag and drop or activity events).
 Don't implement ahead of the current prompt.

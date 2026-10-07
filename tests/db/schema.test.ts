@@ -118,7 +118,7 @@ describe("schema guarantees", () => {
                                 'set_rsvp_reminder_policy', 'claim_automatic_rsvp_reminders',
                                 'prepare_automatic_rsvp_reminder', 'begin_automatic_rsvp_reminder_send',
                                 'record_automatic_rsvp_reminder_email', 'finish_automatic_rsvp_reminder',
-                                'ingest_email_delivery_event'))
+                                'ingest_email_delivery_event', 'get_guest_invitation_email_block'))
        order by 1`,
     );
 
@@ -127,7 +127,9 @@ describe("schema guarantees", () => {
       "private.automatic_rsvp_reminder_due_at",
       "private.automatic_rsvp_reminder_ineligibility",
       "private.automatic_rsvp_reminder_party_due_at",
+      "private.email_comparison_form",
       "private.email_delivery_status_rank",
+      "private.email_recipient_block",
       "private.enforce_guest_invitation_capability_secret",
       "private.enforce_guest_invitation_has_guest",
       "private.enforce_wedding_has_owner",
@@ -152,6 +154,7 @@ describe("schema guarantees", () => {
       "public.create_wedding",
       "public.finish_automatic_rsvp_reminder",
       "public.get_guest_invitation",
+      "public.get_guest_invitation_email_block",
       "public.get_guest_invitation_recovery_envelope",
       "public.get_guest_invitation_site_slug",
       "public.get_published_wedding_site",
@@ -189,6 +192,8 @@ describe("schema guarantees", () => {
       "public.create_guest_invitation",
       "public.create_wedding",
       "public.get_guest_invitation",
+      // LB-18.3: membership-checked inside; one closed value, no ids or history.
+      "public.get_guest_invitation_email_block",
       "public.get_guest_invitation_recovery_envelope",
       "public.get_guest_invitation_site_slug",
       "public.get_published_wedding_site",
@@ -224,6 +229,9 @@ describe("schema guarantees", () => {
     expect(definer).toContain("public.record_rsvp_reminder_email");
     // LB-18.2 (ADR-011 §7): service_role-only, provider-signature-authenticated.
     expect(definer).toContain("public.ingest_email_delivery_event");
+    // LB-18.3: checks membership itself so the private determination needs
+    // no client grant.
+    expect(definer).toContain("public.get_guest_invitation_email_block");
     // LB-13 (ADR-006): no client role can read or write token_hash/envelopes,
     // so the two writers and the recovery read check membership themselves.
     expect(definer).toContain("public.get_guest_invitation_recovery_envelope");

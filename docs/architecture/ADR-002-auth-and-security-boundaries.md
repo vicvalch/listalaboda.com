@@ -120,6 +120,10 @@ Applies to two distinct token kinds:
 - *Later note (LB-18.1):* [ADR-011](ADR-011-email-delivery-observability.md) makes each of the four record functions
   (including ADR-010's automatic one) also insert one `email_deliveries` ledger row in the same transaction. No
   service-role module, operation or RPC was added, and the ledger has no other writer.
+- *Later note (LB-18.3):* [ADR-011 §14](ADR-011-email-delivery-observability.md) adds one column to the delivery
+  recorder's existing `get_rsvp_confirmation_email_context` result (whether the party's current address is blocked by
+  an earlier bounce, suppression or complaint). No service-role module, operation or RPC was added. The manual-send
+  guard runs with the member's own session (`get_guest_invitation_email_block`, membership-checked), not service_role.
 - *Later note (LB-17):* [ADR-010](ADR-010-automatic-rsvp-reminder-scheduling.md) accepts a **second** service-role
   module, `src/lib/scheduler/rsvp-reminder-store.ts`, for the automatic RSVP reminder scheduler, which runs with no
   session. It exposes exactly five named operations (claim, prepare, begin, record, finish), each one fixed

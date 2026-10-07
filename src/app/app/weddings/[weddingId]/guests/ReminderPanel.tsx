@@ -28,6 +28,13 @@ type Props = {
   contactEmail: string | null;
   /** Owner: may generate a new link. Cosmetic; the server re-checks. */
   canAdministerLink: boolean;
+  /**
+   * LB-18.3: why the reminder EMAIL is unavailable (the current address
+   * bounced, was suppressed or complained), or null. The button is disabled
+   * and this is shown next to it; the server refuses the send anyway. The
+   * WhatsApp text is never affected.
+   */
+  emailBlockedMessage?: string | null;
 };
 
 /**
@@ -40,7 +47,14 @@ type Props = {
  *   is never sent or recorded by the app; the text lives only in this
  *   component's state (never storage, cookies or a URL) until "Ocultar".
  */
-export function ReminderPanel({ weddingId, guestInvitationId, partyLabel, contactEmail, canAdministerLink }: Props) {
+export function ReminderPanel({
+  weddingId,
+  guestInvitationId,
+  partyLabel,
+  contactEmail,
+  canAdministerLink,
+  emailBlockedMessage = null,
+}: Props) {
   const copy = getMessages().guests.reminder;
   return (
     <div className="space-y-3 border-t border-border pt-4" data-testid="party-reminder">
@@ -54,6 +68,7 @@ export function ReminderPanel({ weddingId, guestInvitationId, partyLabel, contac
           guestInvitationId={guestInvitationId}
           contactEmail={contactEmail}
           canAdministerLink={canAdministerLink}
+          emailBlockedMessage={emailBlockedMessage}
         />
       ) : (
         <p className="text-muted text-sm" data-testid="reminder-no-email">
@@ -75,11 +90,13 @@ function SendReminderForm({
   guestInvitationId,
   contactEmail,
   canAdministerLink,
+  emailBlockedMessage,
 }: {
   weddingId: string;
   guestInvitationId: string;
   contactEmail: string;
   canAdministerLink: boolean;
+  emailBlockedMessage: string | null;
 }) {
   const [state, formAction] = useActionState<SendReminderState, FormData>(sendReminderAction, null);
   const copy = getMessages().guests.reminder;
@@ -88,8 +105,19 @@ function SendReminderForm({
     <form action={formAction} className="space-y-2">
       <input type="hidden" name="weddingId" value={weddingId} />
       <input type="hidden" name="guestInvitationId" value={guestInvitationId} />
-      <p className="text-muted text-sm break-words">{interpolate(copy.sendHint, { email: contactEmail })}</p>
-      <SubmitButton label={copy.send} pendingLabel={copy.sending} variant="secondary" />
+      {emailBlockedMessage ? (
+        <p className="text-danger text-sm" data-testid="reminder-email-blocked">
+          {emailBlockedMessage}
+        </p>
+      ) : (
+        <p className="text-muted text-sm break-words">{interpolate(copy.sendHint, { email: contactEmail })}</p>
+      )}
+      <SubmitButton
+        label={copy.send}
+        pendingLabel={copy.sending}
+        variant="secondary"
+        disabled={emailBlockedMessage !== null}
+      />
       {state ? (
         <div key={state.nonce} data-testid="reminder-email-result">
           <Notice tone={state.tone}>

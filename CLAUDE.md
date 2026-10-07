@@ -396,8 +396,8 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 
 ## Signed delivery webhook rules (LB-18.2, ADR-011 §7)
 
-- Passive ingestion only: no UI, member read of the status, suppression, `recipient_undeliverable` or
-  `recently_reminded` change. No production webhook or `RESEND_WEBHOOK_SECRET` is configured (LB-18.5, separately approved).
+- Passive ingestion only (LB-18.3 below adds the member status read, UI and manual guard): no
+  `recipient_undeliverable` or `recently_reminded` change. No production webhook or `RESEND_WEBHOOK_SECRET` is configured (LB-18.5, separately approved).
 - `email_deliveries.status` (`accepted` 0 < `delayed` 10 < `failed` 20 < `delivered` 30 < `suppressed` 40 < `bounced` 50 <
   `complained` 60; the enum is declared in that order) only moves to a strictly higher rank; same/lower-rank events are
   history only; the provider timestamp never decides. `status_event_at` = occurred_at of the event that last advanced it;
@@ -416,6 +416,31 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   bad signature or timestamp outside ± 5 min → 401 (verify with `standardwebhooks` over the RAW body, before any JSON
   parsing; never a Resend client or `RESEND_API_KEY`); unsupported (incl. opened/clicked, never read) or malformed signed
   bodies → 200 ignored; ingest outcomes → 200; database failure → 500.
+
+## Delivery status UI and manual send guardrails (LB-18.3, ADR-011 §14)
+
+- Members (owners and collaborators) read `email_deliveries.status` (column grant + member RLS). Still never
+  `provider_message_id`, `status_event_at` or `email_delivery_events`; anon nothing; no client writes.
+- Read model: `listGuestParties`' single nested select embeds `email_deliveries(kind, recipient, accepted_at, status)`;
+  the page derives everything in memory (`@/lib/guests/delivery-status`). Never a per-party query or event history.
+- Each "last sent" line shows the status of its own send (latest of its kinds, same clock as `*_sent_at`), else
+  "Estado de entrega no disponible"; next to, never instead of, the "enviada el … a …" text. The reminder line is the
+  latest of both reminder kinds and labels an automatic one. `accepted` = "Enviado", never "Entregado".
+- Bad address = a SAME-wedding delivery to the current `contact_email` with status suppressed/bounced/complained
+  (`private.email_recipient_block`, no client grant; delayed/failed/delivered/accepted never block), compared in the
+  comparison form only: trim + lowercase of the whole address (`private.email_comparison_form` /
+  `normalizeEmailForComparison`; never stored, no dot/+tag/alias rules). A case-only edit stays blocked; a genuinely
+  different address is never blocked by an old one. Never cross-wedding, never the provider's account-wide list. No override.
+- The UI disables email-send buttons for a blocked current address (rotate-and-send, fresh-link send, reminder email);
+  link display/copy, WhatsApp, "Generar nuevo enlace" and editing stay enabled. The server guard remains the authority.
+- Manual guard: `@/lib/guests/email-block` → `get_guest_invitation_email_block` (member session, membership-checked,
+  null = not visible/not current → fail closed), right after loading the party, before link checks, rotation and the
+  provider, in the invitation (fresh and rotate-and-send) and manual reminder flows. Blocked = `recipient_undeliverable`
+  / `recipient_complained` and zero side effects. "Mostrar enlace" and the WhatsApp text are never blocked.
+- RSVP confirmation: `get_rsvp_confirmation_email_context` also returns `contact_email_block`; blocked →
+  `skipped_undeliverable` (no send, no note to the guest). The RSVP save never depends on it.
+- Not here: automatic reminder suppression / `recipient_undeliverable` / `recently_reminded` per address (LB-18.4),
+  activity rows for delivery outcomes, production webhook (LB-18.5).
 
 ## Commands
 
@@ -456,4 +481,7 @@ slices (ADR-011); LB-18.1 adds only the `email_deliveries` ledger, one immutable
 four record functions (no webhooks, statuses, UI or suppression yet). LB-18.2 adds passive signed Resend webhook
 ingestion: delivery status with a rank rule, the append-only `email_delivery_events`, one service_role-only ingest RPC
 through a third narrow service-role module and `POST /api/webhooks/resend` (no UI, suppression or production webhook).
+LB-18.3 shows delivery status to members on the party card and blocks manual emails (and skips RSVP confirmations) to a
+current address that bounced, was suppressed or complained in the same wedding; editing the address re-enables it
+(automatic reminder suppression is LB-18.4; no production webhook).
 Don't implement ahead of the current prompt.

@@ -4,8 +4,9 @@ Status: Accepted for staged implementation (LB-18) · Date: 2026-10-06
 Implementation: **LB-18.1 = persistence foundation** (migration `20261013120000_lb_email_delivery_ledger`): the
 `email_deliveries` ledger and its writes inside the four existing record functions. **LB-18.2 = passive signed webhook
 ingestion** (migration `20261014120000_lb_email_delivery_events`): delivery status, `email_delivery_events`, the
-service_role-only ingest function and `POST /api/webhooks/resend` (§7). No UI, suppression, eligibility change or
-production webhook exists yet; those are the later slices in §12.
+service_role-only ingest function and `POST /api/webhooks/resend` (§7). **LB-18.3 = delivery status UI and manual
+send guardrails** (migration `20261015120000_lb_email_delivery_status_ui`, §14). No automatic-reminder eligibility change
+or production webhook exists yet; those are LB-18.4 and LB-18.5 (§12).
 Related: [ADR-001 §2](ADR-001-product-domain-and-tenancy.md), [ADR-002 §6, §7](ADR-002-auth-and-security-boundaries.md),
 [ADR-004](ADR-004-invitation-delivery-recorder.md), [ADR-005](ADR-005-rsvp-confirmation-email.md),
 [ADR-007](ADR-007-manual-rsvp-reminder-delivery.md), [ADR-008](ADR-008-basic-activity-history.md),
@@ -202,7 +203,7 @@ LB-17's `automatic_rsvp_reminders.state` remains **execution truth**: whether th
 whether the provider accepted. Delivery status is separate and lives with the ledger. A delivery bounce never
 rewrites `sent → failed`, never reactivates a consumed occurrence and never changes `attempt_count`.
 
-### 9. Future resend policy (approved product decision; implemented in a later LB-18 slice)
+### 9. Resend policy (approved product decision; implemented in LB-18.3, §14)
 
 - `delayed` or `failed` → a manual email retry is allowed.
 - `bounced`, `suppressed` or `complained` → sending email again to the **same current** `contact_email` is blocked.
@@ -235,7 +236,7 @@ rewrites `sent → failed`, never reactivates a consumed occurrence and never ch
 |---|---|
 | **LB-18.1** (implemented) | ADR-011, `email_deliveries`, one row per recorded send, tests |
 | **LB-18.2** (implemented) | Signed Resend webhook ingestion (`POST /api/webhooks/resend`), `email_delivery_events`, status columns and rank rule, a narrow service_role ingest module (ADR-002 §6 justification); production webhook not configured |
-| LB-18.3 | Delivery status UI on the party card (owners and collaborators) and the resend rules of §9 |
+| **LB-18.3** (implemented) | Delivery status UI on the party card (owners and collaborators) and the resend rules of §9 for manual sends and the RSVP confirmation (§14) |
 | LB-18.4 | `recipient_undeliverable` and the `recently_reminded` refinement (§10) |
 | LB-18.5 | Production webhook activation: a separately approved infrastructure step, after the sending domain is owned and verified |
 
@@ -243,6 +244,74 @@ rewrites `sent → failed`, never reactivates a consumed occurrence and never ch
 
 No backfill. Sends recorded before this migration have no ledger row and will show delivery status as unavailable.
 Ledger rows are never fabricated from the latest-only provider columns.
+
+### 14. Delivery status UI and manual send guardrails (LB-18.3, implemented)
+
+**Member-visible status.** authenticated gains `SELECT (status)` on `email_deliveries`, under the existing member RLS
+policy (owners and collaborators of the row's wedding). Nothing else is exposed: `provider_message_id` and
+`status_event_at` keep no client grant (the UI shows no event times), `email_delivery_events` keeps no privilege for
+any client role, anon has nothing, and no client role can insert, update or delete a delivery.
+
+**Read model.** The guest page's existing single nested query (`listGuestParties`) also embeds each party's
+`email_deliveries(kind, recipient, accepted_at, status)`; no event history and no per-party query. In memory
+(`src/lib/guests/delivery-status.ts`):
+
+- each "last sent" line shows the status of the latest delivery of its kinds (`accepted_at` desc), only when it is the
+  send that line describes (same database clock as its `*_sent_at`, written in one transaction); otherwise, e.g. sends
+  before LB-18.1, "Estado de entrega no disponible". It is shown next to, never instead of, "enviada el … a …", whose
+  address is the one the status belongs to;
+- the reminder line combines both reminder kinds (it already shows the latest reminder of either channel): the latest
+  `accepted_at` wins and an automatic one is labelled "(recordatorio automático)", never presented as manual.
+
+| Status | Copy | Manual email to the same current address |
+|---|---|---|
+| `accepted` | Enviado (never "Entregado") | allowed |
+| `delayed` | Entrega retrasada | allowed (no warning) |
+| `failed` | No se pudo enviar | allowed (no warning) |
+| `delivered` | Entregado | allowed |
+| `suppressed` | Bloqueado | blocked, warning |
+| `bounced` | Rebotó | blocked, warning |
+| `complained` | Marcado como spam | blocked, stronger warning |
+| no ledger row | Estado de entrega no disponible | — |
+
+**The current-address rule.** A party's CURRENT `contact_email` is blocked when a delivery of the SAME wedding, of any
+kind and any party, has a `recipient` equal to it in the **comparison form** (the whole address trimmed and lowercased:
+`private.email_comparison_form` in SQL, `normalizeEmailForComparison` in TypeScript) and status `suppressed`, `bounced` or
+`complained`. Comparison only: stored recipients and contact emails keep their casing and are never rewritten, and
+nothing provider-specific is applied (dots and `+tags` stay significant; no alias inference). It is one database
+determination, `private.email_recipient_block(wedding, recipient)` (no client grant; an expression index on
+`(wedding_id, email_comparison_form(recipient))`), returning the closed `email_recipient_block` (`none < suppressed <
+bounced < complained`, strongest wins). Consequences: another wedding's history never counts (no cross-tenant
+suppression, and the provider's account-wide suppression list is never used as tenant logic); a case-only edit is the
+SAME address and stays blocked; a genuinely different address is never blocked by an old one; going back to the bad
+address blocks again; a later successful delivery doesn't clear it. Old ledger rows are never rewritten. The page mirrors the rule only to decide
+whether to show the warning ("No pudimos entregar correos a esta dirección. Revísala antes de volver a enviar." /
+"Esta dirección marcó un correo como spam. Cambia el correo antes de volver a enviar."), next to the existing edit
+control, and to disable the email-send controls ("Generar nuevo enlace y enviar", the fresh link's "Enviar invitación
+por correo", "Enviar recordatorio", whose hint is replaced by the same warning). "Mostrar enlace", copying a link, the
+WhatsApp text, "Generar nuevo enlace" and editing the address stay available. Disabled buttons are a convenience: the
+server guard below refuses a forced submission all the same.
+
+**Manual send guard.** `public.get_guest_invitation_email_block(wedding, party, recipient)`: SECURITY DEFINER only so the
+private determination needs no client grant; it checks membership itself (`auth.uid()`), returns `null` for a party
+that isn't the caller's or a `recipient` that is no longer exactly the party's stored current address (a staleness
+check, not the block comparison), and returns nothing else (no
+ids, statuses or history). `src/lib/guests/email-block.ts` calls it with the member's own session right after the party
+and its recipient are loaded, before the link check, any rotation and the provider: the invitation email (fresh link),
+the owner's "Generar nuevo enlace y enviar" and the manual reminder email. Blocked → `recipient_undeliverable` /
+`recipient_complained`: no provider call, no rotation, no metadata, activity or ledger row. Any doubt (error, `null`)
+fails closed. Not blocked: "Mostrar enlace" and the WhatsApp text. No override exists. "Manual reminders are never
+blocked by automation" still holds: this is delivery safety, not automation state.
+
+**RSVP confirmation.** The RSVP is still saved first, unchanged. `get_rsvp_confirmation_email_context` (service_role
+only, ADR-005; recreated because its result type changed) also returns `contact_email_block` for the party's current
+address. Blocked → the confirmation is skipped (`skipped_undeliverable`): no provider call, metadata or ledger row; the
+guest sees no note (as when there is no address), the RSVP save never fails. No new service-role operation.
+
+**Unchanged.** Automatic reminders (LB-17 eligibility, scheduler functions; `recipient_undeliverable` and the
+`recently_reminded` refinement remain LB-18.4, §10), the ingest function, status rank rule and webhook route, the
+event ledger's privileges, activity history (no delivery outcome rows), the latest-send columns. No production webhook
+or secret.
 
 ## Consequences
 
@@ -252,5 +321,8 @@ Ledger rows are never fabricated from the latest-only provider columns.
 - Deleting a party now also deletes its delivery rows; activity history is unaffected.
 - No user-visible change in LB-18.1.
 - LB-18.2: a delivery's status reflects the highest-ranked provider event received for it, with full event history;
-  nothing reads it yet, and LB-17 execution state, latest-send metadata and activity history are untouched by
-  webhooks (a bounce never turns `sent` into anything else). Still no user-visible change.
+  LB-17 execution state, latest-send metadata and activity history are untouched by webhooks (a bounce never turns
+  `sent` into anything else).
+- LB-18.3: organizers see each recorded email's delivery status and a warning for a bad current address; manual emails
+  and RSVP confirmations to that address stop until it is edited. Automatic reminders still go out as before until
+  LB-18.4.

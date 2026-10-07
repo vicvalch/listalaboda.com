@@ -580,10 +580,33 @@ export const es = {
         providerFailed:
           "No pudimos enviar el correo. Inténtalo de nuevo en unos minutos o comparte el enlace manualmente.",
         recipientRejected: "El servicio de correo rechazó esta dirección. Revisa el correo de contacto.",
+        recipientUndeliverable:
+          "No enviamos el correo: no pudimos entregar correos a esta dirección. Cambia el correo de contacto o comparte el enlace manualmente.",
+        recipientComplained:
+          "No enviamos el correo: esta dirección marcó un correo como spam. Cambia el correo de contacto o comparte el enlace manualmente.",
         sentUnrecorded:
           "El correo se envió, pero no pudimos actualizar el estado. No lo envíes otra vez todavía.",
         rotatedNotSent:
           "Generamos un enlace nuevo (el anterior ya no funciona), pero no pudimos enviar el correo. Copia el enlace para compartirlo o vuelve a intentar el envío.",
+      },
+    },
+    /** LB-18.3: what happened to a recorded email after the provider accepted it. */
+    delivery: {
+      label: "Estado de entrega",
+      status: {
+        accepted: "Enviado",
+        delayed: "Entrega retrasada",
+        failed: "No se pudo enviar",
+        delivered: "Entregado",
+        suppressed: "Bloqueado",
+        bounced: "Rebotó",
+        complained: "Marcado como spam",
+      },
+      unavailable: "Estado de entrega no disponible",
+      automatic: "recordatorio automático",
+      warning: {
+        undeliverable: "No pudimos entregar correos a esta dirección. Revísala antes de volver a enviar.",
+        complained: "Esta dirección marcó un correo como spam. Cambia el correo antes de volver a enviar.",
       },
     },
     rsvpConfirmationEmail: {
@@ -623,6 +646,10 @@ export const es = {
         providerFailed:
           "No pudimos enviar el recordatorio. Inténtalo de nuevo en unos minutos o prepara el mensaje para WhatsApp.",
         recipientRejected: "El servicio de correo rechazó esta dirección. Revisa el correo de contacto.",
+        recipientUndeliverable:
+          "No enviamos el recordatorio: no pudimos entregar correos a esta dirección. Cambia el correo de contacto o prepara el mensaje para WhatsApp.",
+        recipientComplained:
+          "No enviamos el recordatorio: esta dirección marcó un correo como spam. Cambia el correo de contacto o prepara el mensaje para WhatsApp.",
         sentUnrecorded:
           "El recordatorio se envió, pero no pudimos actualizar el estado. No lo envíes otra vez todavía.",
       },

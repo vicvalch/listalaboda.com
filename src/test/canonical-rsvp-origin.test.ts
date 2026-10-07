@@ -190,6 +190,7 @@ describe("absolute RSVP links use the trusted APP_ORIGIN, whatever the request h
         body: [{ id: WEDDING_ID, name: "Boda Origen", wedding_date: null, city: null, time_zone: null }],
       },
       "GET /rest/v1/wedding_publications": { status: 200, body: [] },
+      "POST /rest/v1/rpc/get_guest_invitation_email_block": { status: 200, body: "none" },
       "POST /rest/v1/rpc/rotate_guest_invitation_link": { status: 200, body: true },
     });
     const state = await rotateAndSendAction(null, form({ weddingId: WEDDING_ID, guestInvitationId: PARTY_ID }));

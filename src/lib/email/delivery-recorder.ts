@@ -13,7 +13,9 @@ import type { Database } from "@/lib/supabase/database.types";
  * - `recordInvitation` (ADR-004): the provider accepted an invitation email.
  * - `readRsvpConfirmationContext` (ADR-005): after a party's RSVP was saved
  *   through its link, the private bits its confirmation needs (the party's
- *   ids, its contact email, the wedding's name/date/city), by that link's
+ *   ids, its contact email and, since LB-18.3, whether that address is
+ *   blocked by an earlier bounce/suppression/complaint, the wedding's
+ *   name/date/city), by that link's
  *   hash. The guest has no account and guest functions must never reveal
  *   the contact email, so only a credential the browser never holds can
  *   read it.
@@ -90,6 +92,11 @@ export type RsvpConfirmationContext = Readonly<{
   guestInvitationId: string;
   /** The party's CURRENT contact email; null = none, nothing to send. */
   recipient: string | null;
+  /**
+   * LB-18.3 (ADR-011 §9): that address already bounced, was suppressed or
+   * complained in this wedding, so no confirmation is sent to it.
+   */
+  recipientBlocked: boolean;
   weddingName: string;
   /** Postgres date (`YYYY-MM-DD`) or null. */
   weddingDate: string | null;
@@ -216,12 +223,17 @@ export function createDeliveryRecorder({ supabaseUrl, serviceRoleKey }: Recorder
         const contactEmail: string | null = row.contact_email;
         const weddingDate: string | null = row.wedding_date;
         const weddingCity: string | null = row.wedding_city;
+        const block = row.contact_email_block;
+        if (block !== "none" && block !== "suppressed" && block !== "bounced" && block !== "complained") {
+          return { ok: false };
+        }
         return {
           ok: true,
           context: {
             weddingId: row.wedding_id,
             guestInvitationId: row.guest_invitation_id,
             recipient: contactEmail,
+            recipientBlocked: block !== "none",
             weddingName: row.wedding_name,
             weddingDate,
             weddingCity,

@@ -26,7 +26,8 @@ import { publicSitePath } from "@/lib/wedding-site/slug";
  *      answers are saved and committed. Any failure here is an RSVP failure
  *      and nothing else happens (no configuration read, provider or recorder).
  *   2. Only then, the email: configuration → the party's private context
- *      (contact email, wedding name/date/city) through the privileged reader
+ *      (contact email and its LB-18.3 send block, wedding name/date/city)
+ *      through the privileged reader
  *      (ADR-005; never the guest's own functions, which must not reveal it) →
  *      the published-site address through the existing guest helper →
  *      render from the database's post-save result → ONE provider call →
@@ -87,6 +88,9 @@ async function sendRsvpConfirmation(
   if (!read.ok) return "not_sent";
   const context = read.context;
   if (!context.recipient) return "skipped_no_email";
+  // LB-18.3 (ADR-011 §9): this exact address already bounced, was suppressed
+  // or complained in this wedding. Skip the email; the RSVP stays saved.
+  if (context.recipientBlocked) return "skipped_undeliverable";
   // Stored values passed the database CHECK; re-checked before they become
   // a provider recipient.
   if (!isStoredContactEmail(context.recipient)) return "not_sent";

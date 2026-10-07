@@ -93,6 +93,9 @@ describe("sendReminderAction", () => {
     [{ outcome: "link_unrecoverable" }, "error", copy.errors.linkUnrecoverable, true],
     [{ outcome: "link_unavailable" }, "error", copy.errors.linkUnavailable, false],
     [{ outcome: "recipient_rejected" }, "error", copy.errors.recipientRejected, false],
+    // LB-18.3: the same-address delivery guard.
+    [{ outcome: "recipient_undeliverable" }, "error", copy.errors.recipientUndeliverable, false],
+    [{ outcome: "recipient_complained" }, "error", copy.errors.recipientComplained, false],
     [{ outcome: "provider_failed" }, "error", copy.errors.providerFailed, false],
     [{ outcome: "failed", reason: "error" }, "error", getMessages().guests.errors.failed, false],
   ])("maps %j to a fixed catalog message", async (outcome, tone, message, needsNewLink) => {

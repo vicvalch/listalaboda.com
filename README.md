@@ -288,8 +288,20 @@ access) and advances that email's delivery status by a fixed rank, so duplicates
 backwards. Opens and clicks are never processed. Nothing is visible yet, nothing blocks sending, and no production
 webhook or secret is configured (a separately approved step).
 
-Still deferred: recurring or multi-stage reminders, per-party automation settings, delivery status UI, bounce-based
-send blocking and production webhook activation (LB-18.3+), and messaging APIs and phone numbers.
+**Delivery status and the same-address guard (LB-18.3).** Each "última … enviada el … a …" line on a party card now also
+shows what happened to that email ("Enviado", "Entrega retrasada", "No se pudo enviar", "Entregado", "Bloqueado",
+"Rebotó", "Marcado como spam", or "Estado de entrega no disponible" for sends before LB-18.1), to owners and
+collaborators only. When the party's CURRENT contact email has already bounced, been suppressed or marked an email as
+spam in this wedding, the card shows a warning, and the invitation email, "Generar nuevo enlace y enviar" and the manual
+reminder email buttons are disabled and the server refuses them before anything is sent or rotated; the RSVP
+confirmation is quietly skipped (the RSVP is always saved). Addresses are compared ignoring case and surrounding spaces
+(a case-only edit is the same address; dots and `+tags` still count). Delayed and failed never block. Changing the contact
+email to a different address makes sending possible again; sharing the link
+("Mostrar enlace", the WhatsApp text) is never blocked; there is no override. Automatic reminders are unchanged
+(LB-18.4), and no production webhook is configured.
+
+Still deferred: recurring or multi-stage reminders, per-party automation settings, bounce-based automatic reminder
+suppression (LB-18.4), production webhook activation (LB-18.5), and messaging APIs and phone numbers.
 
 ## Stack
 

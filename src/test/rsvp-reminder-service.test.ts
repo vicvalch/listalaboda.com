@@ -76,6 +76,8 @@ const ENCRYPTION = { key: TEST_RSVP_CAPABILITY_KEY };
 const LINK_CONFIG = { appOrigin: APP_ORIGIN, encryption: ENCRYPTION };
 
 const RECOVERY_RPC = "POST /rest/v1/rpc/get_guest_invitation_recovery_envelope";
+/** LB-18.3: the same-address delivery guard, run as the member before anything else. */
+const BLOCK_RPC = "POST /rest/v1/rpc/get_guest_invitation_email_block";
 const ROTATE_RPC = "POST /rest/v1/rpc/rotate_guest_invitation_link";
 const RECORD_RPC = "POST /rest/v1/rpc/record_rsvp_reminder_email";
 
@@ -128,6 +130,7 @@ const PARTY_ROW = { id: PARTY_ID, label: "Familia Pérez", contact_email: "famil
 function happyReplies(link: ReturnType<typeof storedLink>, overrides: Record<string, Reply> = {}) {
   return {
     "GET /rest/v1/guest_invitations": { status: 200, body: [PARTY_ROW] },
+    [BLOCK_RPC]: { status: 200, body: "none" },
     [RECOVERY_RPC]: recoverable(link),
     "GET /rest/v1/weddings": {
       status: 200,
@@ -259,9 +262,9 @@ describe("sendRsvpReminderEmail", () => {
       expect(sameToken, "reminder token equals the currently recoverable token (value redacted)").toBe(true);
       expect(fake.sent[0]!.html.includes(`${APP_ORIGIN}/rsvp/${link.token}`)).toBe(true);
 
-      // Order: party → recovery → (wedding, site) → send → record.
+      // Order: party → delivery guard (LB-18.3) → recovery → (wedding, site) → send → record.
       const calls = dataCalls(requests);
-      expect(calls.slice(0, 2)).toEqual(["GET /rest/v1/guest_invitations", RECOVERY_RPC]);
+      expect(calls.slice(0, 3)).toEqual(["GET /rest/v1/guest_invitations", BLOCK_RPC, RECOVERY_RPC]);
       expect(fake.order).toEqual(["SEND", "RECORD"]);
       expect(calls).not.toContain(RECORD_RPC);
       expectNoLinkChange(requests);
@@ -524,5 +527,71 @@ describe("prepareRsvpReminderMessage (WhatsApp-ready text)", () => {
       reason: "link_not_configured",
     });
     expect(dataCalls(requests)).toEqual([]);
+  });
+});
+
+// LB-18.3 (ADR-011 §9): automation never blocks a manual reminder, but the
+// same-address delivery guard does block the EMAIL — never the WhatsApp text.
+describe("same-address delivery guard (LB-18.3)", () => {
+  const blocked = (block: string): Record<string, Reply> => ({ [BLOCK_RPC]: { status: 200, body: block } });
+
+  it("asks about the party's current address, scoped to the authorized wedding", async () => {
+    const link = storedLink();
+    const { supabase, requests } = clientFor({ role: "collaborator", replies: happyReplies(link) });
+    await sendRsvpReminderEmail(supabase, WEDDING_ID, PARTY_ID, fakeDelivery().delivery, ENCRYPTION);
+    expect(requests.find((r) => `${r.method} ${r.url.pathname}` === BLOCK_RPC)?.body).toEqual({
+      target_wedding_id: WEDDING_ID,
+      target_invitation_id: PARTY_ID,
+      target_recipient: "familia@example.com",
+    });
+  });
+
+  it.each([
+    ["bounced", "recipient_undeliverable"],
+    ["suppressed", "recipient_undeliverable"],
+    ["complained", "recipient_complained"],
+  ] as const)("current address %s → %s: provider 0, recorder 0, no recovery, link untouched", async (block, outcome) => {
+    const link = storedLink();
+    const { supabase, requests } = clientFor({ role: "owner", replies: happyReplies(link, blocked(block)) });
+    const fake = fakeDelivery();
+    expect(await sendRsvpReminderEmail(supabase, WEDDING_ID, PARTY_ID, fake.delivery, ENCRYPTION)).toEqual({ outcome });
+    expect(fake.sent).toHaveLength(0);
+    expect(fake.records).toHaveLength(0);
+    expect(fake.order).toEqual([]);
+    const calls = dataCalls(requests);
+    expect(calls).not.toContain(RECOVERY_RPC);
+    expect(calls).not.toContain(RECORD_RPC);
+    expectNoLinkChange(requests);
+  });
+
+  it("none (clean, delayed, failed, delivered or an edited address) → sent and recorded", async () => {
+    const link = storedLink();
+    const { supabase } = clientFor({ role: "owner", replies: happyReplies(link, blocked("none")) });
+    const fake = fakeDelivery();
+    expect(await sendRsvpReminderEmail(supabase, WEDDING_ID, PARTY_ID, fake.delivery, ENCRYPTION)).toMatchObject({
+      outcome: "sent",
+    });
+    expect(fake.order).toEqual(["SEND", "RECORD"]);
+  });
+
+  it("fails closed when the guard can't answer: provider 0", async () => {
+    const link = storedLink();
+    const { supabase } = clientFor({
+      role: "owner",
+      replies: happyReplies(link, { [BLOCK_RPC]: { status: 500, body: { code: "XX000", message: "boom" } } }),
+    });
+    const fake = fakeDelivery();
+    expect(await sendRsvpReminderEmail(supabase, WEDDING_ID, PARTY_ID, fake.delivery, ENCRYPTION)).toEqual({
+      outcome: "failed",
+      reason: "error",
+    });
+    expect(fake.sent).toHaveLength(0);
+  });
+
+  it.each(["bounced", "complained"] as const)("the WhatsApp text is never blocked (current address %s)", async (block) => {
+    const link = storedLink();
+    const { supabase, requests } = clientFor({ role: "owner", replies: happyReplies(link, blocked(block)) });
+    expect((await prepareRsvpReminderMessage(supabase, WEDDING_ID, PARTY_ID, LINK_CONFIG)).ok).toBe(true);
+    expect(dataCalls(requests)).not.toContain(BLOCK_RPC);
   });
 });

@@ -18,6 +18,12 @@ type Props = {
   guestInvitationId: string;
   partyLabel: string;
   contactEmail: string;
+  /**
+   * LB-18.3: the current address bounced, was suppressed or complained. This
+   * action always emails, so it is disabled (the server refuses it anyway);
+   * "Generar nuevo enlace" alone stays available.
+   */
+  emailBlocked?: boolean;
 };
 
 /**
@@ -27,7 +33,13 @@ type Props = {
  * old one is already gone) with a retry; otherwise the new link is shown to
  * copy, as after any rotation (manual sharing keeps working).
  */
-export function RotateAndSendButton({ weddingId, guestInvitationId, partyLabel, contactEmail }: Props) {
+export function RotateAndSendButton({
+  weddingId,
+  guestInvitationId,
+  partyLabel,
+  contactEmail,
+  emailBlocked = false,
+}: Props) {
   const [state, formAction] = useActionState<RotateAndSendState, FormData>(rotateAndSendAction, null);
   const currentNonce = state?.nonce ?? "none";
   const [confirmingFor, setConfirmingFor] = useState<string | null>(null);
@@ -42,7 +54,7 @@ export function RotateAndSendButton({ weddingId, guestInvitationId, partyLabel, 
 
   return (
     <div className="w-full space-y-3">
-      {confirming ? (
+      {confirming && !emailBlocked ? (
         <form action={formAction} className="space-y-3 rounded-lg border border-border p-3">
           <input type="hidden" name="weddingId" value={weddingId} />
           <input type="hidden" name="guestInvitationId" value={guestInvitationId} />
@@ -69,7 +81,12 @@ export function RotateAndSendButton({ weddingId, guestInvitationId, partyLabel, 
           </div>
         </form>
       ) : (
-        <button type="button" onClick={() => setConfirmingFor(currentNonce)} className={smallButtonClass}>
+        <button
+          type="button"
+          onClick={() => setConfirmingFor(currentNonce)}
+          disabled={emailBlocked}
+          className={smallButtonClass}
+        >
           {copy.invitationEmail.rotateSend.open}
         </button>
       )}
@@ -84,6 +101,7 @@ export function RotateAndSendButton({ weddingId, guestInvitationId, partyLabel, 
               id={`guest-link-send-${guestInvitationId}`}
               status={copy.link.created}
               canSend
+              emailBlocked={emailBlocked}
             />
           ) : null}
           {state.link && !state.canRetry ? (

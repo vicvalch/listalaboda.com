@@ -19,6 +19,7 @@ describe("confirmation notice", () => {
     ["not_sent", "failed"],
     // No email was expected: no note, no alarm.
     ["skipped_no_email", null],
+    ["skipped_undeliverable", null],
     ["not_configured", null],
   ] as Array<[ConfirmationOutcome, "sent" | "failed" | null]>)("%s → %s", (outcome, notice) => {
     expect(confirmationNoticeOf(outcome)).toBe(notice);

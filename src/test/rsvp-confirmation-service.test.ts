@@ -135,6 +135,7 @@ function fakeDelivery(fakes: Fakes, log: string[], state: { saved: boolean }) {
               weddingId: WEDDING_ID,
               guestInvitationId: PARTY_ID,
               recipient: RECIPIENT,
+              recipientBlocked: false,
               weddingName: "Boda de Ana y Luis",
               weddingDate: "2027-10-16",
               weddingCity: "Ciudad Ejemplo",
@@ -281,6 +282,7 @@ describe("failure matrix (RSVP | email | provider | recorder → result)", () =>
             weddingId: WEDDING_ID,
             guestInvitationId: PARTY_ID,
             recipient: null,
+            recipientBlocked: false,
             weddingName: "Boda",
             weddingDate: null,
             weddingCity: null,
@@ -289,6 +291,34 @@ describe("failure matrix (RSVP | email | provider | recorder → result)", () =>
       },
     );
     expect(result).toMatchObject({ rsvp: "saved", confirmation: "skipped_no_email" });
+    expect(sent).toHaveLength(0);
+    expect(records).toHaveLength(0);
+  });
+
+  // LB-18.3 (ADR-011 §9): the party's current address already bounced, was
+  // suppressed or complained in this wedding. The RSVP is saved exactly as
+  // before; only the confirmation is skipped, and the guest sees no note.
+  it("saved | blocked address → provider 0, recorder 0, saved + skipped_undeliverable", async () => {
+    const { result, sent, records, log, state } = await run(
+      {},
+      {
+        context: {
+          ok: true,
+          context: {
+            weddingId: WEDDING_ID,
+            guestInvitationId: PARTY_ID,
+            recipient: RECIPIENT,
+            recipientBlocked: true,
+            weddingName: "Boda",
+            weddingDate: null,
+            weddingCity: null,
+          },
+        },
+      },
+    );
+    expect(result).toMatchObject({ rsvp: "saved", confirmation: "skipped_undeliverable" });
+    expect(state.saved).toBe(true);
+    expect(log).toEqual(["SAVE", "CONFIG", "CONTEXT"]);
     expect(sent).toHaveLength(0);
     expect(records).toHaveLength(0);
   });
@@ -352,6 +382,7 @@ describe("failure matrix (RSVP | email | provider | recorder → result)", () =>
             weddingId: WEDDING_ID,
             guestInvitationId: PARTY_ID,
             recipient: "x@example.com\r\nBcc: y@example.com",
+            recipientBlocked: false,
             weddingName: "Boda",
             weddingDate: null,
             weddingCity: null,

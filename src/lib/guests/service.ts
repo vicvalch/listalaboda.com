@@ -8,6 +8,7 @@ import {
   type WeddingAccess,
 } from "@/lib/authz/wedding";
 import type { GuestPartyOption, RelatedChecklistItem } from "@/lib/checklist/guest-work";
+import type { PartyDelivery } from "@/lib/guests/delivery-status";
 import { guestRsvpUrl } from "@/lib/guests/link";
 import type { GuestResponse } from "@/lib/guests/summary";
 import type { NewPartyInput } from "@/lib/guests/validation";
@@ -139,6 +140,13 @@ export type GuestListParty = Readonly<{
    * (state, closed reason and times only; never claim tokens or worker data).
    */
   automaticReminder: AutomaticReminderOccurrence | null;
+  /**
+   * LB-18.3: the party's recorded emails (ledger rows, any kind), newest
+   * first: kind, recipient, acceptance time and delivery status only — never
+   * the provider id or event history. Feeds the per-line delivery status and
+   * the current-address warning (`@/lib/guests/delivery-status`).
+   */
+  deliveries: readonly PartyDelivery[];
 }>;
 
 export type AutomaticReminderOccurrence = Readonly<{
@@ -150,8 +158,9 @@ export type AutomaticReminderOccurrence = Readonly<{
 
 /**
  * The whole guest list of the wedding — parties, their guests, each guest's
- * current response and (LB-16) the checklist items about each party — in
- * ONE query (nested select), never per party.
+ * current response, (LB-16) the checklist items about each party and
+ * (LB-18.3) its recorded emails' delivery status — in ONE query (nested
+ * select), never per party.
  * Takes the `WeddingAccess` of a successful membership check, so it can't
  * run before one. Never selects token_hash (it isn't readable anyway).
  * Returns null on failure.
@@ -164,7 +173,7 @@ export async function listGuestParties(
     const { data, error } = await supabase
       .from("guest_invitations")
       .select(
-        "id, label, token_issued_at, revoked_at, contact_email, invitation_email_sent_at, invitation_email_sent_to, rsvp_confirmation_email_sent_at, rsvp_confirmation_email_sent_to, rsvp_reminder_email_sent_at, rsvp_reminder_email_sent_to, created_at, guests(id, name, created_at, rsvps(attending, dietary_note)), checklist_items(id, title, status, sort_order, created_at), automatic_rsvp_reminders(state, outcome_reason, due_at, sent_at)",
+        "id, label, token_issued_at, revoked_at, contact_email, invitation_email_sent_at, invitation_email_sent_to, rsvp_confirmation_email_sent_at, rsvp_confirmation_email_sent_to, rsvp_reminder_email_sent_at, rsvp_reminder_email_sent_to, created_at, guests(id, name, created_at, rsvps(attending, dietary_note)), checklist_items(id, title, status, sort_order, created_at), automatic_rsvp_reminders(state, outcome_reason, due_at, sent_at), email_deliveries(kind, recipient, accepted_at, status)",
       )
       .eq("wedding_id", access.weddingId)
       .order("created_at", { ascending: true })
@@ -221,6 +230,14 @@ export async function listGuestParties(
             }
           : null;
       })(),
+      deliveries: [...party.email_deliveries]
+        .sort((a, b) => Date.parse(b.accepted_at) - Date.parse(a.accepted_at))
+        .map((delivery) => ({
+          kind: delivery.kind,
+          recipient: delivery.recipient,
+          acceptedAt: delivery.accepted_at,
+          status: delivery.status,
+        })),
     }));
   } catch {
     return null;

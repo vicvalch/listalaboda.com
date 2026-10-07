@@ -10,6 +10,7 @@ import {
 import type { EmailDelivery } from "@/lib/email/delivery";
 import { renderInvitationEmail } from "@/lib/email/invitation";
 import { isStoredContactEmail } from "@/lib/guests/contact-email";
+import { checkContactEmailBlock } from "@/lib/guests/email-block";
 import { guestRsvpUrl } from "@/lib/guests/link";
 import { replaceGuestPartyLink, type FreshLink } from "@/lib/guests/service";
 import { hashCapabilityToken, isWellFormedCapabilityToken } from "@/lib/security/capability-token";
@@ -36,12 +37,19 @@ import { getWeddingDetail } from "@/lib/weddings/service";
  *
  * Order, for both: authorize (the user's own session) → validate input →
  * configuration → load the party (scoped to the authorized wedding) and its
- * recipient → current link → everything the email needs → [rotate] → ONE
+ * recipient → the same-address delivery guard (LB-18.3) → current link →
+ * everything the email needs → [rotate] → ONE
  * provider call → only after the provider accepted, record the send through
  * the privileged recorder (`delivery.recorder`, ADR-004). The provider is
  * never called before every check passed, the recorder never before the
  * provider accepted, and neither takes part in authorization. No automatic
  * retries. The provider id comes from the provider's response only.
+ *
+ * LB-18.3 (ADR-011 §9): when the party's CURRENT contact email already
+ * bounced, was suppressed or complained in this wedding, nothing is sent and
+ * nothing is rotated (`recipient_undeliverable` / `recipient_complained`);
+ * editing the address makes it sendable again. delayed and failed never
+ * block. No override.
  *
  * Not transactional with the provider, and it doesn't pretend to be:
  * - provider fails → nothing recorded; a rotated link stays rotated (never
@@ -71,6 +79,10 @@ export type SendInvitationFailure =
   /** New links can't be made recoverable (LB-13 key missing): nothing rotated. */
   | "link_configuration_error"
   | "recipient_rejected"
+  /** LB-18.3: this exact current address bounced or was suppressed in this wedding. */
+  | "recipient_undeliverable"
+  /** LB-18.3: this exact current address marked an email as spam. */
+  | "recipient_complained"
   | "provider_failed"
   | "error";
 
@@ -88,8 +100,30 @@ function failed(reason: SendInvitationFailure): SendInvitationOutcome {
 
 type PartyForEmail = Readonly<{ id: string; label: string; recipient: string }>;
 
-/** The party in the authorized wedding, with a usable recipient. */
+/**
+ * The party in the authorized wedding, with a usable recipient that isn't
+ * blocked by an earlier bounce, suppression or complaint (LB-18.3).
+ */
 async function loadParty(
+  supabase: Client,
+  access: WeddingAccess,
+  guestInvitationId: string,
+): Promise<PartyForEmail | SendInvitationFailure> {
+  const party = await loadPartyRow(supabase, access, guestInvitationId);
+  if (typeof party === "string") return party;
+  switch (await checkContactEmailBlock(supabase, access, party.id, party.recipient)) {
+    case "sendable":
+      return party;
+    case "undeliverable":
+      return "recipient_undeliverable";
+    case "complained":
+      return "recipient_complained";
+    case "error":
+      return "error";
+  }
+}
+
+async function loadPartyRow(
   supabase: Client,
   access: WeddingAccess,
   guestInvitationId: string,

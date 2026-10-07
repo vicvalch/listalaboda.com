@@ -4,6 +4,7 @@ import {
   CONTACT_EMAIL_MAX_LENGTH,
   isStoredContactEmail,
   normalizeContactEmail,
+  normalizeEmailForComparison,
   parseContactEmail,
 } from "@/lib/guests/contact-email";
 import { parseNewParty } from "@/lib/guests/validation";
@@ -86,5 +87,16 @@ describe("party contact email", () => {
       ok: false,
       fieldErrors: { contactEmail: v.invalid },
     });
+  });
+});
+
+describe("normalizeEmailForComparison (LB-18.3: comparison only)", () => {
+  it("trims and lowercases the whole address, nothing else", () => {
+    expect(normalizeEmailForComparison(" Victor@Example.COM ")).toBe("victor@example.com");
+    expect(normalizeEmailForComparison("victor.test+uno@gmail.com")).toBe("victor.test+uno@gmail.com");
+  });
+
+  it("never changes the stored form (the local part keeps its casing)", () => {
+    expect(normalizeContactEmail("Victor@Example.COM")).toBe("Victor@example.com");
   });
 });

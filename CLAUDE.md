@@ -17,7 +17,8 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - `docs/architecture/ADR-009-checklist-guest-work.md` (checklist item → guest party link)
 - `docs/architecture/ADR-010-automatic-rsvp-reminder-scheduling.md` (automatic RSVP reminders; the second
   service-role module)
-- `docs/architecture/ADR-011-email-delivery-observability.md` (email delivery ledger; staged LB-18)
+- `docs/architecture/ADR-011-email-delivery-observability.md` (email delivery ledger and signed delivery webhooks;
+  staged LB-18; the third service-role module)
 
 ## Product rules
 
@@ -38,9 +39,13 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   (ADR-008), and since LB-18.1 its `email_deliveries` ledger row (ADR-011); neither is a new privileged operation.
   The SECOND and only other use is the ADR-010 scheduler store (`src/lib/scheduler/rsvp-reminder-store.ts`: five
   named operations — claim, prepare, begin, record, finish — each one fixed service_role-only RPC; LB-17 below).
-  Any other use needs its own `server-only` module plus a written justification (ADR-002 §6).
-  ESLint blocks `process.env.SUPABASE_SERVICE_ROLE_KEY` everywhere else, and `process.env.CRON_SECRET` everywhere but
-  `src/lib/scheduler/cron-auth.ts`.
+  The THIRD and last is the ADR-011 delivery event store (`src/lib/email/delivery-event-store.ts`: one operation,
+  `ingest`, one fixed service_role-only RPC, called only after the webhook signature verified; LB-18.2 below). Three
+  separate authorities, never merged: app-authorized provider result / system scheduler / provider signature. No
+  generic privileged client anywhere. Any other use needs its own `server-only` module plus a written justification
+  (ADR-002 §6). ESLint blocks `process.env.SUPABASE_SERVICE_ROLE_KEY` everywhere else, `process.env.CRON_SECRET`
+  everywhere but `src/lib/scheduler/cron-auth.ts`, and `process.env.RESEND_WEBHOOK_SECRET` everywhere but
+  `src/lib/email/webhook-auth.ts`.
 - Browser code reads env only through `src/lib/env/public.ts` (`NEXT_PUBLIC_*` only).
 - Modules that touch cookies or secrets start with `import "server-only"`.
 - Migrations live in `supabase/migrations/`, named `YYYYMMDDHHMMSS_lb_<slug>.sql`; applied
@@ -389,6 +394,29 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   complained blocks email to the SAME current address (editing it re-enables; link sharing always allowed; no override);
   LB-18.4 adds `recipient_undeliverable` and scopes `recently_reminded` to the current address.
 
+## Signed delivery webhook rules (LB-18.2, ADR-011 §7)
+
+- Passive ingestion only: no UI, member read of the status, suppression, `recipient_undeliverable` or
+  `recently_reminded` change. No production webhook or `RESEND_WEBHOOK_SECRET` is configured (LB-18.5, separately approved).
+- `email_deliveries.status` (`accepted` 0 < `delayed` 10 < `failed` 20 < `delivered` 30 < `suppressed` 40 < `bounced` 50 <
+  `complained` 60; the enum is declared in that order) only moves to a strictly higher rank; same/lower-rank events are
+  history only; the provider timestamp never decides. `status_event_at` = occurred_at of the event that last advanced it;
+  `accepted` ⇔ null (CHECK). The guard (every role) keeps identity immutable and refuses regressions. Webhooks never touch
+  `automatic_rsvp_reminders`, `*_sent_*` metadata or activity.
+- `email_delivery_events`: append-only, one row per `provider_event_id` (`svix-id`, UNIQUE = the dedupe and concurrency
+  authority), same-wedding composite FK to the delivery, cascades with it. Closed `event_type`; `bounce_type` iff bounced.
+  Never a recipient, subject, sender, payload, reason text, link, IP, user agent or tags. No privileges for anon,
+  authenticated or service_role; written only by `ingest_email_delivery_event` (SECURITY DEFINER, service_role-only),
+  which takes normalized fields only (never a Wedding/party/delivery id, recipient or payload) and returns a closed
+  outcome (`applied | no_change | duplicate | unknown_message`), never ids.
+- Correlation: `data.email_id` → `email_deliveries.provider_message_id` → party → Wedding, locally. Never `data.message_id`,
+  tags or any provider-supplied tenant data. Unknown ids → `unknown_message`: 200, nothing written.
+- Route `POST /api/webhooks/resend` (POST only, dynamic, no-store, empty bodies, nothing logged, excluded from the session
+  proxy; the signature is the only authority): secret missing/malformed → 503; raw body > 64 KiB → 413; missing headers,
+  bad signature or timestamp outside ± 5 min → 401 (verify with `standardwebhooks` over the RAW body, before any JSON
+  parsing; never a Resend client or `RESEND_API_KEY`); unsupported (incl. opened/clicked, never read) or malformed signed
+  bodies → 200 ignored; ingest outcomes → 200; database failure → 500.
+
 ## Commands
 
 - `npm run verify`: lint, typecheck, unit tests, build (same as CI)
@@ -425,4 +453,7 @@ automatic RSVP reminders: an owner-enabled policy, one automatic reminder per un
 state machine with a stable provider idempotency key, a second narrow service-role module and a `CRON_SECRET`-protected
 route (ADR-010; production cron NOT activated: a separately approved step). LB-18 closes the email delivery lifecycle in
 slices (ADR-011); LB-18.1 adds only the `email_deliveries` ledger, one immutable row per recorded send written inside the
-four record functions (no webhooks, statuses, UI or suppression yet). Don't implement ahead of the current prompt.
+four record functions (no webhooks, statuses, UI or suppression yet). LB-18.2 adds passive signed Resend webhook
+ingestion: delivery status with a rank rule, the append-only `email_delivery_events`, one service_role-only ingest RPC
+through a third narrow service-role module and `POST /api/webhooks/resend` (no UI, suppression or production webhook).
+Don't implement ahead of the current prompt.

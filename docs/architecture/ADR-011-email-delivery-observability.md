@@ -1,9 +1,11 @@
 # ADR-011 — Email Delivery Observability
 
 Status: Accepted for staged implementation (LB-18) · Date: 2026-10-06
-Implementation: **LB-18.1 = persistence foundation only** (migration `20261013120000_lb_email_delivery_ledger`): the
-`email_deliveries` ledger and its writes inside the four existing record functions. No webhook, provider event table,
-delivery status, UI, suppression or eligibility change exists yet; those are the later slices in §12.
+Implementation: **LB-18.1 = persistence foundation** (migration `20261013120000_lb_email_delivery_ledger`): the
+`email_deliveries` ledger and its writes inside the four existing record functions. **LB-18.2 = passive signed webhook
+ingestion** (migration `20261014120000_lb_email_delivery_events`): delivery status, `email_delivery_events`, the
+service_role-only ingest function and `POST /api/webhooks/resend` (§7). No UI, suppression, eligibility change or
+production webhook exists yet; those are the later slices in §12.
 Related: [ADR-001 §2](ADR-001-product-domain-and-tenancy.md), [ADR-002 §6, §7](ADR-002-auth-and-security-boundaries.md),
 [ADR-004](ADR-004-invitation-delivery-recorder.md), [ADR-005](ADR-005-rsvp-confirmation-email.md),
 [ADR-007](ADR-007-manual-rsvp-reminder-delivery.md), [ADR-008](ADR-008-basic-activity-history.md),
@@ -42,8 +44,8 @@ writers and readers (the party card, LB-17's `recently_reminded` check). They ar
 backfilled.
 
 Added: **`public.email_deliveries`**, one immutable identity row per provider-accepted application email that was
-successfully recorded. LB-18.2 will add `public.email_delivery_events` (provider events, deduplicated by the
-provider's event id) and the delivery status columns. The events table does **not** exist yet.
+successfully recorded. LB-18.2 adds `public.email_delivery_events` (provider events, deduplicated by the provider's
+event id) and the delivery status columns (§7).
 
 Rejected: replacing the per-flow columns with the shared table (rewrites four shipped flows and LB-17's eligibility
 for no gain), and more per-flow columns (still latest-only, or four copies of one history table).
@@ -78,7 +80,7 @@ Columns: `id`, `wedding_id`, `guest_invitation_id`, `kind`, `provider_message_id
 - **Same-wedding** composite FK `(guest_invitation_id, wedding_id) → guest_invitations (id, wedding_id)`.
 - **Identity is immutable** for every role (guard trigger): no identity column ever changes after insert. Rows are
   deleted only by the foreign keys' `ON DELETE CASCADE` (party or wedding); a direct delete is refused, even for
-  service_role. LB-18.2's delivery status columns will be the only updatable ones.
+  service_role. LB-18.2's delivery status columns are the only updatable ones (§7).
 - Indexes: `(guest_invitation_id, kind, accepted_at desc)` for "latest delivery per party and kind" (and the party FK);
   `(wedding_id)` for a guest page's member read and the wedding FK cascade.
 
@@ -114,16 +116,85 @@ environments) is acknowledged and ignored.
 - Repository style: column grants plus member RLS for display data (as for `automatic_rsvp_reminders`); a read RPC is
   added only when a page needs joins or aggregation (LB-18.3 may add one for "latest per party and kind").
 
-### 7. Future delivery statuses (LB-18.2; documented, not implemented)
+### 7. Delivery status and signed webhook ingestion (LB-18.2, implemented)
 
-`accepted` (set only by the application's record, never by a webhook) · `delayed` · `failed` · `delivered` ·
-`suppressed` · `bounced` · `complained`.
+**Status.** `public.email_delivery_status`, declared in rank order; `email_deliveries.status` (`NOT NULL DEFAULT
+'accepted'`, a metadata-only column add: every LB-18.1 row reads `accepted`) and `status_event_at` (null while
+`accepted`; a CHECK enforces `status = 'accepted'` ⇔ `status_event_at IS NULL`). `accepted_at` keeps its meaning.
 
-They will be rank-monotonic (out-of-order and duplicate events never move the status backwards):
-`accepted 0 < delayed 10 < failed 20 < delivered 30 < suppressed 40 < bounced 50 < complained 60`. A later
-recipient-negative signal outranks `delivered`; a sender-side `failed` doesn't. Events are deduplicated by the
-provider's event id (`svix-id`). Only `delivered`, `delivery_delayed`, `bounced`, `complained`, `failed` and
-`suppressed` will be subscribed.
+| Status | Rank | Meaning | Superseded by |
+|---|---|---|---|
+| `accepted` | 0 | provider accepted, app recorded (set only by the record; never by a webhook) | any event |
+| `delayed` | 10 | temporary delivery trouble | failed, delivered, suppressed, bounced, complained |
+| `failed` | 20 | sender-side failure | delivered, suppressed, bounced, complained |
+| `delivered` | 30 | reached the recipient's server | suppressed, bounced, complained |
+| `suppressed` | 40 | provider refused to send to the address | bounced, complained |
+| `bounced` | 50 | recipient's server rejected it | complained |
+| `complained` | 60 | marked as spam | nothing (terminal) |
+
+The status only moves to a **strictly higher** rank. A same- or lower-rank event is recorded as history and changes
+nothing; the provider's timestamp never decides precedence (events arrive late and out of order). `status_event_at`
+is the provider time of the event that last **advanced** the status. The ledger's guard (every role, superuser and
+service_role included) keeps identity immutable, refuses a status regression and refuses moving `status_event_at`
+without an advance; a new row always starts `accepted`. The guard uses the enum's own order (equal to the rank table,
+pinned by a DB test) because it runs with the caller's privileges and service_role has no access to schema `private`.
+
+**Event ledger.** `public.email_delivery_events`: `id`, `delivery_id`, `wedding_id` (same-wedding composite FK
+`(delivery_id, wedding_id) → email_deliveries (id, wedding_id)`, `ON DELETE CASCADE`), `provider_event_id`
+(**`UNIQUE`**, the `svix-id`, `^[A-Za-z0-9_-]{1,128}$`), `event_type` (`delivered`, `delivery_delayed`, `failed`,
+`suppressed`, `bounced`, `complained`), `bounce_type` (`permanent`/`transient`/`undetermined`, required for bounces and
+only for bounces), `occurred_at` (the payload's top-level `created_at`), `received_at` (database clock). Append-only
+(guard: no updates; deletes only through the cascade). It stores no recipient, subject, sender, payload, failure or
+bounce text, link, IP, user agent or tags. RLS on; **no** privileges for anon, authenticated **or** service_role: it
+is internal audit, nothing reads it yet.
+
+**One writer.** `public.ingest_email_delivery_event(provider_event_id, provider_message_id, event_type, occurred_at,
+bounce_type)`: SECURITY DEFINER, `search_path = ''`, EXECUTE for service_role only. It takes no Wedding, party,
+delivery id, recipient or payload. In one transaction: look up `email_deliveries` by `provider_message_id` (none →
+`unknown_message`, nothing written) → lock it `FOR UPDATE` → insert the event `ON CONFLICT (provider_event_id) DO
+NOTHING` (conflict → `duplicate`, nothing changed) → advance the status if the event outranks it (`applied`) or not
+(`no_change`). Malformed input raises `email_delivery_event_invalid` before any write. The result is a closed enum and
+carries no ids. Concurrent deliveries of one event serialize on the row lock, and the unique constraint is the final
+authority: exactly one row, at most one transition, the others `duplicate`.
+
+**Route.** `POST /api/webhooks/resend` (POST only, dynamic, `no-store`, empty responses, nothing logged; excluded from
+the session proxy; no cookies, session, CSRF or redirect: the provider's signature is the only authority):
+
+1. `RESEND_WEBHOOK_SECRET` missing or malformed (not `whsec_<base64>` of ≥ 24 bytes) → **503**;
+2. the raw body, read once as received, at most **64 KiB** (declared or streamed) → else **413**;
+3. `svix-id`, `svix-timestamp`, `svix-signature` present and well-formed → else **401**; timestamp within the
+   library's ± 5 minutes → else **401**; Standard Webhooks HMAC-SHA256 over `<id>.<timestamp>.<raw body>` (any `v1`
+   signature of the space-separated list) → else **401**. Verification uses `standardwebhooks` directly with the
+   webhook secret only (never a Resend client or `RESEND_API_KEY`), in `src/lib/email/webhook-auth.ts`, the only
+   reader of the secret;
+4. only then JSON parsing and normalization (`src/lib/email/delivery-events.ts`): `type`, top-level `created_at`,
+   `data.email_id` (the correlation key; `data.message_id`, tags and recipients are never read) and, for bounces,
+   `data.bounce.type` (case-insensitive: `Permanent` → permanent; `Transient`/`Temporary` → transient; anything else
+   or missing → undetermined);
+5. one `ingest` call through `src/lib/email/delivery-event-store.ts` (the third service-role module, ADR-002 §6).
+
+| Verified event | Persistence | HTTP |
+|---|---|---|
+| `email.delivered` / `delivery_delayed` / `failed` / `suppressed` / `bounced` / `complained` | event row + rank rule (`applied`, `no_change`), or nothing (`duplicate`, `unknown_message`) | 200 |
+| `email.opened`, `email.clicked` (never read: no link, IP or user agent), `email.sent`, contact/domain/suppression/topic and unknown types | nothing | 200 |
+| A supported type with a malformed body (bad JSON, missing/invalid `email_id` or `created_at`) | nothing | 200 |
+| Database unreachable or refused | nothing | 500 (the provider retries) |
+| Service-role configuration missing | nothing | 503 |
+
+Malformed-but-signed bodies are acknowledged: the provider signed them, so a retry can't make them valid, and refusing
+them would only trigger retries and eventually disable the endpoint. `unknown_message` is expected and safe (sends
+before LB-18.1, deleted parties, dashboard test events, another environment's webhook): 200, no row, nothing logged.
+
+**Contract check (2026-10-06).** Resend's current documentation and SDK (`resend@6.32.0`, which itself verifies with
+`standardwebhooks@1.1.1`) match this ADR: Svix headers, raw-body signing, `data.email_id` = the `emails.send` id,
+top-level `created_at`, and retries of one event keep the same `svix-id` (Svix). Resend documents retries (over about a
+day) but no ordering guarantee, so none is assumed. One
+documentation inconsistency — bounce types listed as `Permanent`/`Transient`/`Undetermined` in the bounce guide and
+`Permanent`/`Temporary` in the webhook reference — is absorbed by the normalization above.
+
+**Not in LB-18.2:** member reads of the status (no client grant on `status`/`status_event_at` yet), UI, resend rules
+(§9), `recipient_undeliverable`/`recently_reminded` (§10), production webhook or secret (§12). Open tracking stays
+disabled and click tracking prohibited (§11).
 
 ### 8. Execution vs delivery
 
@@ -162,8 +233,8 @@ rewrites `sent → failed`, never reactivates a consumed occurrence and never ch
 
 | Slice | Scope |
 |---|---|
-| **LB-18.1** (this) | ADR-011, `email_deliveries`, one row per recorded send, tests |
-| LB-18.2 | Signed Resend webhook ingestion (`POST /api/webhooks/resend`), `email_delivery_events`, status columns and rank rule, a narrow service_role ingest module (ADR-002 §6 justification) |
+| **LB-18.1** (implemented) | ADR-011, `email_deliveries`, one row per recorded send, tests |
+| **LB-18.2** (implemented) | Signed Resend webhook ingestion (`POST /api/webhooks/resend`), `email_delivery_events`, status columns and rank rule, a narrow service_role ingest module (ADR-002 §6 justification); production webhook not configured |
 | LB-18.3 | Delivery status UI on the party card (owners and collaborators) and the resend rules of §9 |
 | LB-18.4 | `recipient_undeliverable` and the `recently_reminded` refinement (§10) |
 | LB-18.5 | Production webhook activation: a separately approved infrastructure step, after the sending domain is owned and verified |
@@ -180,3 +251,6 @@ Ledger rows are never fabricated from the latest-only provider columns.
   with provider UUIDs) turns a send into `sent_but_unrecorded` instead of corrupting correlation.
 - Deleting a party now also deletes its delivery rows; activity history is unaffected.
 - No user-visible change in LB-18.1.
+- LB-18.2: a delivery's status reflects the highest-ranked provider event received for it, with full event history;
+  nothing reads it yet, and LB-17 execution state, latest-send metadata and activity history are untouched by
+  webhooks (a bounce never turns `sent` into anything else). Still no user-visible change.

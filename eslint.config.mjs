@@ -11,10 +11,14 @@ const CAPABILITY_KEY_MESSAGE =
 const CRON_SECRET_MESSAGE =
   "CRON_SECRET is read only in src/lib/scheduler/cron-auth.ts (ADR-010 §4).";
 
+const RESEND_WEBHOOK_SECRET_MESSAGE =
+  "RESEND_WEBHOOK_SECRET is read only in src/lib/email/webhook-auth.ts (ADR-011 §7).";
+
 const restrictedEnvKeys = [
   ["SUPABASE_SERVICE_ROLE_KEY", SERVICE_ROLE_MESSAGE],
   ["RSVP_CAPABILITY_ENCRYPTION_KEY", CAPABILITY_KEY_MESSAGE],
   ["CRON_SECRET", CRON_SECRET_MESSAGE],
+  ["RESEND_WEBHOOK_SECRET", RESEND_WEBHOOK_SECRET_MESSAGE],
 ];
 
 /** `process.env.NAME` and `process.env["NAME"]`, except where `allowed` lists the name. */
@@ -51,9 +55,20 @@ const eslintConfig = defineConfig([
   },
   {
     // ADR-010 §21: the automatic RSVP reminder scheduler's store, the second
-    // and last sanctioned service-role use. Nowhere else.
+    // sanctioned service-role use.
     files: ["src/lib/scheduler/rsvp-reminder-store.ts"],
     rules: { "no-restricted-syntax": ["error", ...envKeyRestrictions(["SUPABASE_SERVICE_ROLE_KEY"])] },
+  },
+  {
+    // ADR-011 §7, ADR-002 §6: the provider delivery event store, the third and
+    // last sanctioned service-role use (signature-authenticated webhooks). Nowhere else.
+    files: ["src/lib/email/delivery-event-store.ts"],
+    rules: { "no-restricted-syntax": ["error", ...envKeyRestrictions(["SUPABASE_SERVICE_ROLE_KEY"])] },
+  },
+  {
+    // ADR-011 §7: the one module that reads the Resend webhook signing secret.
+    files: ["src/lib/email/webhook-auth.ts"],
+    rules: { "no-restricted-syntax": ["error", ...envKeyRestrictions(["RESEND_WEBHOOK_SECRET"])] },
   },
   {
     // ADR-010 §4: the one module that reads the scheduler route's secret.

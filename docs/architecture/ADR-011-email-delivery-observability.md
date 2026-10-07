@@ -5,8 +5,10 @@ Implementation: **LB-18.1 = persistence foundation** (migration `20261013120000_
 `email_deliveries` ledger and its writes inside the four existing record functions. **LB-18.2 = passive signed webhook
 ingestion** (migration `20261014120000_lb_email_delivery_events`): delivery status, `email_delivery_events`, the
 service_role-only ingest function and `POST /api/webhooks/resend` (§7). **LB-18.3 = delivery status UI and manual
-send guardrails** (migration `20261015120000_lb_email_delivery_status_ui`, §14). No automatic-reminder eligibility change
-or production webhook exists yet; those are LB-18.4 and LB-18.5 (§12).
+send guardrails** (migration `20261015120000_lb_email_delivery_status_ui`, §14). **LB-18.4 = automatic reminder
+suppression and recipient-aware eligibility** (migrations `20261016120000_lb_automatic_reminder_recipient_reason`,
+`20261016120100_lb_automatic_reminder_recipient_suppression`, §10). No production webhook exists yet; that is LB-18.5
+(§12).
 Related: [ADR-001 §2](ADR-001-product-domain-and-tenancy.md), [ADR-002 §6, §7](ADR-002-auth-and-security-boundaries.md),
 [ADR-004](ADR-004-invitation-delivery-recorder.md), [ADR-005](ADR-005-rsvp-confirmation-email.md),
 [ADR-007](ADR-007-manual-rsvp-reminder-delivery.md), [ADR-008](ADR-008-basic-activity-history.md),
@@ -211,13 +213,19 @@ rewrites `sent → failed`, never reactivates a consumed occurrence and never ch
 - Copying and sharing the party's RSVP link manually ("Mostrar enlace", the WhatsApp text) is always allowed.
 - No operator override control.
 
-### 10. Future automatic eligibility (LB-18.4; approved product decision)
+### 10. Automatic eligibility (LB-18.4; approved product decision, implemented)
 
-- `bounced`, `suppressed` or `complained` for the party's **current** email address will skip the automatic reminder
-  with a new pre-provider reason `recipient_undeliverable` (attempt 0, remediable).
-- Editing the address reactivates eligibility.
-- `recently_reminded` will be scoped to the **current** recipient address: a recent send to an OLD address no longer
-  suppresses the automatic reminder after `contact_email` changes.
+- `bounced`, `suppressed` or `complained` for the party's **current** email address in the same wedding skips the
+  automatic reminder with the pre-provider reason `recipient_undeliverable` (`skipped`, attempt 0, no provider call,
+  remediable). The determination is LB-18.3's `private.email_recipient_block` (§14), so the members' warning, the
+  manual guard and the scheduler agree. `delayed`, `failed`, `delivered` and `accepted` never block.
+- A genuinely different address reactivates eligibility; a case-only edit is the same address (comparison form) and
+  does not; an old address's failures never poison a new one.
+- `recently_reminded` is scoped to the **current** recipient address: a recent send to an OLD address no longer
+  suppresses the automatic reminder after `contact_email` changes; a case variant of the current address still does.
+- Checked at claim and re-checked at prepare and begin (before the provider boundary): a bounce that lands after the
+  claim stops the send. Execution and delivery stay separate (§8): a delivery outcome never rewrites an occurrence
+  (`sent` stays `sent`); it only informs FUTURE eligibility. Details: ADR-010 §27.
 
 ### 11. Privacy
 
@@ -237,7 +245,7 @@ rewrites `sent → failed`, never reactivates a consumed occurrence and never ch
 | **LB-18.1** (implemented) | ADR-011, `email_deliveries`, one row per recorded send, tests |
 | **LB-18.2** (implemented) | Signed Resend webhook ingestion (`POST /api/webhooks/resend`), `email_delivery_events`, status columns and rank rule, a narrow service_role ingest module (ADR-002 §6 justification); production webhook not configured |
 | **LB-18.3** (implemented) | Delivery status UI on the party card (owners and collaborators) and the resend rules of §9 for manual sends and the RSVP confirmation (§14) |
-| LB-18.4 | `recipient_undeliverable` and the `recently_reminded` refinement (§10) |
+| **LB-18.4** (implemented) | `recipient_undeliverable` and the `recently_reminded` refinement for automatic reminders (§10; ADR-010 §27) |
 | LB-18.5 | Production webhook activation: a separately approved infrastructure step, after the sending domain is owned and verified |
 
 ### 13. Historical sends
@@ -309,7 +317,7 @@ address. Blocked → the confirmation is skipped (`skipped_undeliverable`): no p
 guest sees no note (as when there is no address), the RSVP save never fails. No new service-role operation.
 
 **Unchanged.** Automatic reminders (LB-17 eligibility, scheduler functions; `recipient_undeliverable` and the
-`recently_reminded` refinement remain LB-18.4, §10), the ingest function, status rank rule and webhook route, the
+`recently_reminded` refinement came in LB-18.4, §10), the ingest function, status rank rule and webhook route, the
 event ledger's privileges, activity history (no delivery outcome rows), the latest-send columns. No production webhook
 or secret.
 
@@ -326,3 +334,7 @@ or secret.
 - LB-18.3: organizers see each recorded email's delivery status and a warning for a bad current address; manual emails
   and RSVP confirmations to that address stop until it is edited. Automatic reminders still go out as before until
   LB-18.4.
+- LB-18.4: automatic reminders skip a current address known undeliverable in the wedding (`recipient_undeliverable`,
+  no attempt consumed) until a genuinely different address is set, and only recent sends to the current address
+  count as `recently_reminded`. The production webhook stays inactive (LB-18.5), so in production no status beyond
+  `accepted` exists yet and nothing is suppressed.

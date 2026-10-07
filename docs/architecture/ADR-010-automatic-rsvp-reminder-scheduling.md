@@ -9,6 +9,10 @@ Activation (LB-17A.2, zero-send): the daily `vercel.json` cron entry (`0 15 * * 
 see the §3 note) and a Production `CRON_SECRET` are the scheduler infrastructure only. Automatic sending stays
 operationally disabled: every reminder policy is OFF (none may be enabled in this step), and production email
 delivery is blocked until the sending domain (`listalaboda.com`) is owned and verified with the provider.
+LB-18.4 (migrations `20261016120000_lb_automatic_reminder_recipient_reason`,
+`20261016120100_lb_automatic_reminder_recipient_suppression`) makes eligibility recipient-aware: E11
+`recipient_undeliverable` and a recipient-scoped E9 (§27; ADR-011 §10). States, attempts and the provider boundary are
+unchanged.
 Related: [ADR-002 §5, §6](ADR-002-auth-and-security-boundaries.md), [ADR-004](ADR-004-invitation-delivery-recorder.md),
 [ADR-005](ADR-005-rsvp-confirmation-email.md), [ADR-006](ADR-006-recoverable-rsvp-capability.md),
 [ADR-007](ADR-007-manual-rsvp-reminder-delivery.md), [ADR-008](ADR-008-basic-activity-history.md),
@@ -165,8 +169,9 @@ Evaluated at claim, at prepare and again at begin, always from current rows. A p
 | E6 | `contact_email` is not null | `guest_invitations` |
 | E7 | Link not revoked and not expired (`private.guest_invitation_expires_at`) | `guest_invitations`, `weddings` |
 | E8 | An envelope bound to the CURRENT `token_hash` exists (not legacy) | `private.guest_invitation_capability_secrets` |
-| E9 | No `rsvp_reminder_email_sent_at` and no `invitation_email_sent_at` within the last 7 days | `guest_invitations` |
+| E9 | No `rsvp_reminder_email_sent_at` and no `invitation_email_sent_at` within the last 7 days; since LB-18.4 only sends **to the current `contact_email`** count (§27) | `guest_invitations`, `email_deliveries` |
 | E10 | The occurrence is absent, or in a claimable state (§9) | `automatic_rsvp_reminders` |
+| E11 | LB-18.4: the current `contact_email` has no suppressed/bounced/complained delivery in this wedding (§27) | `email_deliveries` |
 
 The wedding site need not be published; the email links the site only while it is (existing renderer rule).
 At begin, two more checks bind the send to what the worker is about to use: the hash it decrypted is still the
@@ -207,7 +212,8 @@ re-entry reuses the row (§8a).
 | `failed` | the provider definitively rejected the message after an actual attempt | yes |
 | `unknown` | the application cannot prove that no email was sent (§15) | yes |
 
-**Outcome reasons** (`automatic_rsvp_reminder_outcome_reason`), closed, twelve values:
+**Outcome reasons** (`automatic_rsvp_reminder_outcome_reason`), closed, thirteen values (LB-18.4 added
+`recipient_undeliverable`):
 
 | Reason | Class | Allowed only with |
 |---|---|---|
@@ -218,6 +224,7 @@ re-entry reuses the row (§8a).
 | `recently_reminded` | pre-provider eligibility (§18) | `skipped` |
 | `policy_disabled` | pre-provider eligibility | `skipped` |
 | `out_of_window` | pre-provider eligibility (date, zone, `days_before` change, or no date/zone any more) | `skipped` |
+| `recipient_undeliverable` | pre-provider eligibility (LB-18.4, E11: the current address is known undeliverable in this wedding; §27) | `skipped` |
 | `recipient_rejected` | definite provider failure | `failed` |
 | `ineligible_after_attempt` | uncertain: an eligibility check failed after an earlier attempt | `unknown` |
 | `idempotency_conflict` | uncertain: the provider refused the reused key for a different payload | `unknown` |
@@ -265,7 +272,7 @@ party becomes eligible again, the claim function **reactivates the same row**: `
 #### 8b. Reactivation matrix (`skipped`, `attempt_count = 0`)
 
 Reactivation always additionally requires: policy enabled (E1), wedding date and zone (E2), window open (E3) and
-every current eligibility check (E5–E9).
+every current eligibility check (E5–E9, and E11 since LB-18.4).
 
 | `outcome_reason` | Reactivatable | Conditions / rationale |
 |---|---|---|
@@ -274,6 +281,7 @@ every current eligibility check (E5–E9).
 | `link_unavailable` | **YES** | the link is usable again through an explicit owner action ("Generar nuevo enlace" clears `revoked_at` and resets `token_issued_at`), or a date change un-expired it; E4 applies |
 | `policy_disabled` | **YES** | the policy is enabled again and the window is still open. **E4 is waived** for this reason only: the row was claimed while the policy was enabled and before the disable, and re-enabling resets `enabled_at`; the 48 h window still bounds it |
 | `out_of_window` | **YES** | a later date or `days_before` change reopens the window; E4 applies |
+| `recipient_undeliverable` | **YES** (LB-18.4) | the current `contact_email` is now a genuinely different address (comparison form: trim + lowercase; a case-only edit is the same address) that is not itself blocked in this wedding; E4 applies |
 | `recently_reminded` | **NO** | a manual reminder or invitation within 7 days already did the nudge near the automatic date; re-entering could produce two reminders within a week |
 | `answered` | **NO** | answering is the success condition. The product has no RSVP deletion; LB-17 invents none. The row stays `skipped` |
 
@@ -479,7 +487,8 @@ These are constants in the claim function and runner, changed only by a reviewed
 ### 18. Manual vs automatic suppression
 
 - E9: an automatic reminder is not begun within **7 days** after a recorded manual reminder or invitation email
-  (`rsvp_reminder_email_sent_at`, `invitation_email_sent_at`). `recently_reminded` is not reactivatable (§8b).
+  (`rsvp_reminder_email_sent_at`, `invitation_email_sent_at`) — since LB-18.4, one sent to the CURRENT address (§27).
+  `recently_reminded` is not reactivatable (§8b).
 - An automatic send writes `rsvp_reminder_email_sent_at` too, but manual reminders are explicit human intent and are
   never suppressed; the UI shows the automatic status next to the button.
 
@@ -562,6 +571,37 @@ or synthetic sends.
   recordatorio reciente, fecha ya pasada), plus the `sent_unrecorded` and `unknown` notices (§14, §15).
 - A wedding-level notice when any occurrence is `failed`, `sent_unrecorded` or `unknown`.
 - Never provider codes, ids, secrets or worker logs. Configuration problems are operator-only (route counts, logs).
+- LB-18.4: "No se enviará automáticamente a esta dirección porque tuvo un problema de entrega." for
+  `recipient_undeliverable` (next to LB-18.3's address warning); `recently_reminded` is shown only for sends to the
+  current address. The page mirror (`@/lib/scheduler/party-status`) applies the same rules; the database decides.
+
+### 27. Delivery-aware eligibility (LB-18.4, ADR-011 §10)
+
+Both changes live in the one shared check, `private.automatic_rsvp_reminder_ineligibility`, so they are evaluated at
+claim (new and reactivated rows, and the due-time skip rows), re-checked at prepare, and again at begin (the provider
+boundary) with no new call site:
+
+- **E11 `recipient_undeliverable`**: the party's CURRENT `contact_email` has a delivery in the SAME wedding whose
+  `email_deliveries.status` is `suppressed`, `bounced` or `complained`, decided by LB-18.3's
+  `private.email_recipient_block` (the very determination behind the members' warning and the manual send guard, so
+  the two can't drift). `accepted`, `delayed`, `failed` and `delivered` never block. Never the event history, another
+  wedding's deliveries or the provider's account-wide suppression list. Addresses compare in their comparison form
+  (`private.email_comparison_form`: trim + lowercase of the whole address; no dot, `+tag` or alias rules).
+- **Pre-provider only**: `skipped`, `attempt_count = 0`, no begin, no provider call or idempotency key, no metadata,
+  activity or ledger row, lease cleared. Remediable (§8b): a genuinely different, clean current address reactivates
+  the same row; a case-only edit does not; a new address that is itself blocked stays skipped. A bounce that lands
+  after claim is caught at prepare or begin; after an attempt the existing rule applies unchanged (`unknown
+  (ineligible_after_attempt)`).
+- **E9 is recipient-scoped**: only an invitation or reminder (either channel; the RSVP confirmation never counted)
+  sent within 7 days TO the current address (comparison form) counts. Evidence: the latest-send metadata
+  (`*_sent_at` + `*_sent_to`) and the party's own ledger rows of those kinds (`accepted_at` + `recipient`), so a later
+  send elsewhere can't hide an earlier one to this address. Every send counted was already counted by the LB-17 rule:
+  the change only narrows, by recipient. A recorded `recently_reminded` skip stays final (§8b), as before.
+- **Precedence** (first match wins): `answered` → `policy_disabled` → `out_of_window` → `link_unavailable` →
+  `link_unrecoverable` → `no_contact_email` → `recipient_undeliverable` → `recently_reminded`. A bad address that was
+  also recently emailed is `recipient_undeliverable` (remediable), not `recently_reminded` (final).
+- **Execution vs delivery** (ADR-011 §8): delivery status never rewrites an occurrence. A bounce of an automatic
+  reminder that was already sent leaves it `sent` (attempts unchanged); it only informs FUTURE eligibility.
 
 ## Safety guarantees, by layer
 

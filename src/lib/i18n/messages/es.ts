@@ -692,6 +692,8 @@ export const es = {
           link_unavailable: "No se enviará: el enlace no está activo.",
           link_unrecoverable:
             "No se enviará: no podemos recuperar el enlace actual. Un dueño puede generar un enlace nuevo.",
+          recipient_undeliverable:
+            "No se enviará automáticamente a esta dirección porque tuvo un problema de entrega.",
           recently_reminded: "No se enviará: el grupo recibió un correo hace menos de 7 días.",
           date_passed: "No se enviará: la fecha del recordatorio ya pasó.",
           needs_date: "No se enviará: la boda necesita fecha y zona horaria.",

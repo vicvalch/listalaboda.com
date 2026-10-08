@@ -311,6 +311,13 @@ sent never changes it. The production webhook is still not configured, so nothin
 Still deferred: recurring or multi-stage reminders, per-party automation settings, production webhook activation
 (LB-18.5), and messaging APIs and phone numbers.
 
+**Seating plan foundation (LB-19).** "Mesas" lets owners and collaborators create tables (name and capacity, 1–50),
+seat each guest at one table, move and unseat them, and see occupancy ("8 / 10"), who still has no table (grouped by
+party) and a summary. Every seated person takes a seat, whether they confirmed or haven't answered yet; capacity is
+enforced by the database, also under concurrent edits. Guests who declined can't be seated; a guest who declines after
+being seated stays on their table with a "No asistirá" warning until someone unseats them. It is a list-and-forms
+tool: there is no visual floor plan, drag and drop, chair-level seating, plus-ones or automatic seating. See ADR-012.
+
 ## Stack
 
 Next.js (App Router) · React · TypeScript (strict) · Tailwind CSS · Supabase (`@supabase/ssr`) ·
@@ -402,6 +409,7 @@ one later.
 - [ADR-008 — Basic wedding activity history](docs/architecture/ADR-008-basic-activity-history.md)
 - [ADR-009 — Checklist ↔ guest work](docs/architecture/ADR-009-checklist-guest-work.md)
 - [ADR-010 — Automatic RSVP reminder scheduling](docs/architecture/ADR-010-automatic-rsvp-reminder-scheduling.md)
+- [ADR-012 — Seating plan domain model](docs/architecture/ADR-012-seating-plan-domain-model.md)
 
 Database migrations live in `supabase/migrations/` and are named `YYYYMMDDHHMMSS_lb_<slug>.sql`.
 After changing the schema, run `npm run db:reset && npm run db:types` and commit the regenerated types.

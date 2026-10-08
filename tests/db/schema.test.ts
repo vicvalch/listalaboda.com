@@ -25,6 +25,9 @@ const TABLES = [
   "email_deliveries",
   // LB-18.2 (ADR-011 §7)
   "email_delivery_events",
+  // LB-19 (ADR-012)
+  "seating_tables",
+  "seating_assignments",
 ];
 
 /**
@@ -66,7 +69,7 @@ describe("schema guarantees", () => {
     expect(columns).toEqual([]);
   });
 
-  it("authenticated can INSERT only into membership invites, checklist items, the guest list and site content", async () => {
+  it("authenticated can INSERT only into membership invites, checklist items, the guest list, site content and seating", async () => {
     const rows = await sql<{ table_name: string }>(
       `select table_name from information_schema.column_privileges
        where grantee = 'authenticated' and privilege_type = 'INSERT'
@@ -80,6 +83,9 @@ describe("schema guarantees", () => {
       // LB-13: no guest_invitations — parties come only from create_guest_invitation.
       "guests",
       "membership_invites",
+      // LB-19 (ADR-012): shared planning content, member RLS.
+      "seating_assignments",
+      "seating_tables",
     ]);
   });
 
@@ -124,6 +130,7 @@ describe("schema guarantees", () => {
 
     expect(rows.map((r) => r.name)).toEqual([
       "private.assign_checklist_item_sort_order",
+      "private.assign_seating_table_sort_order",
       "private.automatic_rsvp_reminder_due_at",
       "private.automatic_rsvp_reminder_ineligibility",
       "private.automatic_rsvp_reminder_party_due_at",
@@ -132,6 +139,8 @@ describe("schema guarantees", () => {
       "private.email_recipient_block",
       "private.enforce_guest_invitation_capability_secret",
       "private.enforce_guest_invitation_has_guest",
+      "private.enforce_seating_assignment",
+      "private.enforce_seating_table_capacity",
       "private.enforce_wedding_has_owner",
       "private.guard_email_deliveries",
       "private.guard_email_delivery_events",

@@ -37,6 +37,8 @@ describe("server-only boundary", () => {
     "@/lib/scheduler/cron-auth",
     "@/lib/scheduler/runtime",
     "@/lib/scheduler/policy",
+    // LB-21 (ADR-014)
+    "@/lib/vendors/service",
   ])("refuses to load %s outside a server runtime", async (specifier) => {
     await expect(import(/* @vite-ignore */ specifier)).rejects.toThrow(
       /cannot be imported from a Client Component/,

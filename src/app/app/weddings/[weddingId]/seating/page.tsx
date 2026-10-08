@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { Notice } from "@/components/ui/Notice";
-import { cardClass, textLinkClass } from "@/components/ui/styles";
+import { cardClass, primaryButtonClass, textLinkClass } from "@/components/ui/styles";
 import { loginPath } from "@/lib/auth/redirect";
 import { requireUser } from "@/lib/auth/session";
 import { requireWeddingMembership } from "@/lib/authz/wedding";
@@ -28,7 +28,10 @@ import {
   unseatGuestAction,
   updateTableAction,
 } from "./actions";
-import { AssignmentForm, type TableOption } from "./AssignmentForm";
+import { AssignmentForm } from "./AssignmentForm";
+import { PlannerGate } from "./PlannerGate";
+import { SeatingPlanner } from "./SeatingPlanner";
+import { seatingTableOptions } from "./table-options";
 import { TableForm } from "./TableForm";
 
 export const metadata: Metadata = { title: getMessages().seating.title };
@@ -42,11 +45,20 @@ const copy = getMessages().seating;
  * membership is checked server-side first, and a non-member, a nonexistent
  * wedding and a malformed id all get the same 404. The data is loaded after
  * that check in two batched queries; occupancy, groups and conflicts are
- * derived in memory (`@/lib/seating/plan`). Plain forms and Server Actions:
- * no drag and drop, no floor plan.
+ * derived in memory (`@/lib/seating/plan`). Plain forms and Server Actions.
+ *
+ * LB-20 (ADR-013): `?view=plan` opens the visual planner, a progressive
+ * enhancement over the same data and actions, on desktop screens only. The
+ * list stays the default and the full fallback (and the only view below
+ * `lg`). `view` is presentation, never a boundary: both views get the same
+ * membership check and the same data.
  */
-export default async function SeatingPage({ params }: PageProps<"/app/weddings/[weddingId]/seating">) {
+export default async function SeatingPage({
+  params,
+  searchParams,
+}: PageProps<"/app/weddings/[weddingId]/seating">) {
   const { weddingId } = await params;
+  const view = (await searchParams).view === "plan" ? "plan" : "list";
   const selfPath = `/app/weddings/${encodeURIComponent(weddingId)}/seating`;
   await requireUser(selfPath);
 
@@ -81,9 +93,47 @@ export default async function SeatingPage({ params }: PageProps<"/app/weddings/[
         </p>
       </header>
 
-      {plan ? (
+      {plan && data && view === "plan" ? (
         <>
           <SummarySection plan={plan} />
+          {/* Page-local breakout to ~max-w-7xl from the shell's max-w-4xl, with
+              fixed negative margins per breakpoint (never 100vw, which counts
+              the scrollbar and overflows on Windows). Below lg: no breakout. */}
+          <div data-testid="planner-workspace" className="space-y-4 lg:-mx-8 xl:-mx-40 2xl:-mx-52">
+            <PlannerGate listHref={`/app/weddings/${wedding.id}/seating`}>
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <ViewToggle weddingId={wedding.id} view={view} />
+                <details className="relative">
+                  <summary
+                    className={`${primaryButtonClass} min-h-9 cursor-pointer list-none px-4 py-1.5 [&::-webkit-details-marker]:hidden`}
+                  >
+                    {copy.planner.createTable}
+                  </summary>
+                  <section
+                    aria-labelledby="new-table-title"
+                    className={`${cardClass} absolute right-0 z-30 mt-2 w-[32rem] space-y-4`}
+                  >
+                    <h2 id="new-table-title" className="text-xl font-semibold">
+                      {copy.newTable.title}
+                    </h2>
+                    <TableForm
+                      action={createTableAction}
+                      weddingId={wedding.id}
+                      id="new-table"
+                      submitLabel={copy.newTable.submit}
+                      pendingLabel={copy.newTable.submitting}
+                    />
+                  </section>
+                </details>
+              </div>
+              <SeatingPlanner weddingId={wedding.id} data={data} />
+            </PlannerGate>
+          </div>
+        </>
+      ) : plan ? (
+        <>
+          <SummarySection plan={plan} />
+          <ViewToggle weddingId={wedding.id} view={view} />
 
           <section aria-labelledby="new-table-title" className={`${cardClass} space-y-4`}>
             <h2 id="new-table-title" className="text-xl font-semibold">
@@ -105,6 +155,39 @@ export default async function SeatingPage({ params }: PageProps<"/app/weddings/[
         <Notice tone="error">{copy.loadFailed}</Notice>
       )}
     </div>
+  );
+}
+
+// --------------------------------------------------------------------- view
+
+/**
+ * "Lista | Plano" (LB-20): plain links to the same route, desktop only. Below
+ * `lg` the list is the only view, so the toggle isn't shown at all.
+ */
+function ViewToggle({ weddingId, view }: { weddingId: string; view: "list" | "plan" }) {
+  const base = `/app/weddings/${weddingId}/seating`;
+  const links = [
+    { key: "list", label: copy.view.list, href: base },
+    { key: "plan", label: copy.view.plan, href: `${base}?view=plan` },
+  ] as const;
+  return (
+    <nav aria-label={copy.view.label} className="hidden lg:block">
+      <ul className="inline-flex rounded-lg border border-border bg-surface p-1">
+        {links.map((link) => (
+          <li key={link.key}>
+            <Link
+              href={link.href}
+              aria-current={view === link.key ? "page" : undefined}
+              className={`inline-flex min-h-9 items-center rounded-md px-4 text-sm font-semibold ${
+                view === link.key ? "bg-accent text-accent-foreground" : "hover:bg-accent-soft"
+              }`}
+            >
+              {link.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }
 
@@ -148,16 +231,6 @@ function SummarySection({ plan }: { plan: SeatingPlan }) {
 }
 
 // ------------------------------------------------------------------- tables
-
-function tableOptions(tables: readonly SeatingTablePlan[], excludeId: string | null): TableOption[] {
-  return tables
-    .filter((table) => table.id !== excludeId)
-    .map((table) => ({
-      id: table.id,
-      label: table.isFull ? interpolate(copy.seat.fullOption, { table: table.name }) : table.name,
-      disabled: table.isFull,
-    }));
-}
 
 function RsvpBadge({ guest }: { guest: SeatingGuest }) {
   if (guest.rsvpState === "attending") return null;
@@ -270,7 +343,7 @@ function TableCard({
                     select={{
                       label: interpolate(copy.move.selectLabel, { guest: guest.name }),
                       placeholder: copy.seat.choose,
-                      options: tableOptions(tables, table.id),
+                      options: seatingTableOptions(tables, table.id),
                     }}
                     submitLabel={copy.move.submit}
                     submitAriaLabel={interpolate(copy.move.submitAria, { guest: guest.name })}
@@ -298,6 +371,7 @@ function TableCard({
           id={`edit-${table.id}`}
           defaultName={table.name}
           defaultCapacity={table.capacity}
+          defaultShape={table.shape}
           submitLabel={copy.editTable.submit}
           pendingLabel={copy.editTable.submitting}
           disclosure={{
@@ -352,7 +426,7 @@ function PartyGroups({
                     select={{
                       label: interpolate(copy.seat.selectLabel, { guest: guest.name }),
                       placeholder: copy.seat.choose,
-                      options: tableOptions(tables, null),
+                      options: seatingTableOptions(tables, null),
                     }}
                     submitLabel={copy.seat.submit}
                     submitAriaLabel={interpolate(copy.seat.submitAria, { guest: guest.name })}

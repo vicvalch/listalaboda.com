@@ -5,9 +5,16 @@ import { useActionState } from "react";
 import { FormField } from "@/components/ui/FormField";
 import { Notice } from "@/components/ui/Notice";
 import { SubmitButton } from "@/components/ui/SubmitButton";
-import { secondaryButtonClass } from "@/components/ui/styles";
+import { inputClass, secondaryButtonClass } from "@/components/ui/styles";
 import { getMessages } from "@/lib/i18n";
-import { TABLE_CAPACITY_MAX, TABLE_CAPACITY_MIN, TABLE_NAME_MAX_LENGTH } from "@/lib/seating/validation";
+import {
+  DEFAULT_TABLE_SHAPE,
+  TABLE_CAPACITY_MAX,
+  TABLE_CAPACITY_MIN,
+  TABLE_NAME_MAX_LENGTH,
+  TABLE_SHAPES,
+  type TableShape,
+} from "@/lib/seating/validation";
 
 import type { TableFormState } from "./actions";
 
@@ -23,16 +30,21 @@ type Props = {
   id: string;
   defaultName?: string;
   defaultCapacity?: number;
+  /** LB-20: visual only; a new table is round unless chosen otherwise. */
+  defaultShape?: TableShape;
   submitLabel: string;
   pendingLabel: string;
   /** When set, the form sits behind a disclosure ("Editar"). */
   disclosure?: Readonly<{ label: string; ariaLabel: string }>;
+  /** Stack the fields (the planner's narrow inspector). */
+  compact?: boolean;
 };
 
 /**
- * A table's name and capacity ("Crear mesa", "Editar"). Works without
+ * A table's name, capacity and shape ("Crear mesa", "Editar"). Works without
  * JavaScript, keeps typed values on errors (including the capacity-below-
- * assigned refusal) and announces success in a status region.
+ * assigned refusal) and announces success in a status region. The shape
+ * (LB-20) is visual only: it never changes capacity, seats or position.
  */
 export function TableForm({
   action,
@@ -41,13 +53,18 @@ export function TableForm({
   id,
   defaultName = "",
   defaultCapacity,
+  defaultShape = DEFAULT_TABLE_SHAPE,
   submitLabel,
   pendingLabel,
   disclosure,
+  compact = false,
 }: Props) {
   const [state, formAction] = useActionState<TableFormState, FormData>(action, null);
-  const copy = getMessages().seating.newTable;
+  const messages = getMessages().seating;
+  const copy = messages.newTable;
   const failure = state && !state.ok ? state : null;
+  const shapeError = failure?.fieldErrors?.shape;
+  const shapeErrorId = `${id}-shape-error`;
 
   const form = (
     <div className="space-y-2">
@@ -56,7 +73,7 @@ export function TableForm({
         <input type="hidden" name="weddingId" value={weddingId} />
         {tableId ? <input type="hidden" name="tableId" value={tableId} /> : null}
         {failure?.formError ? <Notice tone="error">{failure.formError}</Notice> : null}
-        <div className="grid gap-4 sm:grid-cols-[1fr_10rem]">
+        <div className={compact ? "grid gap-4" : "grid gap-4 sm:grid-cols-[1fr_10rem_10rem]"}>
           <FormField
             id={`${id}-name`}
             name="name"
@@ -81,6 +98,30 @@ export function TableForm({
             defaultValue={failure?.values?.capacity ?? (defaultCapacity === undefined ? "" : String(defaultCapacity))}
             error={failure?.fieldErrors?.capacity}
           />
+          <div className="space-y-1.5">
+            <label htmlFor={`${id}-shape`} className="block text-sm font-semibold">
+              {copy.shapeLabel}
+            </label>
+            <select
+              id={`${id}-shape`}
+              name="shape"
+              defaultValue={failure?.values?.shape || defaultShape}
+              className={inputClass}
+              aria-invalid={shapeError ? true : undefined}
+              aria-describedby={shapeError ? shapeErrorId : undefined}
+            >
+              {TABLE_SHAPES.map((shape) => (
+                <option key={shape} value={shape}>
+                  {messages.shapes[shape]}
+                </option>
+              ))}
+            </select>
+            {shapeError ? (
+              <p id={shapeErrorId} className="text-danger text-sm font-medium">
+                {shapeError}
+              </p>
+            ) : null}
+          </div>
         </div>
         <SubmitButton
           label={submitLabel}

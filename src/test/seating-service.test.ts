@@ -1,7 +1,13 @@
 import { createClient, type SupportedStorage } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 
-import { parseTableCapacity, parseTableInput, parseTableName } from "@/lib/seating/validation";
+import {
+  parseLayoutCoordinate,
+  parseTableCapacity,
+  parseTableInput,
+  parseTableName,
+  parseTableShape,
+} from "@/lib/seating/validation";
 import type { Database } from "@/lib/supabase/database.types";
 
 vi.mock("server-only", () => ({}));
@@ -11,6 +17,7 @@ const {
   deleteSeatingTable,
   getSeatingData,
   moveGuest,
+  positionSeatingTable,
   seatGuest,
   seatingFailure,
   unseatGuest,
@@ -29,6 +36,7 @@ const WEDDING_ID = "22222222-2222-4222-8222-222222222222";
 const MY_MEMBERSHIP = "33333333-3333-4333-8333-333333333333";
 const TABLE_ID = "44444444-4444-4444-8444-444444444444";
 const GUEST_ID = "55555555-5555-4555-8555-555555555555";
+const OTHER_TABLE_ID = "66666666-6666-4666-8666-666666666666";
 
 type Recorded = { method: string; url: URL; body: unknown };
 type Reply = { status: number; body: unknown };
@@ -183,27 +191,29 @@ describe("seating service writes", () => {
 
   it("creates a table with only wedding, trimmed name and capacity", async () => {
     const { supabase, requests } = clientFor();
-    await expect(createSeatingTable(supabase, WEDDING_ID, { name: "  Mesa 1 ", capacity: 8 })).resolves.toEqual({
+    await expect(createSeatingTable(supabase, WEDDING_ID, { name: "  Mesa 1 ", capacity: 8, shape: "round" })).resolves.toEqual({
       ok: true,
     });
-    expect(writes(requests).map((r) => r.body)).toEqual([{ wedding_id: WEDDING_ID, name: "Mesa 1", capacity: 8 }]);
+    expect(writes(requests).map((r) => r.body)).toEqual([
+      { wedding_id: WEDDING_ID, name: "Mesa 1", capacity: 8, shape: "round" },
+    ]);
   });
 
   it("a capacity below the people seated is capacity_below_assigned", async () => {
     const { supabase, requests } = clientFor({ write: dbError("23514", "seating_capacity_below_assigned") });
-    await expect(updateSeatingTable(supabase, WEDDING_ID, TABLE_ID, { name: "Mesa", capacity: 2 })).resolves.toEqual({
+    await expect(updateSeatingTable(supabase, WEDDING_ID, TABLE_ID, { name: "Mesa", capacity: 2, shape: "round" })).resolves.toEqual({
       ok: false,
       reason: "capacity_below_assigned",
     });
-    expect(writes(requests)[0]?.body).toEqual({ name: "Mesa", capacity: 2 });
+    expect(writes(requests)[0]?.body).toEqual({ name: "Mesa", capacity: 2, shape: "round" });
   });
 
   it.each([
-    { name: "", capacity: 4 },
-    { name: "Mesa", capacity: 0 },
-    { name: "Mesa", capacity: 51 },
-    { name: "Mesa", capacity: 2.5 },
-    { name: "a".repeat(81), capacity: 4 },
+    { name: "", capacity: 4, shape: "round" as const },
+    { name: "Mesa", capacity: 0, shape: "round" as const },
+    { name: "Mesa", capacity: 51, shape: "round" as const },
+    { name: "Mesa", capacity: 2.5, shape: "round" as const },
+    { name: "a".repeat(81), capacity: 4, shape: "round" as const },
   ])("invalid input %j never reaches the database", async (input) => {
     const { supabase, requests } = clientFor();
     await expect(createSeatingTable(supabase, WEDDING_ID, input)).resolves.toEqual({ ok: false, reason: "invalid_input" });
@@ -232,7 +242,13 @@ describe("getSeatingData", () => {
   it("reads tables and the nested guest list in two queries, ordered", async () => {
     const { supabase, requests } = clientFor({
       get: {
-        seating_tables: { status: 200, body: [{ id: TABLE_ID, name: "Mesa 1", capacity: 8 }] },
+        seating_tables: {
+          status: 200,
+          body: [
+            { id: TABLE_ID, name: "Mesa 1", capacity: 8, shape: "round", layout_x: null, layout_y: null },
+            { id: OTHER_TABLE_ID, name: "Mesa 2", capacity: 10, shape: "rectangle", layout_x: 340, layout_y: 120 },
+          ],
+        },
         guest_invitations: {
           status: 200,
           body: [
@@ -256,7 +272,10 @@ describe("getSeatingData", () => {
       },
     });
     await expect(getSeatingData(supabase, access)).resolves.toEqual({
-      tables: [{ id: TABLE_ID, name: "Mesa 1", capacity: 8 }],
+      tables: [
+        { id: TABLE_ID, name: "Mesa 1", capacity: 8, shape: "round", layout: null },
+        { id: OTHER_TABLE_ID, name: "Mesa 2", capacity: 10, shape: "rectangle", layout: { x: 340, y: 120 } },
+      ],
       parties: [
         {
           id: "p1",
@@ -271,6 +290,7 @@ describe("getSeatingData", () => {
     const reads = requests.filter((r) => r.method === "GET" && r.url.pathname.startsWith("/rest/v1/") && r.url.pathname !== "/rest/v1/wedding_memberships");
     expect(reads.map((r) => r.url.pathname)).toEqual(["/rest/v1/seating_tables", "/rest/v1/guest_invitations"]);
     expect(reads[0]?.url.searchParams.get("order")).toBe("sort_order.asc,created_at.asc,id.asc");
+    expect(reads[0]?.url.searchParams.get("select")).toBe("id,name,capacity,shape,layout_x,layout_y");
     for (const read of reads) expect(read.url.searchParams.get("wedding_id")).toBe(`eq.${WEDDING_ID}`);
     // Never contact emails, notes, link state or tokens.
     expect(reads[1]?.url.searchParams.get("select")).not.toMatch(/contact_email|dietary|token|revoked/);
@@ -302,8 +322,132 @@ describe("seating validation", () => {
   });
 
   it("reports each invalid field", () => {
-    const result = parseTableInput({ name: "", capacity: "99" });
+    const result = parseTableInput({ name: "", capacity: "99", shape: "" });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(Object.keys(result.fieldErrors).sort()).toEqual(["capacity", "name"]);
+  });
+});
+
+// --------------------------------------------------------- LB-20 layout
+
+describe("table shape (LB-20)", () => {
+  it.each(["round", "rectangle"] as const)("creates and updates a %s table, sending the shape", async (shape) => {
+    const { supabase, requests } = clientFor();
+    await expect(createSeatingTable(supabase, WEDDING_ID, { name: "Mesa", capacity: 6, shape })).resolves.toEqual({
+      ok: true,
+    });
+    await expect(
+      updateSeatingTable(supabase, WEDDING_ID, TABLE_ID, { name: "Mesa", capacity: 6, shape }),
+    ).resolves.toEqual({ ok: true });
+    const [insert, patch] = writes(requests);
+    expect(insert?.body).toEqual({ wedding_id: WEDDING_ID, name: "Mesa", capacity: 6, shape });
+    // A shape change sends only name, capacity and shape: never layout, order or assignments.
+    expect(patch?.body).toEqual({ name: "Mesa", capacity: 6, shape });
+  });
+
+  it.each(["oval", "square", "ROUND", "round;drop", "<svg>"])("an unknown shape (%s) never reaches the database", async (shape) => {
+    const { supabase, requests } = clientFor();
+    const input = { name: "Mesa", capacity: 6, shape } as unknown as Parameters<typeof createSeatingTable>[2];
+    await expect(createSeatingTable(supabase, WEDDING_ID, input)).resolves.toEqual({ ok: false, reason: "invalid_input" });
+    await expect(updateSeatingTable(supabase, WEDDING_ID, TABLE_ID, input)).resolves.toEqual({
+      ok: false,
+      reason: "invalid_input",
+    });
+    expect(writes(requests)).toEqual([]);
+  });
+
+  it("parses form shapes: blank is round, the enum passes, anything else is a field error", () => {
+    expect(parseTableShape("")).toEqual({ ok: true, value: "round" });
+    expect(parseTableShape("round")).toEqual({ ok: true, value: "round" });
+    expect(parseTableShape(" rectangle ")).toEqual({ ok: true, value: "rectangle" });
+    expect(parseTableShape("triangle").ok).toBe(false);
+    const result = parseTableInput({ name: "Mesa", capacity: "4", shape: "hexagon" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(Object.keys(result.fieldErrors)).toEqual(["shape"]);
+  });
+});
+
+describe("positionSeatingTable (LB-20)", () => {
+  it.each(["owner", "collaborator"] as const)("%s saves a position: only layout_x/layout_y, scoped to (id, wedding)", async (role) => {
+    const { supabase, requests } = clientFor({ role });
+    await expect(positionSeatingTable(supabase, WEDDING_ID, TABLE_ID, { x: 340, y: 120 })).resolves.toEqual({ ok: true });
+    const [patch, ...rest] = writes(requests);
+    expect(rest).toEqual([]);
+    expect(patch?.method).toBe("PATCH");
+    expect(patch?.url.pathname).toBe("/rest/v1/seating_tables");
+    expect(patch?.body).toEqual({ layout_x: 340, layout_y: 120 });
+    expect(patch?.url.searchParams.get("id")).toBe(`eq.${TABLE_ID}`);
+    expect(patch?.url.searchParams.get("wedding_id")).toBe(`eq.${WEDDING_ID}`);
+  });
+
+  it("accepts the database's full 0–10000 range (the 1200-unit board is presentation)", async () => {
+    const { supabase, requests } = clientFor();
+    await expect(positionSeatingTable(supabase, WEDDING_ID, TABLE_ID, { x: 0, y: 10_000 })).resolves.toEqual({ ok: true });
+    await expect(positionSeatingTable(supabase, WEDDING_ID, TABLE_ID, { x: 10_000, y: 0 })).resolves.toEqual({ ok: true });
+    expect(writes(requests)).toHaveLength(2);
+  });
+
+  it.each([
+    { x: 1.5, y: 100 },
+    { x: 100, y: 0.1 },
+    { x: Number.NaN, y: 100 },
+    { x: 100, y: Number.POSITIVE_INFINITY },
+    { x: -20, y: 100 },
+    { x: 100, y: -1 },
+    { x: 10_001, y: 100 },
+    { x: 100, y: 20_000 },
+    { x: "100", y: 100 },
+  ])("invalid coordinates %j are invalid_input and never reach the database", async (position) => {
+    const { supabase, requests } = clientFor();
+    const result = await positionSeatingTable(
+      supabase,
+      WEDDING_ID,
+      TABLE_ID,
+      position as unknown as { x: number; y: number },
+    );
+    expect(result).toEqual({ ok: false, reason: "invalid_input" });
+    expect(writes(requests)).toEqual([]);
+  });
+
+  it("a malformed table id never reaches the database", async () => {
+    const { supabase, requests } = clientFor();
+    await expect(positionSeatingTable(supabase, WEDDING_ID, "not-a-uuid", { x: 100, y: 100 })).resolves.toEqual({
+      ok: false,
+      reason: "invalid_target",
+    });
+    expect(writes(requests)).toEqual([]);
+  });
+
+  it("a missing table or another wedding's table (zero rows) is invalid_target", async () => {
+    const { supabase } = clientFor({ write: { status: 200, body: [] } });
+    await expect(positionSeatingTable(supabase, WEDDING_ID, TABLE_ID, { x: 100, y: 100 })).resolves.toEqual({
+      ok: false,
+      reason: "invalid_target",
+    });
+  });
+
+  it("a non-member gets not_found and nothing is written", async () => {
+    const { supabase, requests } = clientFor({ role: null });
+    await expect(positionSeatingTable(supabase, WEDDING_ID, TABLE_ID, { x: 100, y: 100 })).resolves.toEqual({
+      ok: false,
+      reason: "not_found",
+    });
+    expect(writes(requests)).toEqual([]);
+  });
+
+  it("a database refusal maps to a closed reason without raw details", async () => {
+    const { supabase } = clientFor({ write: dbError("23514", 'new row violates check constraint "seating_tables_layout_range"') });
+    const result = await positionSeatingTable(supabase, WEDDING_ID, TABLE_ID, { x: 100, y: 100 });
+    expect(result).toEqual({ ok: false, reason: "invalid_input" });
+    expect(JSON.stringify(result)).not.toMatch(/constraint|raw detail|layout/);
+  });
+
+  it("parses form coordinates: digits only, within 0–10000", () => {
+    expect(parseLayoutCoordinate("0")).toBe(0);
+    expect(parseLayoutCoordinate(" 340 ")).toBe(340);
+    expect(parseLayoutCoordinate("10000")).toBe(10_000);
+    for (const raw of ["", "-20", "1.5", "1e3", "0x10", "10001", "99999", "abc", "+5"]) {
+      expect(parseLayoutCoordinate(raw), raw).toBeNull();
+    }
   });
 });

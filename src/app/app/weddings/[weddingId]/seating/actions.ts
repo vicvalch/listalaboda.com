@@ -10,12 +10,13 @@ import {
   createSeatingTable,
   deleteSeatingTable,
   moveGuest,
+  positionSeatingTable,
   seatGuest,
   unseatGuest,
   updateSeatingTable,
   type SeatingFailureReason,
 } from "@/lib/seating/service";
-import { parseTableInput, type TableField } from "@/lib/seating/validation";
+import { parseLayoutCoordinate, parseTableInput, type TableField } from "@/lib/seating/validation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
@@ -26,6 +27,10 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
  * re-checks every write (same-wedding FKs, capacity under a row lock,
  * declined guests). Results carry only catalog messages, never database
  * errors. Only the seating page is revalidated: nothing else shows seating.
+ *
+ * LB-20 (ADR-013): the visual planner reuses the seat/move/unseat actions
+ * below for its drops (no second assignment path) and adds one layout
+ * action, `positionTableAction`, called once per completed table drag.
  */
 
 function seatingPath(weddingId: string): string {
@@ -73,7 +78,11 @@ async function saveTable(formData: FormData, tableId: string | null): Promise<Ta
   await requireUser(seatingPath(weddingId));
   const copy = getMessages().seating;
 
-  const values = { name: formText(formData, "name"), capacity: formText(formData, "capacity") };
+  const values = {
+    name: formText(formData, "name"),
+    capacity: formText(formData, "capacity"),
+    shape: formText(formData, "shape"),
+  };
   const parsed = parseTableInput(values);
   if (!parsed.ok) return { ok: false, fieldErrors: parsed.fieldErrors, values };
 
@@ -122,7 +131,14 @@ export async function deleteTableAction(_prev: ConfirmState, formData: FormData)
 
 // ------------------------------------------------------------- assignments
 
-export type SeatingActionState = FormState<never, { nonce: string }> | null;
+/**
+ * The failure also carries the closed service reason, so the visual planner
+ * can tell "Mesa llena" apart from other refusals. Never a database error.
+ */
+export type SeatingActionState =
+  | Readonly<{ ok: true; data: { nonce: string } }>
+  | Readonly<{ ok: false; formError: string; reason: SeatingFailureReason }>
+  | null;
 
 async function runAssignment(
   formData: FormData,
@@ -133,10 +149,14 @@ async function runAssignment(
   await requireUser(seatingPath(weddingId));
 
   const tableId = formText(formData, "tableId");
-  if (needsTable && !tableId) return { ok: false, formError: getMessages().seating.errors.chooseTable };
+  if (needsTable && !tableId) {
+    return { ok: false, formError: getMessages().seating.errors.chooseTable, reason: "invalid_input" };
+  }
 
   const result = await run(weddingId, formText(formData, "guestId"), tableId);
-  if (!result.ok) return { ok: false, formError: await failureMessage(weddingId, result.reason) };
+  if (!result.ok) {
+    return { ok: false, formError: await failureMessage(weddingId, result.reason), reason: result.reason };
+  }
   revalidatePath(seatingPath(weddingId));
   return { ok: true, data: { nonce: crypto.randomUUID() } };
 }
@@ -165,4 +185,40 @@ export async function unseatGuestAction(_prev: SeatingActionState, formData: For
     async (weddingId, guestId) => unseatGuest(await createSupabaseServerClient(), weddingId, guestId),
     false,
   );
+}
+
+// ------------------------------------------------------------ table layout
+
+/**
+ * Saves a table's position on the planner board (LB-20): sent once, when a
+ * table drag ends, never while dragging. The coordinates are already snapped
+ * and clamped by the planner; the service re-validates them (whole numbers,
+ * 0–10000) and writes only `layout_x`/`layout_y`. Last write wins.
+ */
+export async function positionTableAction(
+  _prev: SeatingActionState,
+  formData: FormData,
+): Promise<SeatingActionState> {
+  const weddingId = formText(formData, "weddingId");
+  await requireUser(seatingPath(weddingId));
+
+  const x = parseLayoutCoordinate(formText(formData, "x"));
+  const y = parseLayoutCoordinate(formText(formData, "y"));
+  if (x === null || y === null) {
+    return { ok: false, formError: getMessages().seating.planner.positionFailed, reason: "invalid_input" };
+  }
+
+  const result = await positionSeatingTable(
+    await createSupabaseServerClient(),
+    weddingId,
+    formText(formData, "tableId"),
+    { x, y },
+  );
+  if (!result.ok) {
+    // Never a raw error: one fixed sentence (or the 404 / login redirect).
+    await failureMessage(weddingId, result.reason);
+    return { ok: false, formError: getMessages().seating.planner.positionFailed, reason: result.reason };
+  }
+  revalidatePath(seatingPath(weddingId));
+  return { ok: true, data: { nonce: crypto.randomUUID() } };
 }

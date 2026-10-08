@@ -20,6 +20,7 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - `docs/architecture/ADR-011-email-delivery-observability.md` (email delivery ledger and signed delivery webhooks;
   staged LB-18; the third service-role module)
 - `docs/architecture/ADR-012-seating-plan-domain-model.md` (seating tables and one-table-per-guest assignments)
+- `docs/architecture/ADR-013-visual-seating-planner-layout-model.md` (visual planner: table shape and board position)
 
 ## Product rules
 
@@ -477,8 +478,32 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   `search_path`, not client-executable. No service role, no RPC, no public/RSVP/published-site exposure.
 - Writes go through `@/lib/seating/service` (membership first, wedding-scoped, closed reasons; raw SQL never reaches the
   UI). The page reads in two batched queries (`getSeatingData`) and derives everything in `@/lib/seating/plan`.
-- No activity events for seating (ADR-008 unchanged); no checklist link (`reception.layout` stays unlinked). No drag
-  and drop, floor plan, coordinates, shapes, chairs or auto-seating (LB-20+).
+- No activity events for seating (ADR-008 unchanged); no checklist link (`reception.layout` stays unlinked). No
+  auto-seating. The visual planner is LB-20 below.
+
+## Visual seating planner rules (LB-20, ADR-013)
+
+- Progressive enhancement over LB-19, which stays authoritative. Guest drops call ONLY the LB-19 actions (rail → table
+  `seatGuestAction`, table → table `moveGuestAction`, table → rail `unseatGuestAction`); never a second assignment
+  path, RPC or browser Supabase write. The database decides capacity races (`table_full` → revert + "Mesa llena").
+- Layout lives on `seating_tables`: `shape` (`seating_table_shape` enum: `round | rectangle`, default round, visual
+  only: never capacity/assignments/order/position), `layout_x/layout_y` (the table CENTER, integers, both or neither,
+  0–10000). Null = not placed yet: derive a slot (`deriveTablePositions`), never write on open. No layout table,
+  floor-plan entity, persisted seats/chairs, rotation, width/height, zoom or pan. No layout triggers.
+- Grants: `INSERT (shape)`, `UPDATE (shape, layout_x, layout_y)` on top of LB-19's; never `wedding_id`, `sort_order`,
+  `created_by`, ids or timestamps; no coordinates on insert. anon nothing; never public/RSVP/site.
+- Geometry is pure in `@/lib/seating/planner`: logical board 1200 units wide (grows vertically, min 800, never
+  stored); `scale = renderedWidth / 1200`; screen delta ÷ scale → snap to 20 → clamp. Sizes derive from shape +
+  capacity; chair markers are decorative positions, never guests. Overlap is allowed.
+- Positions: `positionSeatingTable` (`@/lib/seating/service`) via `positionTableAction`, ONE write per completed table
+  drag (on drop, never on pointer move), optimistic, reverted to the server position on failure; last-write-wins (no
+  versions, realtime or conflict UI).
+- `?view=plan` on the same route; list is the default. Desktop only (`lg`+): below it the list is the full fallback,
+  no "Plano" toggle, and `?view=plan` shows a notice + "Volver a lista" without rendering planner DOM. Page-local
+  breakout to ~`max-w-7xl` via fixed negative margins (never `100vw`); the `/app` shell width is unchanged.
+- `@dnd-kit/core` pinned exactly (6.3.1); no `@dnd-kit/react`/sortable/other drag libraries. Explicit drag data kinds
+  (`table`/`guest`); tables move only by their labelled handle. The inspector (LB-19 forms) is the non-drag path for
+  everything; one live region for announcements; no `aria-disabled` on a table group (it would disable its controls).
 
 ## Commands
 
@@ -525,5 +550,7 @@ current address that bounced, was suppressed or complained in the same wedding; 
 pre-provider skip) and scopes `recently_reminded` to sends to the current address (no production webhook). LB-19 adds the
 seating plan foundation: `seating_tables` and one-table-per-guest `seating_assignments` (same-wedding composite FKs,
 database capacity under a table row lock, declined guests not seatable, decline-after-seating preserved and flagged) and
-the "Mesas" page with plain forms (ADR-012; no floor plan, drag and drop or activity events).
+the "Mesas" page with plain forms (ADR-012; no floor plan, drag and drop or activity events). LB-20 adds the desktop
+visual planner (`?view=plan`): table shape and board position on `seating_tables`, guest drops through the LB-19
+actions, one position write per table drag, decorative chairs (ADR-013; no persisted seats, rooms, zoom or realtime).
 Don't implement ahead of the current prompt.

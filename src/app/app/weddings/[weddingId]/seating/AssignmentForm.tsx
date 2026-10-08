@@ -4,10 +4,8 @@ import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 
 import { inputClass, secondaryButtonClass } from "@/components/ui/styles";
-
 import type { SeatingActionState } from "./actions";
-
-export type TableOption = Readonly<{ id: string; label: string; disabled: boolean }>;
+import type { TableOption } from "./table-options";
 
 type Props = {
   /** Server Action: seat, move or unseat. */

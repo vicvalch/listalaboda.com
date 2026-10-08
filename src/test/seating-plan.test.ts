@@ -13,8 +13,8 @@ import {
 // takes a seat, pending guests are seatable, declined guests aren't, and a
 // guest who declined after being seated stays there as a conflict.
 
-const T1: SeatingTableInput = { id: "t1", name: "Mesa 1", capacity: 3 };
-const T2: SeatingTableInput = { id: "t2", name: "Mesa 2", capacity: 2 };
+const T1: SeatingTableInput = { id: "t1", name: "Mesa 1", capacity: 3, shape: "round", layout: null };
+const T2: SeatingTableInput = { id: "t2", name: "Mesa 2", capacity: 2, shape: "rectangle", layout: { x: 300, y: 100 } };
 
 const guest = (id: string, attending: boolean | null, tableId: string | null = null) => ({
   id,
@@ -97,7 +97,7 @@ describe("buildSeatingPlan", () => {
 
   it("never derives free seats from confirmed answers", () => {
     const allPending = buildSeatingPlan(
-      [{ id: "t", name: "Mesa", capacity: 2 }],
+      [{ id: "t", name: "Mesa", capacity: 2, shape: "round", layout: null }],
       [{ id: "p", label: "P", guests: [guest("x", null, "t"), guest("y", null, "t")] }],
     );
     expect(allPending.tables[0]).toMatchObject({ assignedCount: 2, freeCapacity: 0, isFull: true });
@@ -106,7 +106,7 @@ describe("buildSeatingPlan", () => {
 
   it("free capacity never goes negative", () => {
     const over = buildSeatingPlan(
-      [{ id: "t", name: "Mesa", capacity: 1 }],
+      [{ id: "t", name: "Mesa", capacity: 1, shape: "round", layout: null }],
       [{ id: "p", label: "P", guests: [guest("x", true, "t"), guest("y", true, "t")] }],
     );
     expect(over.tables[0]).toMatchObject({ assignedCount: 2, freeCapacity: 0, isFull: true });

@@ -16,11 +16,25 @@
  *
  * Order is stable: tables in the given (persisted) order; guests in the given
  * party order, then their order within the party.
+ *
+ * LB-20 (ADR-013): tables also carry their visual shape and board position
+ * (null = not placed yet). Both are presentation only and pass through
+ * unchanged: they never affect capacity, occupancy or eligibility.
  */
+
+import type { TablePosition, TableShape } from "@/lib/seating/validation";
 
 export type SeatingRsvpState = "attending" | "pending" | "declined";
 
-export type SeatingTableInput = Readonly<{ id: string; name: string; capacity: number }>;
+export type SeatingTableInput = Readonly<{
+  id: string;
+  name: string;
+  capacity: number;
+  /** Visual only (LB-20). */
+  shape: TableShape;
+  /** The table's center on the planner board; null = not placed yet (LB-20). */
+  layout: TablePosition | null;
+}>;
 
 export type SeatingGuestInput = Readonly<{
   id: string;
@@ -50,6 +64,8 @@ export type SeatingTablePlan = Readonly<{
   id: string;
   name: string;
   capacity: number;
+  shape: TableShape;
+  layout: TablePosition | null;
   guests: readonly SeatingGuest[];
   assignedCount: number;
   /** capacity − assignedCount, never below 0. */
@@ -148,6 +164,8 @@ export function buildSeatingPlan(
       id: table.id,
       name: table.name,
       capacity: table.capacity,
+      shape: table.shape,
+      layout: table.layout,
       guests,
       assignedCount: guests.length,
       freeCapacity: Math.max(0, table.capacity - guests.length),

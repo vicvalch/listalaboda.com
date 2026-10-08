@@ -315,8 +315,15 @@ Still deferred: recurring or multi-stage reminders, per-party automation setting
 seat each guest at one table, move and unseat them, and see occupancy ("8 / 10"), who still has no table (grouped by
 party) and a summary. Every seated person takes a seat, whether they confirmed or haven't answered yet; capacity is
 enforced by the database, also under concurrent edits. Guests who declined can't be seated; a guest who declines after
-being seated stays on their table with a "No asistirá" warning until someone unseats them. It is a list-and-forms
-tool: there is no visual floor plan, drag and drop, chair-level seating, plus-ones or automatic seating. See ADR-012.
+being seated stays on their table with a "No asistirá" warning until someone unseats them. The list and its forms
+remain the default view and do everything; plus-ones and automatic seating are not modeled. See ADR-012.
+
+**Visual seating planner (LB-20).** On desktop screens, "Plano" (`?view=plan`) shows the same tables on a board:
+drag a table by its handle to place it (round or rectangular, saved when you drop it), and drag people between the
+"Sin mesa" rail and tables. Chairs are drawn from the table's capacity as decoration: seating is still per table, not
+per chair. Full tables and guests who declined are refused, and the database still has the last word. A details panel
+does every change without dragging, and smaller screens keep the list. It is not a venue or floor-plan editor (no
+rooms, rotation or zoom), and it doesn't seat anyone automatically. See ADR-013.
 
 ## Stack
 
@@ -410,6 +417,7 @@ one later.
 - [ADR-009 — Checklist ↔ guest work](docs/architecture/ADR-009-checklist-guest-work.md)
 - [ADR-010 — Automatic RSVP reminder scheduling](docs/architecture/ADR-010-automatic-rsvp-reminder-scheduling.md)
 - [ADR-012 — Seating plan domain model](docs/architecture/ADR-012-seating-plan-domain-model.md)
+- [ADR-013 — Visual Seating Planner Layout Model](docs/architecture/ADR-013-visual-seating-planner-layout-model.md)
 
 Database migrations live in `supabase/migrations/` and are named `YYYYMMDDHHMMSS_lb_<slug>.sql`.
 After changing the schema, run `npm run db:reset && npm run db:types` and commit the regenerated types.

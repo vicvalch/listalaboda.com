@@ -4,7 +4,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { requireWeddingMembership, type WeddingAccess } from "@/lib/authz/wedding";
 import type { SeatingPartyInput, SeatingTableInput } from "@/lib/seating/plan";
-import { parseTableInput, type TableInput } from "@/lib/seating/validation";
+import {
+  isTablePosition,
+  isTableShape,
+  parseTableInput,
+  type TableInput,
+  type TablePosition,
+} from "@/lib/seating/validation";
 import type { Database } from "@/lib/supabase/database.types";
 
 /**
@@ -23,6 +29,10 @@ import type { Database } from "@/lib/supabase/database.types";
  *
  * Nothing here touches guests, parties, RSVPs, links, emails or the activity
  * history: seating is a separate domain that only reads the guest list.
+ *
+ * LB-20 (ADR-013): tables also have a visual shape and a board position. They
+ * are written through the same RLS-bound client and member policies, never
+ * affect capacity or assignments, and a position write is last-write-wins.
  */
 
 type Client = SupabaseClient<Database>;
@@ -129,11 +139,11 @@ function byCreatedThenId(
 
 /**
  * Everything the seating page needs, in TWO queries (never per table or per
- * guest): the wedding's tables in persisted order, and the guest list with
- * each guest's RSVP answer and table nested. Only ids, labels, names, the
- * attending flag and the table id are read: no contact emails, notes, link
- * state or tokens. Takes the `WeddingAccess` of a successful membership
- * check. Returns null on failure.
+ * guest): the wedding's tables in persisted order (with their LB-20 shape and
+ * position), and the guest list with each guest's RSVP answer and table
+ * nested. Only ids, labels, names, the attending flag and the table id are
+ * read: no contact emails, notes, link state or tokens. Takes the
+ * `WeddingAccess` of a successful membership check. Returns null on failure.
  */
 export async function getSeatingData(
   supabase: Client,
@@ -143,7 +153,7 @@ export async function getSeatingData(
     const [tables, parties] = await Promise.all([
       supabase
         .from("seating_tables")
-        .select("id, name, capacity")
+        .select("id, name, capacity, shape, layout_x, layout_y")
         .eq("wedding_id", access.weddingId)
         .order("sort_order", { ascending: true })
         .order("created_at", { ascending: true })
@@ -158,7 +168,16 @@ export async function getSeatingData(
     if (tables.error || !tables.data || parties.error || !parties.data) return null;
 
     return {
-      tables: tables.data.map((table) => ({ id: table.id, name: table.name, capacity: table.capacity })),
+      tables: tables.data.map((table) => ({
+        id: table.id,
+        name: table.name,
+        capacity: table.capacity,
+        // The enum is closed in the database; anything unexpected renders round.
+        shape: isTableShape(table.shape) ? table.shape : "round",
+        // The pair CHECK makes these both-or-neither.
+        layout:
+          table.layout_x !== null && table.layout_y !== null ? { x: table.layout_x, y: table.layout_y } : null,
+      })),
       parties: parties.data.map((party) => ({
         id: party.id,
         label: party.label,
@@ -177,30 +196,42 @@ export async function getSeatingData(
 
 // ------------------------------------------------------------------ tables
 
+/** Re-validates a service caller's table input (never trust it was parsed). */
+function reparseTable(input: TableInput) {
+  return parseTableInput({ name: input.name, capacity: String(input.capacity), shape: String(input.shape) });
+}
+
 /**
- * Adds a table at the end of the wedding's list. Only the name and capacity
- * are sent: ordering and provenance come from the database.
+ * Adds a table at the end of the wedding's list. Only the name, capacity and
+ * shape are sent: ordering and provenance come from the database, and a new
+ * table has no position (the planner derives a slot until it is moved).
  */
 export async function createSeatingTable(
   supabase: Client,
   weddingId: string,
   input: TableInput,
 ): Promise<SeatingResult> {
-  const parsed = parseTableInput({ name: input.name, capacity: String(input.capacity) });
+  const parsed = reparseTable(input);
   if (!parsed.ok) return fail("invalid_input");
 
   return mutate(supabase, weddingId, [], (access) =>
     supabase
       .from("seating_tables")
-      .insert({ wedding_id: access.weddingId, name: parsed.input.name, capacity: parsed.input.capacity })
+      .insert({
+        wedding_id: access.weddingId,
+        name: parsed.input.name,
+        capacity: parsed.input.capacity,
+        shape: parsed.input.shape,
+      })
       .select("id"),
   );
 }
 
 /**
- * Renames a table and/or changes its capacity. Lowering the capacity below
- * the people already seated there is refused by the database
- * (`capacity_below_assigned`); nobody is unseated.
+ * Renames a table and/or changes its capacity or shape. Lowering the capacity
+ * below the people already seated there is refused by the database
+ * (`capacity_below_assigned`); nobody is unseated. The shape is visual only:
+ * it never touches capacity, assignments, position or order.
  */
 export async function updateSeatingTable(
   supabase: Client,
@@ -208,13 +239,39 @@ export async function updateSeatingTable(
   tableId: string,
   input: TableInput,
 ): Promise<SeatingResult> {
-  const parsed = parseTableInput({ name: input.name, capacity: String(input.capacity) });
+  const parsed = reparseTable(input);
   if (!parsed.ok) return fail("invalid_input");
 
   return mutate(supabase, weddingId, [tableId], (access) =>
     supabase
       .from("seating_tables")
-      .update({ name: parsed.input.name, capacity: parsed.input.capacity })
+      .update({ name: parsed.input.name, capacity: parsed.input.capacity, shape: parsed.input.shape })
+      .eq("id", tableId)
+      .eq("wedding_id", access.weddingId)
+      .select("id"),
+  );
+}
+
+/**
+ * Places a table on the planner board (LB-20): its center in logical integer
+ * units, 0–10000 each (the database's loose range; the board width and grid
+ * are presentation). Only `layout_x`/`layout_y` are sent, scoped to the
+ * authorized wedding: never capacity, shape, order or assignments.
+ * Concurrent moves of the same table are last-write-wins.
+ */
+export function positionSeatingTable(
+  supabase: Client,
+  weddingId: string,
+  tableId: string,
+  position: TablePosition,
+): Promise<SeatingResult> {
+  if (!isTablePosition(position)) return Promise.resolve(fail("invalid_input"));
+  const { x, y } = position;
+
+  return mutate(supabase, weddingId, [tableId], (access) =>
+    supabase
+      .from("seating_tables")
+      .update({ layout_x: x, layout_y: y })
       .eq("id", tableId)
       .eq("wedding_id", access.weddingId)
       .select("id"),

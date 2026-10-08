@@ -21,6 +21,7 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   staged LB-18; the third service-role module)
 - `docs/architecture/ADR-012-seating-plan-domain-model.md` (seating tables and one-table-per-guest assignments)
 - `docs/architecture/ADR-013-visual-seating-planner-layout-model.md` (visual planner: table shape and board position)
+- `docs/architecture/ADR-014-wedding-vendor-engagement-model.md` (wedding-scoped vendor engagements, quote/contract)
 
 ## Product rules
 
@@ -505,6 +506,27 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   (`table`/`guest`); tables move only by their labelled handle. The inspector (LB-19 forms) is the non-drag path for
   everything; one live region for announcements; no `aria-disabled` on a table group (it would disable its controls).
 
+## Vendor rules (LB-21, ADR-014)
+
+- `public.wedding_vendors` (WeddingVendor) is a Wedding-scoped ENGAGEMENT: identity/contact fields are copied into it.
+  No global vendor table, planner/organization directory or copy-between-weddings; a future directory is additive.
+- PRIVATE organizer data: owners and collaborators have identical CRUD rights (member RLS, column grants; never
+  `id`, `wedding_id`, `created_by` or timestamps). anon nothing; no SECURITY DEFINER/RPC, service role, public/RSVP/
+  guest/site projection. Writes go through `@/lib/vendors/service` (membership first, scoped by `(id, wedding_id)`,
+  re-validated, closed reasons). Foreign/malformed/deleted ids look identical (404 / `invalid_target`).
+- Category is the closed enum; `custom_category` exists iff `other`. Status (`considering|quoted|selected|booked|
+  discarded`) has no state machine and no payment vocabulary; "Descartado" is a status, never a delete (hard delete).
+- Money: `quoted_amount_minor` / `contracted_amount_minor` are integer minor units (bigint, 0–99 999 999 999 999),
+  never float/numeric; `currency` is CRC or USD only, present iff an amount is. Parse with `@/lib/vendors/money`
+  (never `parseFloat`), format with `formatMoney`. Never add currencies together or convert; the "Contratado" total
+  is booked vendors' contracted amounts per currency; quotes are never summed. Payments/deposits/due dates are LB-22.
+- Vendor email is informational: never imported into `@/lib/email`, sent to or tracked. Links are generated only
+  (`mailto:`, `tel:`, Instagram URL from a validated handle); never store a URL. Notes are plain text.
+- Read model: the list is ONE query without notes; summary/groups/search/filters derive in `@/lib/vendors/summary`.
+  Free-text search is local and never in a URL; `?category=&status=` may be. Detail is ONE query with notes.
+- `UNIQUE (id, wedding_id)` is the composite-FK target: LB-22 payments `ON DELETE RESTRICT`, LB-23 timeline
+  `ON DELETE SET NULL`. No checklist link, activity events, documents/storage, vendor login or realtime yet.
+
 ## Commands
 
 - `npm run verify`: lint, typecheck, unit tests, build (same as CI)
@@ -553,4 +575,7 @@ database capacity under a table row lock, declined guests not seatable, decline-
 the "Mesas" page with plain forms (ADR-012; no floor plan, drag and drop or activity events). LB-20 adds the desktop
 visual planner (`?view=plan`): table shape and board position on `seating_tables`, guest drops through the LB-19
 actions, one position write per table drag, decorative chairs (ADR-013; no persisted seats, rooms, zoom or realtime).
+LB-21 adds vendor management: wedding-scoped `wedding_vendors` engagements (category, status, one contact, quote and
+contracted amount in CRC/USD minor units), the "Proveedores" list and detail pages (ADR-014; no payments, directory,
+checklist link, activity or documents).
 Don't implement ahead of the current prompt.

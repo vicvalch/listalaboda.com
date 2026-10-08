@@ -140,11 +140,15 @@ describe("schema: reminder metadata lives on the party only", () => {
        where table_schema = 'public' and column_name like 'rsvp_reminder_email%' order by 1`,
     );
     expect(rows.map((r) => r.name)).toEqual(REMINDER_COLUMNS.map((c) => `guest_invitations.${c}`));
-    const phone = await sql(
-      `select 1 from information_schema.columns where table_schema in ('public', 'private')
-       and (column_name ilike '%phone%' or column_name ilike '%whatsapp%' or column_name ilike '%country_code%')`,
+    // LB-21 (ADR-014): the ONE approved phone column is a vendor's informational
+    // contact (private organizer data). Guests, parties and messaging stay phone-free.
+    const phone = await sql<{ name: string }>(
+      `select table_schema || '.' || table_name || '.' || column_name as name
+       from information_schema.columns where table_schema in ('public', 'private')
+       and (column_name ilike '%phone%' or column_name ilike '%whatsapp%' or column_name ilike '%country_code%')
+       order by 1`,
     );
-    expect(phone).toEqual([]);
+    expect(phone.map((r) => r.name)).toEqual(["public.wedding_vendors.phone"]);
   });
 
   it("the three fields are set together or not at all; sent_to and provider id are validated", async () => {

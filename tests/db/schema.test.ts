@@ -28,6 +28,8 @@ const TABLES = [
   // LB-19 (ADR-012)
   "seating_tables",
   "seating_assignments",
+  // LB-21 (ADR-014)
+  "wedding_vendors",
 ];
 
 /**
@@ -69,7 +71,7 @@ describe("schema guarantees", () => {
     expect(columns).toEqual([]);
   });
 
-  it("authenticated can INSERT only into membership invites, checklist items, the guest list, site content and seating", async () => {
+  it("authenticated can INSERT only into membership invites, checklist items, the guest list, site content, seating and vendors", async () => {
     const rows = await sql<{ table_name: string }>(
       `select table_name from information_schema.column_privileges
        where grantee = 'authenticated' and privilege_type = 'INSERT'
@@ -86,6 +88,8 @@ describe("schema guarantees", () => {
       // LB-19 (ADR-012): shared planning content, member RLS.
       "seating_assignments",
       "seating_tables",
+      // LB-21 (ADR-014): private organizer data, member RLS.
+      "wedding_vendors",
     ]);
   });
 

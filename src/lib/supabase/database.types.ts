@@ -282,6 +282,62 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"vendor_payment_schedule_items": {
+                  Row: {
+                    "amount_minor": number,"created_at": string,"created_by": string | null,"due_on": string,"id": string,"label": string,"updated_at": string,"wedding_id": string,"wedding_vendor_id": string
+                  }
+                  Insert: {
+                    "amount_minor": number,"created_at"?: string,"created_by"?: string | null,"due_on": string,"id"?: string,"label": string,"updated_at"?: string,"wedding_id": string,"wedding_vendor_id": string
+                  }
+                  Update: {
+                    "amount_minor"?: number,"created_at"?: string,"created_by"?: string | null,"due_on"?: string,"id"?: string,"label"?: string,"updated_at"?: string,"wedding_id"?: string,"wedding_vendor_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "vendor_payment_schedule_items_vendor_same_wedding"
+      columns: ["wedding_vendor_id","wedding_id"]
+isOneToOne: false
+      referencedRelation: "wedding_vendors"
+      referencedColumns: ["id","wedding_id"]
+    },{
+      foreignKeyName: "vendor_payment_schedule_items_wedding_id_fkey"
+      columns: ["wedding_id"]
+isOneToOne: false
+      referencedRelation: "weddings"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"vendor_payments": {
+                  Row: {
+                    "amount_minor": number,"created_at": string,"created_by": string | null,"id": string,"note": string | null,"paid_on": string,"schedule_item_id": string | null,"updated_at": string,"wedding_id": string,"wedding_vendor_id": string
+                  }
+                  Insert: {
+                    "amount_minor": number,"created_at"?: string,"created_by"?: string | null,"id"?: string,"note"?: string | null,"paid_on": string,"schedule_item_id"?: string | null,"updated_at"?: string,"wedding_id": string,"wedding_vendor_id": string
+                  }
+                  Update: {
+                    "amount_minor"?: number,"created_at"?: string,"created_by"?: string | null,"id"?: string,"note"?: string | null,"paid_on"?: string,"schedule_item_id"?: string | null,"updated_at"?: string,"wedding_id"?: string,"wedding_vendor_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "vendor_payments_schedule_item_same_vendor"
+      columns: ["schedule_item_id","wedding_vendor_id","wedding_id"]
+isOneToOne: false
+      referencedRelation: "vendor_payment_schedule_items"
+      referencedColumns: ["id","wedding_vendor_id","wedding_id"]
+    },{
+      foreignKeyName: "vendor_payments_vendor_same_wedding"
+      columns: ["wedding_vendor_id","wedding_id"]
+isOneToOne: false
+      referencedRelation: "wedding_vendors"
+      referencedColumns: ["id","wedding_id"]
+    },{
+      foreignKeyName: "vendor_payments_wedding_id_fkey"
+      columns: ["wedding_id"]
+isOneToOne: false
+      referencedRelation: "weddings"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"wedding_activity": {
                   Row: {
                     "actor_kind": Database["public"]['Enums']["wedding_activity_actor"],"actor_user_id": string | null,"event_type": Database["public"]['Enums']["wedding_activity_event"],"guest_invitation_id": string | null,"id": string,"occurred_at": string,"wedding_id": string
@@ -301,6 +357,44 @@ isOneToOne: false
       referencedColumns: ["id","wedding_id"]
     },{
       foreignKeyName: "wedding_activity_wedding_id_fkey"
+      columns: ["wedding_id"]
+isOneToOne: false
+      referencedRelation: "weddings"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"wedding_budget_allocations": {
+                  Row: {
+                    "amount_minor": number,"category": Database["public"]['Enums']["wedding_vendor_category"],"created_at": string,"created_by": string | null,"currency": string,"id": string,"updated_at": string,"wedding_id": string
+                  }
+                  Insert: {
+                    "amount_minor": number,"category": Database["public"]['Enums']["wedding_vendor_category"],"created_at"?: string,"created_by"?: string | null,"currency": string,"id"?: string,"updated_at"?: string,"wedding_id": string
+                  }
+                  Update: {
+                    "amount_minor"?: number,"category"?: Database["public"]['Enums']["wedding_vendor_category"],"created_at"?: string,"created_by"?: string | null,"currency"?: string,"id"?: string,"updated_at"?: string,"wedding_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "wedding_budget_allocations_wedding_id_fkey"
+      columns: ["wedding_id"]
+isOneToOne: false
+      referencedRelation: "weddings"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"wedding_budget_totals": {
+                  Row: {
+                    "amount_minor": number,"created_at": string,"created_by": string | null,"currency": string,"id": string,"updated_at": string,"wedding_id": string
+                  }
+                  Insert: {
+                    "amount_minor": number,"created_at"?: string,"created_by"?: string | null,"currency": string,"id"?: string,"updated_at"?: string,"wedding_id": string
+                  }
+                  Update: {
+                    "amount_minor"?: number,"created_at"?: string,"created_by"?: string | null,"currency"?: string,"id"?: string,"updated_at"?: string,"wedding_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "wedding_budget_totals_wedding_id_fkey"
       columns: ["wedding_id"]
 isOneToOne: false
       referencedRelation: "weddings"

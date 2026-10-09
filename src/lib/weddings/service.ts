@@ -182,6 +182,21 @@ export async function getWeddingDetail(
   }
 }
 
+/**
+ * LB-22: just the wedding's IANA time zone (or null), for pages that derive
+ * wedding-local "today" without the rest of the wedding detail. Call only
+ * after a membership check. `undefined` = the read failed.
+ */
+export async function getWeddingTimeZone(supabase: Client, weddingId: string): Promise<string | null | undefined> {
+  try {
+    const { data, error } = await supabase.from("weddings").select("time_zone").eq("id", weddingId).maybeSingle();
+    if (error || !data) return undefined;
+    return data.time_zone;
+  } catch {
+    return undefined;
+  }
+}
+
 // ---------------------------------------------------------------- settings
 
 export type UpdateWeddingSettingsResult =

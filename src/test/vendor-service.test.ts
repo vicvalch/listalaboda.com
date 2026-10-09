@@ -323,15 +323,34 @@ describe("listWeddingVendors", () => {
 });
 
 describe("getWeddingVendor", () => {
-  it("reads one vendor with its notes in ONE query scoped by (id, wedding)", async () => {
-    const { supabase, requests } = clientFor({ read: { status: 200, body: { ...ROW, notes: "Hola\nmundo" } } });
+  it("reads one vendor with its notes, schedule items and payments in ONE query scoped by (id, wedding)", async () => {
+    const ITEM_ID = "55555555-5555-4555-8555-555555555555";
+    const PAYMENT_ID = "66666666-6666-4666-8666-666666666666";
+    const body = {
+      ...ROW,
+      notes: "Hola\nmundo",
+      vendor_payment_schedule_items: [{ id: ITEM_ID, label: "Depósito", amount_minor: 30_000_000, due_on: "2026-11-01" }],
+      vendor_payments: [
+        { id: PAYMENT_ID, amount_minor: 10_000_000, paid_on: "2026-10-01", schedule_item_id: ITEM_ID, note: "SINPE #8842" },
+      ],
+    };
+    const { supabase, requests } = clientFor({ read: { status: 200, body } });
     await expect(getWeddingVendor(supabase, access, VENDOR_ID)).resolves.toEqual({
       ok: true,
-      vendor: { ...ITEM, notes: "Hola\nmundo" },
+      vendor: {
+        ...ITEM,
+        notes: "Hola\nmundo",
+        scheduleItems: [{ id: ITEM_ID, label: "Depósito", amountMinor: 30_000_000, dueOn: "2026-11-01" }],
+        payments: [{ id: PAYMENT_ID, amountMinor: 10_000_000, paidOn: "2026-10-01", scheduleItemId: ITEM_ID, note: "SINPE #8842" }],
+      },
     });
     const reads = vendorRequests(requests);
     expect(reads).toHaveLength(1);
-    expect(reads[0]!.url.searchParams.get("select")).toContain("notes");
+    const select = reads[0]!.url.searchParams.get("select");
+    expect(select).toContain("notes");
+    // LB-22: children embedded through the named vendor relationships (no per-item reads).
+    expect(select).toContain("vendor_payment_schedule_items!vendor_payment_schedule_items_vendor_same_wedding(");
+    expect(select).toContain("vendor_payments!vendor_payments_vendor_same_wedding(");
     expect(reads[0]!.url.searchParams.get("id")).toBe(`eq.${VENDOR_ID}`);
     expect(reads[0]!.url.searchParams.get("wedding_id")).toBe(`eq.${WEDDING_ID}`);
   });

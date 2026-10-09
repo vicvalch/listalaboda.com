@@ -115,6 +115,9 @@ export default async function WeddingPage({
           <Link href={`/app/weddings/${wedding.id}/vendors`} className={textLinkClass}>
             {getMessages().vendors.navLink}
           </Link>
+          <Link href={`/app/weddings/${wedding.id}/budget`} className={textLinkClass}>
+            {getMessages().budget.navLink}
+          </Link>
           <Link href={`/app/weddings/${wedding.id}/site`} className={textLinkClass}>
             {getMessages().site.navLink}
           </Link>

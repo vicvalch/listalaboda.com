@@ -3,7 +3,9 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { requireWeddingMembership, type WeddingAccess } from "@/lib/authz/wedding";
+import type { FinancePayment, FinanceScheduleItem, FinanceVendor } from "@/lib/budget/summary";
 import type { Database } from "@/lib/supabase/database.types";
+import { financialTriggerReason } from "@/lib/vendors/finance-reasons";
 import { isVendorCurrency } from "@/lib/vendors/money";
 import type { VendorListItem } from "@/lib/vendors/summary";
 import { isValidVendorInput, type VendorInput } from "@/lib/vendors/validation";
@@ -24,6 +26,11 @@ import { isValidVendorInput, type VendorInput } from "@/lib/vendors/validation";
  * Nothing here sends email, writes activity history or touches the
  * checklist, guests or public projections. Concurrent edits are
  * last-write-wins (no versions or locks).
+ *
+ * LB-22 (ADR-015): once a vendor has schedule items or payments, the database
+ * locks its currency, keeps its contracted amount non-null and at least the
+ * recorded floor, and refuses to delete it (NO ACTION foreign keys). Those
+ * refusals map to their own closed reasons here.
  */
 
 type Client = SupabaseClient<Database>;
@@ -41,7 +48,12 @@ export type VendorFailureReason =
   | "forbidden"
   | "invalid_input"
   | "invalid_target"
-  | "database_error";
+  | "database_error"
+  // LB-22 (ADR-015): the vendor financial guard and delete protection.
+  | "currency_locked"
+  | "contract_required"
+  | "contract_below_recorded"
+  | "has_financial_records";
 
 export type VendorResult =
   | Readonly<{ ok: true; vendorId: string }>
@@ -50,14 +62,25 @@ export type VendorResult =
 type DbError = Readonly<{ code?: string; message?: string }>;
 
 const CHECK_VIOLATION = "23514";
+const FOREIGN_KEY_VIOLATION = "23503";
 const NOT_NULL_VIOLATION = "23502";
 const INVALID_TEXT_REPRESENTATION = "22P02";
 const INSUFFICIENT_PRIVILEGE = "42501";
 
-/** Maps a database error to a closed reason. Exported for tests. */
+/**
+ * Maps a database error to a closed reason. Exported for tests. The only
+ * foreign key a vendor write can hit is a financial child blocking a delete.
+ */
 export function vendorFailure(error: DbError): VendorFailureReason {
   switch (error.code) {
-    case CHECK_VIOLATION:
+    case CHECK_VIOLATION: {
+      const reason = financialTriggerReason(error.message);
+      return reason === "currency_locked" || reason === "contract_required" || reason === "contract_below_recorded"
+        ? reason
+        : "invalid_input";
+    }
+    case FOREIGN_KEY_VIOLATION:
+      return "has_financial_records";
     case NOT_NULL_VIOLATION:
     case INVALID_TEXT_REPRESENTATION:
       return "invalid_input";
@@ -123,8 +146,42 @@ function vendorColumns(input: VendorInput) {
 const LIST_COLUMNS =
   "id, name, category, custom_category, status, contact_name, email, phone, instagram_handle, currency, quoted_amount_minor, contracted_amount_minor, updated_at";
 
-/** The detail page adds the notes. */
-const DETAIL_COLUMNS = `${LIST_COLUMNS}, notes`;
+/**
+ * LB-22: a vendor's schedule items and payments, embedded in the same query
+ * (never one query per vendor, item or payment). The relationship is named
+ * because vendor_payments also links the vendor to its items.
+ */
+const FINANCE_EMBEDS =
+  "vendor_payment_schedule_items!vendor_payment_schedule_items_vendor_same_wedding(id, label, amount_minor, due_on), vendor_payments!vendor_payments_vendor_same_wedding(id, amount_minor, paid_on, schedule_item_id, note)";
+
+/** The detail page adds the notes and (LB-22) the vendor's schedule and payments. */
+const DETAIL_COLUMNS = `${LIST_COLUMNS}, notes, ${FINANCE_EMBEDS}`;
+
+/** The budget page's vendor read: what the money derivations need, nothing else. */
+const FINANCE_COLUMNS = `id, name, category, custom_category, status, currency, contracted_amount_minor, ${FINANCE_EMBEDS}`;
+
+type ScheduleItemRow = Readonly<{ id: string; label: string; amount_minor: number; due_on: string }>;
+type PaymentRow = Readonly<{
+  id: string;
+  amount_minor: number;
+  paid_on: string;
+  schedule_item_id: string | null;
+  note: string | null;
+}>;
+
+function toScheduleItems(rows: readonly ScheduleItemRow[]): FinanceScheduleItem[] {
+  return rows.map((row) => ({ id: row.id, label: row.label, amountMinor: row.amount_minor, dueOn: row.due_on }));
+}
+
+function toPayments(rows: readonly PaymentRow[]): FinancePayment[] {
+  return rows.map((row) => ({
+    id: row.id,
+    amountMinor: row.amount_minor,
+    paidOn: row.paid_on,
+    scheduleItemId: row.schedule_item_id,
+    note: row.note,
+  }));
+}
 
 type ListRow = Pick<
   Database["public"]["Tables"]["wedding_vendors"]["Row"],
@@ -186,15 +243,20 @@ export async function listWeddingVendors(
   }
 }
 
-export type VendorDetail = VendorListItem & Readonly<{ notes: string | null }>;
+export type VendorDetail = VendorListItem &
+  Readonly<{
+    notes: string | null;
+    scheduleItems: readonly FinanceScheduleItem[];
+    payments: readonly FinancePayment[];
+  }>;
 
 export type VendorDetailResult =
   | Readonly<{ ok: true; vendor: VendorDetail }>
   | Readonly<{ ok: false; reason: "not_found" | "database_error" }>;
 
 /**
- * One vendor of the authorized wedding, with its notes, in ONE query scoped
- * by id AND wedding. A malformed id, another wedding's vendor and a deleted
+ * One vendor of the authorized wedding, with its notes, schedule items and
+ * payments, in ONE query scoped by id AND wedding. A malformed id, another wedding's vendor and a deleted
  * one are all `not_found` (callers 404).
  */
 export async function getWeddingVendor(
@@ -212,9 +274,50 @@ export async function getWeddingVendor(
       .maybeSingle();
     if (error) return { ok: false, reason: "database_error" };
     if (!data) return { ok: false, reason: "not_found" };
-    return { ok: true, vendor: { ...toListItem(data), notes: data.notes } };
+    return {
+      ok: true,
+      vendor: {
+        ...toListItem(data),
+        notes: data.notes,
+        scheduleItems: toScheduleItems(data.vendor_payment_schedule_items),
+        payments: toPayments(data.vendor_payments),
+      },
+    };
   } catch {
     return { ok: false, reason: "database_error" };
+  }
+}
+
+/**
+ * LB-22: every vendor of the wedding with its schedule items and payments, in
+ * ONE query (no per-vendor reads). Derivations happen in memory
+ * (`@/lib/budget/summary`). Returns null on failure.
+ */
+export async function listVendorFinances(
+  supabase: Client,
+  access: WeddingAccess,
+): Promise<FinanceVendor[] | null> {
+  try {
+    const { data, error } = await supabase
+      .from("wedding_vendors")
+      .select(FINANCE_COLUMNS)
+      .eq("wedding_id", access.weddingId)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true });
+    if (error || !data) return null;
+    return data.map((row) => ({
+      id: row.id,
+      name: row.name,
+      category: row.category,
+      customCategory: row.custom_category,
+      status: row.status,
+      currency: isVendorCurrency(row.currency) ? row.currency : null,
+      contractedAmountMinor: row.contracted_amount_minor,
+      scheduleItems: toScheduleItems(row.vendor_payment_schedule_items),
+      payments: toPayments(row.vendor_payments),
+    }));
+  } catch {
+    return null;
   }
 }
 
@@ -258,7 +361,11 @@ export async function updateWeddingVendor(
   );
 }
 
-/** Hard-deletes one vendor engagement ("Descartado" is a status, not this). */
+/**
+ * Hard-deletes one vendor engagement ("Descartado" is a status, not this).
+ * LB-22: refused (`has_financial_records`) while it has schedule items or
+ * payments; financial history is never cascaded away.
+ */
 export function deleteWeddingVendor(
   supabase: Client,
   weddingId: string,

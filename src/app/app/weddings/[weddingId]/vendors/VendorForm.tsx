@@ -7,7 +7,7 @@ import { Notice } from "@/components/ui/Notice";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { inputClass } from "@/components/ui/styles";
 import { getMessages } from "@/lib/i18n";
-import { VENDOR_CURRENCIES } from "@/lib/vendors/money";
+import { VENDOR_CURRENCIES, isVendorCurrency, type VendorCurrency } from "@/lib/vendors/money";
 import { VENDOR_CATEGORIES, VENDOR_STATUSES } from "@/lib/vendors/presentation";
 import {
   VENDOR_CONTACT_NAME_MAX_LENGTH,
@@ -33,6 +33,11 @@ type Props = {
   id: string;
   /** Starting values: the stored vendor (edit) or blanks plus a currency suggestion (create). */
   defaults: VendorFormValues;
+  /**
+   * LB-22: the vendor has schedule items or payments, so its currency can't
+   * change. Shown as fixed text (submitted unchanged); the database decides.
+   */
+  currencyLocked?: boolean;
   submitLabel: string;
   pendingLabel: string;
 };
@@ -44,7 +49,16 @@ type Props = {
  * its field (aria-describedby) and announces success in a status region.
  * "¿Qué tipo de proveedor?" appears only for the category "Otro".
  */
-export function VendorForm({ action, weddingId, vendorId, id, defaults, submitLabel, pendingLabel }: Props) {
+export function VendorForm({
+  action,
+  weddingId,
+  vendorId,
+  id,
+  defaults,
+  currencyLocked = false,
+  submitLabel,
+  pendingLabel,
+}: Props) {
   // Every completed submission is numbered, so the fields remount with the
   // right values: React resets a form after its action, and a <select> would
   // otherwise snap back to its FIRST rendered option (losing the chosen
@@ -68,6 +82,7 @@ export function VendorForm({ action, weddingId, vendorId, id, defaults, submitLa
         values={values}
         errors={failure?.fieldErrors ?? {}}
         formError={failure?.formError}
+        currencyLocked={currencyLocked}
         submit={<SubmitButton label={submitLabel} pendingLabel={pendingLabel} />}
       />
       <p role="status" className="text-success min-h-5 text-sm font-medium">
@@ -85,6 +100,7 @@ function VendorFields({
   values,
   errors,
   formError,
+  currencyLocked,
   submit,
 }: {
   formAction: (formData: FormData) => void;
@@ -94,6 +110,7 @@ function VendorFields({
   values: VendorFormValues;
   errors: Partial<Record<VendorField, string>>;
   formError?: string;
+  currencyLocked: boolean;
   submit: ReactNode;
 }) {
   const copy = getMessages().vendors;
@@ -202,18 +219,22 @@ function VendorFields({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <SelectField
-          id={fieldId("currency")}
-          name="currency"
-          label={fields.currency}
-          hint={fields.currencyHint}
-          defaultValue={values.currency}
-          error={errors.currency}
-          options={[
-            { value: "", label: fields.chooseCurrency },
-            ...VENDOR_CURRENCIES.map((value) => ({ value, label: copy.currencies[value] })),
-          ]}
-        />
+        {currencyLocked && isVendorCurrency(values.currency) ? (
+          <LockedCurrency id={fieldId("currency")} currency={values.currency} error={errors.currency} />
+        ) : (
+          <SelectField
+            id={fieldId("currency")}
+            name="currency"
+            label={fields.currency}
+            hint={fields.currencyHint}
+            defaultValue={values.currency}
+            error={errors.currency}
+            options={[
+              { value: "", label: fields.chooseCurrency },
+              ...VENDOR_CURRENCIES.map((value) => ({ value, label: copy.currencies[value] })),
+            ]}
+          />
+        )}
         <FormField
           id={fieldId("quotedAmount")}
           name="quotedAmount"
@@ -250,6 +271,27 @@ function VendorFields({
 
       {submit}
     </form>
+  );
+}
+
+/** The vendor's currency as fixed text plus the reason, submitted unchanged. */
+function LockedCurrency({ id, currency, error }: { id: string; currency: VendorCurrency; error?: string }) {
+  const copy = getMessages().vendors;
+  return (
+    <div className="space-y-1.5" data-testid="vendor-currency-locked">
+      <p id={`${id}-label`} className="block text-sm font-semibold">
+        {copy.fields.currency}
+      </p>
+      <input type="hidden" name="currency" value={currency} />
+      <p
+        id={id}
+        aria-describedby={describedBy(id, copy.currencyLockedHint, error)}
+        className="flex min-h-11 items-center rounded-lg border border-border bg-accent-soft/40 px-3 py-2"
+      >
+        {copy.currencies[currency]}
+      </p>
+      <FieldMessages id={id} hint={copy.currencyLockedHint} error={error} />
+    </div>
   );
 }
 

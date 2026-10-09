@@ -8,6 +8,7 @@ import { cardClass, textLinkClass } from "@/components/ui/styles";
 import { loginPath } from "@/lib/auth/redirect";
 import { requireUser } from "@/lib/auth/session";
 import { requireWeddingMembership } from "@/lib/authz/wedding";
+import { vendorFinance } from "@/lib/budget/summary";
 import { getMessages, interpolate } from "@/lib/i18n";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/vendors/money";
@@ -20,10 +21,13 @@ import {
 } from "@/lib/vendors/presentation";
 import { getWeddingVendor, type VendorDetail } from "@/lib/vendors/service";
 import { vendorFormValues } from "@/lib/vendors/validation";
+import { getWeddingTimeZone } from "@/lib/weddings/service";
+import { weddingLocalToday } from "@/lib/weddings/timezone";
 
 import { ConfirmButton } from "../../guests/ConfirmButton";
 import { deleteVendorAction, updateVendorAction } from "../actions";
 import { VendorForm } from "../VendorForm";
+import { VendorPayments } from "./VendorPayments";
 
 export const metadata: Metadata = { title: getMessages().vendors.title };
 
@@ -34,8 +38,11 @@ const copy = getMessages().vendors;
  * form (every field, status included, in one write) and the explicit delete.
  * Membership is checked first; the vendor is then read in ONE query scoped by
  * id AND wedding, so another wedding's vendor id, a deleted vendor and a
- * malformed id all get the same 404 as a non-member. This page is where
- * later work (payments, documents) will attach; it renders no placeholders.
+ * malformed id all get the same 404 as a non-member.
+ *
+ * LB-22 (ADR-015): "Pagos" — the vendor's schedule items and payments come
+ * embedded in that same vendor query, plus one read of the wedding's time
+ * zone; the clock is read once here and every state is derived in memory.
  */
 export default async function VendorPage({ params }: PageProps<"/app/weddings/[weddingId]/vendors/[vendorId]">) {
   const { weddingId, vendorId } = await params;
@@ -49,9 +56,15 @@ export default async function VendorPage({ params }: PageProps<"/app/weddings/[w
     notFound();
   }
 
-  const result = await getWeddingVendor(supabase, access.access, vendorId);
+  const [result, timeZone] = await Promise.all([
+    getWeddingVendor(supabase, access.access, vendorId),
+    getWeddingTimeZone(supabase, access.access.weddingId),
+  ]);
   if (!result.ok && result.reason === "not_found") notFound();
   const listHref = `/app/weddings/${access.access.weddingId}/vendors`;
+  // One clock read, turned into the wedding's calendar date. No time zone (or
+  // a failed read) = no "today": dates show, nothing is overdue or due soon.
+  const today = timeZone ? weddingLocalToday(timeZone, new Date()) : null;
 
   return (
     <div className="space-y-8">
@@ -61,7 +74,7 @@ export default async function VendorPage({ params }: PageProps<"/app/weddings/[w
         </Link>
       </p>
       {result.ok ? (
-        <VendorDetailView weddingId={access.access.weddingId} vendor={result.vendor} />
+        <VendorDetailView weddingId={access.access.weddingId} vendor={result.vendor} today={today} />
       ) : (
         <Notice tone="error">{copy.loadFailed}</Notice>
       )}
@@ -69,8 +82,17 @@ export default async function VendorPage({ params }: PageProps<"/app/weddings/[w
   );
 }
 
-function VendorDetailView({ weddingId, vendor }: { weddingId: string; vendor: VendorDetail }) {
+function VendorDetailView({
+  weddingId,
+  vendor,
+  today,
+}: {
+  weddingId: string;
+  vendor: VendorDetail;
+  today: string | null;
+}) {
   const d = copy.detail;
+  const finance = vendorFinance(vendor, today);
   const email = vendor.email ? mailtoHref(vendor.email) : null;
   const phone = vendor.phone ? phoneHref(vendor.phone) : null;
   const instagram = vendor.instagramHandle ? instagramProfileUrl(vendor.instagramHandle) : null;
@@ -142,6 +164,13 @@ function VendorDetailView({ weddingId, vendor }: { weddingId: string; vendor: Ve
         </div>
       </section>
 
+      <VendorPayments
+        weddingId={weddingId}
+        finance={finance}
+        currency={vendor.currency}
+        timingUnavailable={today === null}
+      />
+
       <section aria-labelledby="edit-vendor-title" className={`${cardClass} space-y-4`}>
         <h2 id="edit-vendor-title" className="text-xl font-semibold">
           {copy.edit.title}
@@ -152,12 +181,19 @@ function VendorDetailView({ weddingId, vendor }: { weddingId: string; vendor: Ve
           vendorId={vendor.id}
           id={`edit-${vendor.id}`}
           defaults={vendorFormValues(vendor)}
+          currencyLocked={finance.hasFinancialRecords}
           submitLabel={copy.edit.submit}
           pendingLabel={copy.edit.submitting}
         />
       </section>
 
       <section className="space-y-2">
+        {finance.hasFinancialRecords ? (
+          // The database refuses it too (NO ACTION foreign keys); say why up front.
+          <p className="text-muted text-sm" data-testid="vendor-delete-blocked">
+            {copy.deleteBlocked}
+          </p>
+        ) : (
         <ConfirmButton
           action={deleteVendorAction}
           hidden={{ weddingId, vendorId: vendor.id }}
@@ -168,6 +204,7 @@ function VendorDetailView({ weddingId, vendor }: { weddingId: string; vendor: Ve
           confirmLabel={copy.delete.confirm}
           cancelLabel={copy.delete.cancel}
         />
+        )}
       </section>
     </>
   );

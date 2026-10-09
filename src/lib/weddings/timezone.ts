@@ -74,6 +74,52 @@ export function weddingLocalToday(timeZone: string, now: Date): string | null {
   return `${year}-${month}-${day}`;
 }
 
+export type WeddingLocalNow = Readonly<{
+  /** The wedding-local calendar date, `YYYY-MM-DD`. */
+  date: string;
+  /** Minutes since wedding-local midnight, 0–1439. */
+  minutes: number;
+}>;
+
+/**
+ * The wedding-local wall clock at instant `now` in `timeZone` (LB-23): the
+ * calendar date plus minutes since local midnight, so it compares directly
+ * with the timeline's wall-clock entries. IANA rules (daylight saving
+ * included) via Intl; never the process time zone. During a fall-back hour
+ * the same wall-clock minutes occur twice, which is what the wall clock at
+ * the wedding shows. Null for an unknown zone (fail closed).
+ */
+export function weddingLocalNow(timeZone: string, now: Date): WeddingLocalNow | null {
+  if (Number.isNaN(now.getTime())) return null;
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      calendar: "gregory",
+      numberingSystem: "latn",
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).formatToParts(now);
+  } catch {
+    return null;
+  }
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value;
+  const year = part("year");
+  const month = part("month");
+  const day = part("day");
+  const hour = Number(part("hour"));
+  const minute = Number(part("minute"));
+  if (!year || !month || !day || !/^\d{4}$/.test(year)) return null;
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return null;
+  }
+  return { date: `${year}-${month}-${day}`, minutes: hour * 60 + minute };
+}
+
 /** How a zone appears in the picker: "America/Costa Rica". The value stays the identifier. */
 export function timeZoneLabel(timeZone: string): string {
   return timeZone.replaceAll("_", " ");

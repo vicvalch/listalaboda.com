@@ -24,7 +24,8 @@ export default async function AppLayout({ children }: LayoutProps<"/app">) {
 
   return (
     <div className="flex flex-1 flex-col">
-      <header className="border-b border-border bg-surface">
+      {/* Printed pages (the Cronograma) leave the app chrome out. */}
+      <header className="border-b border-border bg-surface print:hidden">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-4 py-4">
           <Link href="/app" className="text-lg font-semibold tracking-tight">
             {common.brand}

@@ -4,6 +4,7 @@ import {
   isSupportedTimeZone,
   selectableTimeZones,
   timeZoneLabel,
+  weddingLocalNow,
   weddingLocalToday,
 } from "@/lib/weddings/timezone";
 
@@ -120,5 +121,53 @@ describe("isSupportedTimeZone", () => {
   it("labels zones readably without changing the identifier", () => {
     expect(timeZoneLabel("America/Costa_Rica")).toBe("America/Costa Rica");
     expect(timeZoneLabel("America/Argentina/Buenos_Aires")).toBe("America/Argentina/Buenos Aires");
+  });
+});
+
+// LB-23: the wedding-local wall clock (date + minutes since local midnight).
+describe("weddingLocalNow", () => {
+  it("reads the wall clock in the wedding's zone", () => {
+    const instant = at("2027-08-14T21:30:00Z");
+    expect(weddingLocalNow("America/Costa_Rica", instant)).toEqual({ date: "2027-08-14", minutes: 15 * 60 + 30 });
+    expect(weddingLocalNow("UTC", instant)).toEqual({ date: "2027-08-14", minutes: 21 * 60 + 30 });
+    expect(weddingLocalNow("Asia/Tokyo", instant)).toEqual({ date: "2027-08-15", minutes: 6 * 60 + 30 });
+  });
+
+  it("local midnight is minute 0 of the new date", () => {
+    expect(weddingLocalNow("America/Costa_Rica", at("2027-08-15T06:00:00Z"))).toEqual({ date: "2027-08-15", minutes: 0 });
+    expect(weddingLocalNow("America/Costa_Rica", at("2027-08-15T05:59:00Z"))).toEqual({
+      date: "2027-08-14",
+      minutes: 1439,
+    });
+  });
+
+  it("follows New York's daylight saving transitions", () => {
+    // Fall back (2027-11-07): 01:30 happens twice.
+    expect(weddingLocalNow("America/New_York", at("2027-11-07T05:30:00Z"))).toEqual({ date: "2027-11-07", minutes: 90 });
+    expect(weddingLocalNow("America/New_York", at("2027-11-07T06:30:00Z"))).toEqual({ date: "2027-11-07", minutes: 90 });
+    // Spring forward (2027-03-14): 01:59 EST, then 03:00 EDT.
+    expect(weddingLocalNow("America/New_York", at("2027-03-14T06:59:00Z"))).toEqual({ date: "2027-03-14", minutes: 119 });
+    expect(weddingLocalNow("America/New_York", at("2027-03-14T07:00:00Z"))).toEqual({ date: "2027-03-14", minutes: 180 });
+  });
+
+  it("ignores the process time zone", () => {
+    const original = process.env.TZ;
+    try {
+      for (const tz of ["Pacific/Kiritimati", "Pacific/Pago_Pago", "Asia/Tokyo"]) {
+        process.env.TZ = tz;
+        expect(weddingLocalNow("America/Costa_Rica", at("2027-08-14T21:30:00Z")), tz).toEqual({
+          date: "2027-08-14",
+          minutes: 930,
+        });
+      }
+    } finally {
+      if (original === undefined) delete process.env.TZ;
+      else process.env.TZ = original;
+    }
+  });
+
+  it("fails closed for unknown zones and invalid instants", () => {
+    expect(weddingLocalNow("Not/AZone", at("2027-08-14T21:30:00Z"))).toBeNull();
+    expect(weddingLocalNow("America/Costa_Rica", new Date(Number.NaN))).toBeNull();
   });
 });

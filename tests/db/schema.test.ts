@@ -35,6 +35,8 @@ const TABLES = [
   "wedding_budget_allocations",
   "vendor_payment_schedule_items",
   "vendor_payments",
+  // LB-23 (ADR-016)
+  "wedding_timeline_entries",
 ];
 
 /**
@@ -76,7 +78,7 @@ describe("schema guarantees", () => {
     expect(columns).toEqual([]);
   });
 
-  it("authenticated can INSERT only into membership invites, checklist items, the guest list, site content, seating, vendors and their finances", async () => {
+  it("authenticated can INSERT only into membership invites, checklist items, the guest list, site content, seating, vendors, their finances and the timeline", async () => {
     const rows = await sql<{ table_name: string }>(
       `select table_name from information_schema.column_privileges
        where grantee = 'authenticated' and privilege_type = 'INSERT'
@@ -98,6 +100,8 @@ describe("schema guarantees", () => {
       "vendor_payments",
       "wedding_budget_allocations",
       "wedding_budget_totals",
+      // LB-23 (ADR-016): private organizer data, member RLS.
+      "wedding_timeline_entries",
       // LB-21 (ADR-014): private organizer data, member RLS.
       "wedding_vendors",
     ]);

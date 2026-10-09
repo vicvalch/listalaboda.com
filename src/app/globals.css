@@ -37,6 +37,21 @@
   }
 }
 
+/* Paper is light: printing (the Cronograma's "Imprimir") always uses the light palette. */
+@media print {
+  :root {
+    --background: #ffffff;
+    --foreground: #000000;
+    --muted: #444444;
+    --surface: #ffffff;
+    --border: #bbbbbb;
+    --accent: #000000;
+    --accent-soft: #ffffff;
+    --danger: #000000;
+    --success: #000000;
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

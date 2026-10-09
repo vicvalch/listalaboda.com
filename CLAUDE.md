@@ -23,6 +23,7 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - `docs/architecture/ADR-013-visual-seating-planner-layout-model.md` (visual planner: table shape and board position)
 - `docs/architecture/ADR-014-wedding-vendor-engagement-model.md` (wedding-scoped vendor engagements, quote/contract)
 - `docs/architecture/ADR-015-wedding-budget-and-payment-model.md` (budget estimates, vendor schedules and payments)
+- `docs/architecture/ADR-016-wedding-run-of-show-model.md` (wedding-day run of show, "Cronograma")
 
 ## Product rules
 
@@ -552,6 +553,27 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   checklist. Writes via `@/lib/budget/service` and `@/lib/vendors/payments`; named trigger reasons map to closed
   results. Reads: budget page = 2 queries (wedding with estimates embedded, vendors with items/payments embedded).
 
+## Timeline / Run of Show Rules (LB-23, ADR-016)
+
+- `public.wedding_timeline_entries` ("Cronograma") is the wedding day's run of show: a mutable private PLAN, not a
+  calendar, checklist, payment schedule or history. Explicit organizer input only; nothing creates entries.
+- Wedding-relative wall clock: `day_offset` is exactly 0 (wedding day) or 1 (after midnight); `start_time` is local
+  whole minutes (null = "Sin hora"); `duration_minutes` 1–1440 optional. Never a timestamp or calendar date; the day is
+  derived from the CURRENT `wedding_date`, so a date change rewrites nothing. Midnight is chosen, never inferred.
+- Window CHECK `wedding_timeline_entries_end_within_window`: `day_offset*1440 + start + duration ≤ 2880` when both are
+  set; refused, never clipped. No stored end, status, `sort_order`, priority or participants. Order:
+  `day_offset, start_time NULLS LAST, created_at, id` (pure sorter in `@/lib/timeline/summary` is the authority).
+- Display wall-clock text only (no JS `Date` for times). `weddings.time_zone` only interprets "now": "Ahora /
+  Siguiente" is derived per request (`weddingLocalNow`), only on the wedding day or the day after with a date and a zone;
+  current = timed WITH duration containing now (several allowed), next = all sharing the earliest future start. Never
+  "late", never stored, no auto-refresh, realtime or delay propagation.
+- Zero or one vendor: composite FK `(wedding_vendor_id, wedding_id)` `ON DELETE SET NULL (wedding_vendor_id)`; foreign
+  vendor = `invalid_vendor`. The timeline reads only `id, name, category, custom_category, status, contact_name, phone`
+  (never email, Instagram, notes or money); `tel:` only. Free-text `location`/`responsible_name`; closed nullable
+  `phase` badge.
+- Member RLS (owners = collaborators), column grants, `@/lib/timeline/service`, two read queries. No RPC, SECURITY
+  DEFINER, service role, activity events, public itinerary, RSVP/site exposure or vendor access. Basic print CSS only.
+
 ## Commands
 
 - `npm run verify`: lint, typecheck, unit tests, build (same as CI)
@@ -607,4 +629,8 @@ LB-22 adds the wedding budget and vendor payments: per-currency estimates (total
 items and payments with database caps under the vendor row lock, a locked vendor currency and contract floor, derived
 statuses and the "Presupuesto" page plus the vendor's "Pagos" section (ADR-015; no expenses, accounting, FX, reminders,
 activity or documents).
+LB-23 adds the wedding-day run of show, "Cronograma": wedding-relative wall-clock entries (the wedding day and its
+continuation after midnight, a window CHECK), optional duration, phase badge, free-text location and responsible, zero
+or one same-wedding vendor (`ON DELETE SET NULL (wedding_vendor_id)`), derived "Ahora / Siguiente" and basic print
+styles (ADR-016; no status, public itinerary, multi-vendor, templates, realtime or activity).
 Don't implement ahead of the current prompt.

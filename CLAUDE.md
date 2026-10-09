@@ -22,6 +22,7 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - `docs/architecture/ADR-012-seating-plan-domain-model.md` (seating tables and one-table-per-guest assignments)
 - `docs/architecture/ADR-013-visual-seating-planner-layout-model.md` (visual planner: table shape and board position)
 - `docs/architecture/ADR-014-wedding-vendor-engagement-model.md` (wedding-scoped vendor engagements, quote/contract)
+- `docs/architecture/ADR-015-wedding-budget-and-payment-model.md` (budget estimates, vendor schedules and payments)
 
 ## Product rules
 
@@ -524,8 +525,32 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   (`mailto:`, `tel:`, Instagram URL from a validated handle); never store a URL. Notes are plain text.
 - Read model: the list is ONE query without notes; summary/groups/search/filters derive in `@/lib/vendors/summary`.
   Free-text search is local and never in a URL; `?category=&status=` may be. Detail is ONE query with notes.
-- `UNIQUE (id, wedding_id)` is the composite-FK target: LB-22 payments `ON DELETE RESTRICT`, LB-23 timeline
+- `UNIQUE (id, wedding_id)` is the composite-FK target: LB-22 payments `ON DELETE NO ACTION` (ADR-015 §7), LB-23 timeline
   `ON DELETE SET NULL`. No checklist link, activity events, documents/storage, vendor login or realtime yet.
+
+## Budget & Payment Rules (LB-22, ADR-015)
+
+- Estimate = `wedding_budget_totals` (one per wedding + currency) and `wedding_budget_allocations` (one per wedding +
+  vendor category + currency; `other` is one bucket). Committed = booked vendors' `contracted_amount_minor` (LB-21, the
+  ONLY authority for what was agreed; never a second committed column). Obligation = `vendor_payment_schedule_items`.
+  Payment = `vendor_payments`. Allocations never have to sum to the total; a missing one is never zero. No accounting
+  (ledger, invoice, receipt, tax, payment method, reversal rows), no generic expenses (deferred), no FX.
+- A payment applies to at most ONE same-vendor item (composite FK; null = "Sin cuota"); items may have many payments.
+  Payments are editable and hard-deletable.
+- Database invariants under the parent vendor row lock (`FOR UPDATE` in invoker-rights triggers; never app checks):
+  contract required; Σ items + Σ unlinked payments ≤ contract; Σ linked ≤ item; item ≥ its paid. With any child the
+  vendor's currency is locked, the contract can't be null or below Σ items + Σ unlinked. Quote/status never coupled.
+- Child rows store NO currency (the vendor's) and NO status: pending/partial/paid/overdue/due soon are derived
+  (`@/lib/budget/summary`, pure, BigInt, `today` passed in). Overdue = `due_on` < wedding-local today (due today isn't);
+  due soon = today … today + 14; no time zone → no timing labels. Discarded vendors leave global overdue/upcoming.
+- Formulas per currency, never combined: paid = all payments; remaining = Σ booked (contract − its payments), never
+  committed − global paid; unscheduled = Σ booked (contract − items − unlinked). Payments to non-booked vendors show
+  under "Atención"; never change status automatically.
+- Vendor → children and payment → item FKs are NO ACTION (never CASCADE): `has_financial_records`,
+  `schedule_item_has_payments`. Children reference `weddings` ON DELETE CASCADE so wedding deletion still works.
+- Member RLS only (owners = collaborators), no RPC, SECURITY DEFINER or service role; never public/RSVP/email/activity/
+  checklist. Writes via `@/lib/budget/service` and `@/lib/vendors/payments`; named trigger reasons map to closed
+  results. Reads: budget page = 2 queries (wedding with estimates embedded, vendors with items/payments embedded).
 
 ## Commands
 
@@ -578,4 +603,8 @@ actions, one position write per table drag, decorative chairs (ADR-013; no persi
 LB-21 adds vendor management: wedding-scoped `wedding_vendors` engagements (category, status, one contact, quote and
 contracted amount in CRC/USD minor units), the "Proveedores" list and detail pages (ADR-014; no payments, directory,
 checklist link, activity or documents).
+LB-22 adds the wedding budget and vendor payments: per-currency estimates (total and per category), vendor schedule
+items and payments with database caps under the vendor row lock, a locked vendor currency and contract floor, derived
+statuses and the "Presupuesto" page plus the vendor's "Pagos" section (ADR-015; no expenses, accounting, FX, reminders,
+activity or documents).
 Don't implement ahead of the current prompt.

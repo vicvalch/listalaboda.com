@@ -4,12 +4,16 @@ import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth/session";
+import { requireWeddingMembership } from "@/lib/authz/wedding";
+import { vendorFinance } from "@/lib/budget/summary";
 import { formText, type FormState } from "@/lib/forms/result";
-import { getMessages } from "@/lib/i18n";
+import { getMessages, interpolate } from "@/lib/i18n";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { formatMoney } from "@/lib/vendors/money";
 import {
   createWeddingVendor,
   deleteWeddingVendor,
+  getWeddingVendor,
   updateWeddingVendor,
   type VendorFailureReason,
 } from "@/lib/vendors/service";
@@ -51,7 +55,32 @@ async function failureMessage(weddingId: string, reason: VendorFailureReason): P
     case "forbidden":
     case "database_error":
       return copy.failed;
+    // LB-22 (ADR-015): the database's vendor financial guard.
+    case "currency_locked":
+      return copy.currencyLocked;
+    case "contract_required":
+      return copy.contractRequired;
+    case "contract_below_recorded":
+      return copy.contractBelowRecordedGeneric;
+    case "has_financial_records":
+      return copy.hasFinancialRecords;
   }
+}
+
+/**
+ * The floor the database just enforced (Σ schedule items + Σ unscheduled
+ * payments), read again after the refusal so the message names the actual
+ * amount; the generic message if it can't be read.
+ */
+async function contractFloorMessage(weddingId: string, vendorId: string): Promise<string> {
+  const copy = getMessages().vendors.errors;
+  const supabase = await createSupabaseServerClient();
+  const access = await requireWeddingMembership(supabase, weddingId);
+  if (!access.ok) return copy.contractBelowRecordedGeneric;
+  const vendor = await getWeddingVendor(supabase, access.access, vendorId);
+  if (!vendor.ok || vendor.vendor.currency === null) return copy.contractBelowRecordedGeneric;
+  const floor = vendorFinance(vendor.vendor, null).recordedFloorMinor;
+  return interpolate(copy.contractBelowRecorded, { amount: formatMoney(floor, vendor.vendor.currency) });
 }
 
 export type VendorFormState = FormState<VendorField, { message: string; nonce: string }> | null;
@@ -86,7 +115,20 @@ async function saveVendor(formData: FormData, vendorId: string | null): Promise<
   const result = vendorId
     ? await updateWeddingVendor(supabase, weddingId, vendorId, parsed.input)
     : await createWeddingVendor(supabase, weddingId, parsed.input);
-  if (!result.ok) return { ok: false, formError: await failureMessage(weddingId, result.reason), values };
+  if (!result.ok) {
+    const formError =
+      result.reason === "contract_below_recorded" && vendorId
+        ? await contractFloorMessage(weddingId, vendorId)
+        : await failureMessage(weddingId, result.reason);
+    // The currency field is what the database refused: point at it.
+    if (result.reason === "currency_locked") {
+      return { ok: false, fieldErrors: { currency: formError }, values };
+    }
+    if (result.reason === "contract_below_recorded" || result.reason === "contract_required") {
+      return { ok: false, fieldErrors: { contractedAmount: formError }, values };
+    }
+    return { ok: false, formError, values };
+  }
 
   revalidatePath(vendorsPath(weddingId));
   if (vendorId) revalidatePath(vendorPath(weddingId, vendorId));

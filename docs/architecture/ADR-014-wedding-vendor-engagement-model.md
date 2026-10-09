@@ -139,6 +139,11 @@ engagement; "Descartado" is a status, not a deletion, and discarded vendors stay
 
 No child relation exists in LB-21, so nothing restricts deletion yet.
 
+*Amendment (LB-22, [ADR-015 §7](ADR-015-wedding-budget-and-payment-model.md)):* the payment protection was implemented
+with `ON DELETE NO ACTION` rather than literal `RESTRICT`. It blocks direct deletion of a vendor with schedule items or
+payments just the same, but is checked at the end of the statement, so deleting a wedding still cascades its vendors and
+their financial children together.
+
 ### 12. Deliberately not here
 
 Checklist ↔ vendor links (`checklist_items.wedding_vendor_id`; the Constitution's "linked items"), activity events or

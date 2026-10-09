@@ -583,12 +583,21 @@ describe("vendor integrity", () => {
   });
 
   it("no SECURITY DEFINER or client-callable function touches vendors", async () => {
-    const rows = await sql<{ name: string }>(
-      `select p.pronamespace::regnamespace || '.' || p.proname as name from pg_proc p
+    const rows = await sql<{ name: string; definer: boolean; authenticated: boolean; anon: boolean }>(
+      `select p.pronamespace::regnamespace || '.' || p.proname as name, p.prosecdef as definer,
+              has_function_privilege('authenticated', p.oid, 'execute') as authenticated,
+              has_function_privilege('anon', p.oid, 'execute') as anon
+       from pg_proc p
        where p.pronamespace in ('public'::regnamespace, 'private'::regnamespace)
-         and p.prosrc ilike '%vendor%'`,
+         and p.prosrc ilike '%vendor%'
+       order by 1`,
     );
-    expect(rows).toEqual([]);
+    // LB-22 (ADR-015): only the three invoker-rights financial trigger functions.
+    expect(rows).toEqual(
+      ["private.enforce_vendor_payment", "private.enforce_vendor_payment_schedule_item", "private.enforce_wedding_vendor_finance"].map(
+        (name) => ({ name, definer: false, authenticated: false, anon: false }),
+      ),
+    );
   });
 });
 

@@ -30,6 +30,11 @@ const TABLES = [
   "seating_assignments",
   // LB-21 (ADR-014)
   "wedding_vendors",
+  // LB-22 (ADR-015)
+  "wedding_budget_totals",
+  "wedding_budget_allocations",
+  "vendor_payment_schedule_items",
+  "vendor_payments",
 ];
 
 /**
@@ -71,7 +76,7 @@ describe("schema guarantees", () => {
     expect(columns).toEqual([]);
   });
 
-  it("authenticated can INSERT only into membership invites, checklist items, the guest list, site content, seating and vendors", async () => {
+  it("authenticated can INSERT only into membership invites, checklist items, the guest list, site content, seating, vendors and their finances", async () => {
     const rows = await sql<{ table_name: string }>(
       `select table_name from information_schema.column_privileges
        where grantee = 'authenticated' and privilege_type = 'INSERT'
@@ -88,6 +93,11 @@ describe("schema guarantees", () => {
       // LB-19 (ADR-012): shared planning content, member RLS.
       "seating_assignments",
       "seating_tables",
+      // LB-22 (ADR-015): private organizer data, member RLS, trigger-checked sums.
+      "vendor_payment_schedule_items",
+      "vendor_payments",
+      "wedding_budget_allocations",
+      "wedding_budget_totals",
       // LB-21 (ADR-014): private organizer data, member RLS.
       "wedding_vendors",
     ]);
@@ -145,7 +155,10 @@ describe("schema guarantees", () => {
       "private.enforce_guest_invitation_has_guest",
       "private.enforce_seating_assignment",
       "private.enforce_seating_table_capacity",
+      "private.enforce_vendor_payment",
+      "private.enforce_vendor_payment_schedule_item",
       "private.enforce_wedding_has_owner",
+      "private.enforce_wedding_vendor_finance",
       "private.guard_email_deliveries",
       "private.guard_email_delivery_events",
       "private.guard_guest_invitation_link",

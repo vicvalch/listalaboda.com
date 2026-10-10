@@ -15,6 +15,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getMessages } from "@/lib/i18n";
 import { INVITE_HANDOFF_COOKIE } from "@/lib/membership-invites/handoff";
 import { isWellFormedMembershipInviteToken } from "@/lib/membership-invites/token";
+import { MY_WEDDINGS_LIST_PATH } from "@/lib/weddings/entry";
 
 import { AcceptInviteForm } from "./AcceptInviteForm";
 import { switchAccountAction } from "./actions";
@@ -47,7 +48,7 @@ export default async function InviteContinuePage() {
           <p className="text-muted">{inviteInvalid.body}</p>
           <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-center">
             {user ? (
-              <Link href="/app" className={primaryButtonClass}>
+              <Link href={MY_WEDDINGS_LIST_PATH} className={primaryButtonClass}>
                 {common.goToMyWeddings}
               </Link>
             ) : (

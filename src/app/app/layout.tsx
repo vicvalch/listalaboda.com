@@ -6,6 +6,7 @@ import { safeNextPath } from "@/lib/auth/redirect";
 import { requireUser } from "@/lib/auth/session";
 import { getMessages } from "@/lib/i18n";
 import { REQUEST_PATH_HEADER } from "@/lib/supabase/proxy";
+import { MY_WEDDINGS_LIST_PATH } from "@/lib/weddings/entry";
 
 import { logoutAction } from "./actions";
 
@@ -31,7 +32,8 @@ export default async function AppLayout({ children }: LayoutProps<"/app">) {
             {common.brand}
           </Link>
           <nav aria-label={app.nav.label} className="flex flex-wrap items-center gap-x-5 gap-y-2">
-            <Link href="/app" className="text-sm font-semibold hover:underline">
+            {/* The list itself, even with one wedding (`/app` alone opens it). */}
+            <Link href={MY_WEDDINGS_LIST_PATH} className="text-sm font-semibold hover:underline">
               {app.nav.myWeddings}
             </Link>
             <Link href="/app/weddings/new" className="text-sm font-semibold hover:underline">

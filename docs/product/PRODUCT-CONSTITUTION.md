@@ -1,6 +1,8 @@
 # listalaboda.com Product Constitution
 
 Status: Accepted (LB-01) · Date: 2026-09-30 · Baseline: `7c050f3`
+Amended: LB-24A (2026-10-09, [ADR-017](../architecture/ADR-017-dual-couple-planner-use.md)) — dual couple/planner use
+of the same Wedding workspace: §2, §3, §6, §7 (item 11), §8, §9, §11, §14, §17.
 
 This document governs every subsequent product and implementation decision for
 listalaboda.com. Changing a rule here requires an explicit, reviewed amendment —
@@ -9,6 +11,7 @@ not an implementation-time shortcut. Architectural detail lives in:
 - [ADR-001 — Product Domain and Tenancy](../architecture/ADR-001-product-domain-and-tenancy.md)
 - [ADR-002 — Authentication and Security Boundaries](../architecture/ADR-002-auth-and-security-boundaries.md)
 - [ADR-003 — Donor Extraction Policy](../architecture/ADR-003-donor-extraction-policy.md)
+- [ADR-017 — Dual Couple/Planner Use on Wedding Membership](../architecture/ADR-017-dual-couple-planner-use.md)
 
 ---
 
@@ -45,37 +48,42 @@ questions at any time: *what's left, what's next, and who's doing it.*
 
 ## 2. Primary User
 
-**Launch model: A — Couple-first B2C.**
+**Product model (amended LB-24A, ADR-017): couple-first B2C and planner B2B, one
+product, the same Wedding workspace.** The launch voice stays couple-first.
 
 | Group | Who |
 |---|---|
-| PRIMARY USER | The couple getting married (one or both partners), planning their own wedding. |
-| SECONDARY USERS | Collaborators the couple invites: partner, family member, maid of honor, friend — or a person who works professionally as a wedding planner, invited as an ordinary `collaborator` with exactly the collaborator permission set (no `planner` role exists in the MVP). |
-| FUTURE USERS | Guests (Phase 2, token access, no account). Professional planners with a dedicated `planner` role and planner-specific permissions, and agencies managing many weddings (Phase 3+). |
-| OUT OF MVP | Guests, vendors, any `planner` role or planner-specific permission/dashboard, agencies/organizations, platform-admin UI. |
+| PRIMARY USERS | The couple getting married (one or both partners), planning their own wedding (B2C). Professional wedding planners organizing their clients' weddings (B2B). Both use the same Wedding workspace. |
+| SECONDARY USERS | Collaborators invited through a MembershipInvite as `owner` or `collaborator`: partner, family member, maid of honor, friend — or the planner (in a couple-first wedding) / the couple (in a planner-first wedding). |
+| FUTURE USERS | Agencies managing many weddings through an Organization (deferred, §9). |
+| OUT | Vendors, any `planner` role or persona-based permission, organizations, platform-admin UI. |
 
-Rationale: the original README speaks to the couple ("tu lista de to-dos de la
-boda"), the product name is couple-language, and the domain-proven donor
-(Wedding-Fran-Marilu) is couple-operated. A planner-first or dual-entry model
-would force multi-tenant B2B machinery before B2C usefulness is validated. This
-choice was made on product coherence, not on reuse convenience.
+Rationale (LB-01): the original README speaks to the couple ("tu lista de to-dos
+de la boda"), the product name is couple-language, and the domain-proven donor
+(Wedding-Fran-Marilu) is couple-operated. This choice was made on product
+coherence, not on reuse convenience.
 
-**Planners in the MVP:** there is **no `planner` authorization role in the
-MVP**. A person who works professionally as a wedding planner may participate
-in an MVP wedding only if an owner invites them, via a MembershipInvite, as an
-ordinary `collaborator` — and they receive exactly the collaborator permission
-set. There are no hidden planner flags, views or permissions. Planner-specific
-roles, organization semantics, multi-wedding dashboards and planner-specific
-permissions are Phase 3.
+Amendment (LB-24A): LB-01 assumed a planner or dual-entry model "would force
+multi-tenant B2B machinery". It doesn't: Wedding is already the tenant and one
+account may hold any number of Wedding memberships, so planners need no separate
+platform, tenancy or role. Couple and planner are **product personas**, never
+authorization inputs, and are not stored.
+
+**Planners:** there is **no `planner` authorization role**. A planner is an
+ordinary member of each wedding they work on — `owner` (e.g. they created it, or
+were invited as one) or `collaborator` — with exactly that role's permission
+set. Wedding membership remains the only access mechanism. There are no hidden
+planner flags, views or permissions; a persona, subscription or metadata never
+grants access. Organization semantics stay deferred.
 
 ## 3. Secondary Actors
 
 | Actor | MVP? | Access | Scope | Capabilities | Boundaries |
 |---|---|---|---|---|---|
 | Couple owner | Yes | Account (Supabase Auth) | Weddings where they hold `owner` | Everything in the wedding, incl. issuing MembershipInvites and removing members, editing wedding details, deleting the wedding | Cannot remove the last owner |
-| Couple collaborator | Yes | Account | Weddings where they hold `collaborator` | Read and edit the checklist; create, assign, complete items | Cannot manage members, change wedding settings, or delete the wedding |
-| Planner | Phase 3 (as a role) | Account | Explicitly assigned weddings only | Phase 3: collaborator capabilities + planner-specific permissions and a multi-wedding dashboard | No `planner` role exists in the MVP. In the MVP a professional planner participates only if an owner invites them as an ordinary `collaborator`, and gets exactly the collaborator permission set. Never sees a wedding without explicit membership/assignment. |
-| Planner agency | Future | Account(s) via Organization | Weddings explicitly assigned to the org | Assign planners to weddings | Org membership does NOT imply access to every wedding |
+| Collaborator (couple side or planner) | Yes | Account | Weddings where they hold `collaborator` | Read and edit the checklist; create, assign, complete items (and the later modules' member capabilities) | Cannot manage members, change wedding settings, or delete the wedding |
+| Planner | Yes — a persona, not a role (LB-24A) | Account | Weddings where they hold a membership, as `owner` or `collaborator` | Exactly that membership's capabilities in each wedding; "Mis bodas" lists their own memberships | No `planner` role. Never sees a wedding without explicit membership; a persona, subscription or metadata grants nothing. |
+| Planner agency | Future (deferred) | Account(s) via Organization | Weddings explicitly provisioned to its people | Deferred | Org membership alone grants NO wedding access; explicit Wedding membership provisioning comes first (ADR-017) |
 | Guest | Phase 2 | **Token**, no account | One GuestInvitation (household) in one wedding | View their invitation and the wedding's published info; submit/update RSVP for their party | Nothing else. No checklist, no other guests |
 | Vendor | Out (no portal) | None | — | Exists only as a *record* the couple manages (Phase 3) | No vendor login |
 | Platform admin | Operational only | Supabase dashboard / privileged ops, never in-app in MVP | Platform | Support, incident response | Never via shared passwords or user-editable metadata |
@@ -182,7 +190,12 @@ Organization ──< WeddingAssignment >── Wedding
 - No `Project`, `Program`, `Portfolio` or `PMO` concepts, aliases or hidden layers.
 - `Organization` is a **reserved future concept**, not built in the MVP
   (see ADR-001).
-- A user may belong to several weddings (schema allows it; MVP UI optimizes for one).
+- A user may belong to any number of weddings, with a role per wedding (amended
+  LB-24A, ADR-017). The account-level entry (`/app`, "Mis bodas") may list or
+  later aggregate only the weddings the user is a member of; it owns no
+  operational data. Wedding remains the tenancy boundary and the URL
+  (`/app/weddings/[weddingId]`) the only wedding selector — no stored "active"
+  wedding. This overview is never a `Project`/`Program`/`Portfolio`/`PMO` concept.
 
 ## 7. MVP
 
@@ -200,7 +213,7 @@ The smallest version of listalaboda.com that delivers the original promise:
 10. Simple progress: overall and per-category completion.
 11. Invite a partner/collaborator through a **MembershipInvite**: a secure,
     copyable link (email delivery may come with Phase 2's email infrastructure).
-    A professional planner can be invited this way only as an ordinary `collaborator`.
+    A professional planner is invited this way too, as an `owner` or `collaborator` (amended LB-24A).
 12. Manage members (owner only): list, remove, see and revoke pending MembershipInvites.
 
 **Guests / RSVP are NOT in the MVP.** They are the first item of Phase 2.
@@ -221,8 +234,9 @@ The smallest version of listalaboda.com that delivers the original promise:
 - Vendors (light directory: contact, category, quote/contract amount, linked items).
 - Budget (estimated / committed / paid, per category or vendor, due dates).
 - Seating (depends on Phase 2 RSVP data).
-- `planner` role, planner-specific permissions and a multi-wedding planner dashboard;
-  Organization/agency semantics with explicit wedding assignment.
+- Multi-wedding overview and attention across the weddings a person is a member of
+  (LB-24B+); no `planner` role is needed (amended LB-24A, ADR-017).
+  Organization/agency semantics stay deferred (§9).
 - Custom categories; additional templates/locales.
 - Notification digests ("this week's pendientes").
 
@@ -256,7 +270,9 @@ The smallest version of listalaboda.com that delivers the original promise:
 - Vendor portal or marketplace.
 - Gift registry / e-commerce.
 - Accounting-grade budgeting (ledgers, invoices, tax).
-- Planner/agency SaaS before couple usefulness is validated.
+- A separate planner/agency SaaS fork, planner-specific tenancy or enterprise
+  organization tenancy before commercial evidence. Planners use the same Wedding
+  workspace (amended LB-24A).
 - A single-couple, hardcoded wedding site.
 - Open, unauthenticated RSVP.
 
@@ -287,15 +303,21 @@ Full detail in ADR-002. Constitutional summary:
 
 **COMMERCIAL MODEL DEFERRED.** No Stripe, no plans, no paywalls in the MVP.
 
-Architecture must stay compatible with:
+Architecture must stay compatible with (amended LB-24A):
 
 - free or freemium B2C;
-- paid-per-wedding (the Wedding is a natural billable unit);
-- planner/agency subscriptions (the future Organization is the billable unit).
+- B2C: a Wedding-scoped entitlement / one-time purchase (the Wedding is a natural billable unit);
+- B2B: an account-scoped planner subscription;
+- later, possibly an Organization-scoped subscription for agencies.
 
 Therefore: entitlements, when they arrive, are checked server-side in one place
-and attach to a Wedding or an Organization — never to scattered UI flags.
-No feature limits are hardcoded into the domain model.
+and attach to a Wedding, an account or an Organization — never to scattered UI
+flags. No feature limits are hardcoded into the domain model.
+
+**Entitlements never authorize Wedding data.** Billing answers "is this feature
+enabled?"; membership answers "may this user access this Wedding?". A planner
+subscription never grants access to any wedding, and a Wedding purchase never
+creates a membership.
 
 ## 12. AI Boundary
 
@@ -329,6 +351,9 @@ adds weight without adding clarity, it doesn't ship.
 6. **Collaboration without bureaucracy.** Share and assign; no approvals, no workflows.
 7. **Time-aware by default.** Dates relative to the wedding day surface "what's next" automatically.
 8. **Secure and private by default.** Nothing leaks, nothing is public unless the couple publishes it.
+9. **Simple for a couple, open for a planner** (LB-24A). A couple should never feel they are using
+   enterprise planner software; a planner should never be trapped inside one wedding. With one wedding,
+   `/app` opens it directly; with several, "Mis bodas" lists them. Inside, one wedding still has one clear home.
 
 ## 15. Donor Policy
 
@@ -357,8 +382,11 @@ SEO intent matching. **The product is not renamed in LB-01.**
    content, vocabulary and the branding question above.
 3. **Template content:** which items, categories and offsets form the default
    `es` template? Who authors and validates it?
-4. **Planner pull:** do couples actually invite planners? Measure MembershipInvites
-   accepted by professionals (joining as ordinary `collaborator`s) before building the planner role.
+4. **Planner pull:** *architecture closed by LB-24A (ADR-017)*: planners use the
+   same workspace as ordinary `owner`s or `collaborator`s; no planner role will be
+   built on this question. Still open, on pilot evidence: how planners and couples
+   actually split ownership (co-owners have symmetric authority, ADR-017) and what
+   cross-wedding help planners need first.
 5. **Commercial model:** free, freemium or paid-per-wedding?
 6. **Post-wedding lifecycle:** archive, read-only, export, or delete after the date?
 7. **Collaborator permissions:** is a single `collaborator` role enough, or do

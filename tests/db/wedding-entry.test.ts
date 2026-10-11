@@ -127,7 +127,7 @@ describe("account entry listing (LB-24A)", () => {
   it("one collaborator membership (created by someone else) → redirect into it", async () => {
     const weddings = await list(soloCollaborator);
     expect(weddings).toEqual([
-      { id: b, name: "Boda B", weddingDate: "2027-03-02", city: null, role: "collaborator" },
+      { id: b, name: "Boda B", weddingDate: "2027-03-02", city: null, timeZone: null, role: "collaborator" },
     ]);
     expect(decideWeddingEntry(weddings, { showList: false })).toEqual({
       kind: "redirect",
@@ -138,9 +138,9 @@ describe("account entry listing (LB-24A)", () => {
   it("three weddings, mixed roles: exactly those, soonest first, city only where set", async () => {
     const weddings = await list(mixed);
     expect(weddings).toEqual([
-      { id: b, name: "Boda B", weddingDate: "2027-03-02", city: null, role: "collaborator" },
-      { id: a, name: "Boda A", weddingDate: "2027-08-14", city: "Escazú", role: "owner" },
-      { id: c, name: "Boda C", weddingDate: null, city: null, role: "owner" },
+      { id: b, name: "Boda B", weddingDate: "2027-03-02", city: null, timeZone: null, role: "collaborator" },
+      { id: a, name: "Boda A", weddingDate: "2027-08-14", city: "Escazú", timeZone: null, role: "owner" },
+      { id: c, name: "Boda C", weddingDate: null, city: null, timeZone: null, role: "owner" },
     ]);
     expect(weddings?.map((w) => w.id)).not.toContain(foreign);
     expect(JSON.stringify(weddings)).not.toContain("Cartago");

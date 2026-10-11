@@ -22,7 +22,7 @@ const B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 function wedding(id: string, role: WeddingSummary["role"] = "owner"): WeddingSummary {
-  return { id, name: `Boda ${id.slice(0, 1)}`, weddingDate: null, city: null, role };
+  return { id, name: `Boda ${id.slice(0, 1)}`, weddingDate: null, city: null, timeZone: null, role };
 }
 
 describe("decideWeddingEntry", () => {
@@ -137,20 +137,23 @@ function clientFor(backend: Backend) {
 }
 
 const rows = [
-  { role: "collaborator", weddings: { id: B, name: "Boda B", wedding_date: null, city: null } },
-  { role: "owner", weddings: { id: A, name: "Boda A", wedding_date: "2027-08-14", city: "Escazú" } },
+  { role: "collaborator", weddings: { id: B, name: "Boda B", wedding_date: null, city: null, time_zone: null } },
+  {
+    role: "owner",
+    weddings: { id: A, name: "Boda A", wedding_date: "2027-08-14", city: "Escazú", time_zone: "America/Costa_Rica" },
+  },
 ];
 
 describe("listMyWeddings", () => {
-  it("reads only the caller's memberships and projects the city", async () => {
+  it("reads only the caller's memberships and projects the city and time zone", async () => {
     const { supabase, requests } = clientFor({ body: rows });
     await expect(listMyWeddings(supabase, USER_ID)).resolves.toEqual([
-      { id: A, name: "Boda A", weddingDate: "2027-08-14", city: "Escazú", role: "owner" },
-      { id: B, name: "Boda B", weddingDate: null, city: null, role: "collaborator" },
+      { id: A, name: "Boda A", weddingDate: "2027-08-14", city: "Escazú", timeZone: "America/Costa_Rica", role: "owner" },
+      { id: B, name: "Boda B", weddingDate: null, city: null, timeZone: null, role: "collaborator" },
     ]);
     const [request] = requests;
     expect(request?.searchParams.get("user_id")).toBe(`eq.${USER_ID}`);
-    expect(request?.searchParams.get("select")).toBe("role,weddings(id,name,wedding_date,city)");
+    expect(request?.searchParams.get("select")).toBe("role,weddings(id,name,wedding_date,city,time_zone)");
   });
 
   it("a membership whose wedding RLS hides is dropped, never shown", async () => {

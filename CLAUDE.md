@@ -25,6 +25,7 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - `docs/architecture/ADR-015-wedding-budget-and-payment-model.md` (budget estimates, vendor schedules and payments)
 - `docs/architecture/ADR-016-wedding-run-of-show-model.md` (wedding-day run of show, "Cronograma")
 - `docs/architecture/ADR-017-dual-couple-planner-use.md` (couples and planners on the same Wedding membership model)
+- `docs/architecture/ADR-018-multi-wedding-overview-and-attention.md` (multi-wedding read model, derived attention)
 
 ## Product rules
 
@@ -591,6 +592,25 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   implies a membership. Organizations are deferred until an explicit milestone.
 - No Project/Program/Portfolio/PMO vocabulary for account navigation ("Mis bodas"); no "workspace"/"tenant" in Spanish UI.
 
+## Multi-wedding overview and attention (LB-24B, ADR-018)
+
+- `loadWeddingsOverview(supabase, user.id, now)` (`@/lib/weddings/overview`) is read-only. The ids come ONLY from
+  `listMyWeddings` (memberships; never `created_by`, persona, metadata, subscription). Caller RLS client only: no service
+  role, no SECURITY DEFINER overview.
+- Batched, never one query per wedding: 6 requests whatever N (memberships, 4 reads rooted at `weddings` with
+  `.in("id", ids)`, one exact party count), 2–6 in parallel.
+- PostgREST `max_rows` (1000) caps embedded arrays too, per parent. Every child array that can pass it is read with its
+  exact `(count)`; parties (column-only grants) against the flat exact count. Short = `unavailable`, never partial.
+- More than 100 weddings = explicit `over_limit`; never slice or drop weddings.
+- One request clock passed in (the library never reads it); local today from each wedding's own time zone. No zone =
+  no timing classification.
+- A failed, missing or truncated domain read is `unavailable`, never zero or empty; `allClear = complete && no attention`.
+- Attention is derived per request: never persisted, notified or scheduled. Closed kinds and levels with explicit
+  `KIND_RANK`/`LEVEL_RANK`; ids `${weddingId}:${kind}`. No readiness, health or numeric score.
+- Domain helpers are the only formula source. Money is per-currency `bigint` buckets: CRC and USD never combined or
+  converted. Minimal projections: no guest names, contacts, tokens, notes, labels or vendor contacts.
+- LB-24C renders and formats; it never recomputes summaries, triggers, levels or order.
+
 ## Commands
 
 - `npm run verify`: lint, typecheck, unit tests, build (same as CI)
@@ -653,4 +673,7 @@ styles (ADR-016; no status, public itinerary, multi-vendor, templates, realtime 
 LB-24A freezes dual couple (B2C) / planner (B2B) use of the same Wedding workspace on the existing membership model
 (ADR-017; no migration, role, persona or organization): `/app` adapts to 0 / 1 / N weddings, "Mis bodas" lists with
 city, and the account-level copy is persona-neutral (no cross-wedding summaries, switcher or billing yet).
+LB-24B adds the multi-wedding overview read model and derived attention as a library only (ADR-018): six batched
+caller-RLS requests whatever the wedding count, exact counts against PostgREST's embedded `max_rows` truncation, a
+100-wedding `over_limit`, per-domain `unavailable`, eight closed attention kinds, no persistence, score or UI (LB-24C).
 Don't implement ahead of the current prompt.

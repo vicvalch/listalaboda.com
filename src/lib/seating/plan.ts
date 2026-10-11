@@ -130,18 +130,40 @@ function groupByParty(guests: readonly SeatingGuest[]): SeatingPartyGroup[] {
   return groups;
 }
 
+export type SeatingGuestCounts = Omit<SeatingSummary, "totalCapacity">;
+
+/**
+ * The summary's guest counts from RSVP state and "has a table" alone (no
+ * names, parties or tables), so a multi-wedding overview (LB-24B) can reuse
+ * the exact same rules. `seated` = an assignment to a loaded table.
+ */
+export function summarizeSeatingGuests(
+  guests: readonly Readonly<{ attending: boolean | null; seated: boolean }>[],
+): SeatingGuestCounts {
+  let confirmed = 0;
+  let seated = 0;
+  let confirmedUnseated = 0;
+  let seatedDeclined = 0;
+  for (const guest of guests) {
+    const state = seatingRsvpState(guest.attending);
+    if (state === "attending") confirmed += 1;
+    if (guest.seated) seated += 1;
+    if (state === "attending" && !guest.seated) confirmedUnseated += 1;
+    if (state === "declined" && guest.seated) seatedDeclined += 1;
+  }
+  return { confirmed, seated, confirmedUnseated, seatedDeclined };
+}
+
 export function buildSeatingPlan(
   tables: readonly SeatingTableInput[],
   parties: readonly SeatingPartyInput[],
 ): SeatingPlan {
   const seatedByTable = new Map<string, SeatingGuest[]>(tables.map((table) => [table.id, []]));
   const unseated: SeatingGuest[] = [];
-  let confirmed = 0;
 
   for (const party of parties) {
     for (const input of party.guests) {
       const rsvpState = seatingRsvpState(input.attending);
-      if (rsvpState === "attending") confirmed += 1;
       // An assignment to a table that isn't loaded can't be shown on a card;
       // the same-wedding FK makes it impossible, so it reads as unassigned.
       const tableGuests = input.tableId ? seatedByTable.get(input.tableId) : undefined;
@@ -185,11 +207,15 @@ export function buildSeatingPlan(
     declined: groupByParty(unseated.filter((g) => g.rsvpState === "declined")),
     conflicts,
     summary: {
-      confirmed,
-      seated: tablePlans.reduce((sum, table) => sum + table.assignedCount, 0),
-      confirmedUnseated: unseatedAttending.length,
+      ...summarizeSeatingGuests(
+        parties.flatMap((party) =>
+          party.guests.map((guest) => ({
+            attending: guest.attending,
+            seated: guest.tableId !== null && seatedByTable.has(guest.tableId),
+          })),
+        ),
+      ),
       totalCapacity: tables.reduce((sum, table) => sum + table.capacity, 0),
-      seatedDeclined: conflicts.length,
     },
   };
 }

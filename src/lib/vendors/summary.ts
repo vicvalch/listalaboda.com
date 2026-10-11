@@ -46,7 +46,9 @@ export type VendorSummary = Readonly<{
   contractedTotals: readonly CurrencyTotal[];
 }>;
 
-export function summarizeVendors(vendors: readonly VendorListItem[]): VendorSummary {
+export function summarizeVendors(
+  vendors: readonly Pick<VendorListItem, "status" | "currency" | "contractedAmountMinor">[],
+): VendorSummary {
   const byStatus = Object.fromEntries(VENDOR_STATUSES.map((status) => [status, 0])) as Record<VendorStatus, number>;
   // BigInt: a sum of many maximal amounts can pass Number.MAX_SAFE_INTEGER.
   const totals = new Map<VendorCurrency, bigint>();

@@ -46,7 +46,7 @@ Rationale: both donors use this stack; it minimizes new learning and risk.
 | Actor | Mechanism |
 |---|---|
 | Couple owner / collaborator | Supabase Auth account, email-based (magic link and/or email+password; exact methods fixed in the auth implementation prompt). Social login deferred. |
-| Planner | Same as couple: personal Supabase Auth account, access only via explicit wedding membership. **No `planner` role in the MVP**: a professional planner joins only through a MembershipInvite as an ordinary `collaborator` and gets exactly the collaborator permission set. Planner-specific roles and permissions are Phase 3. |
+| Planner | Same as couple: personal Supabase Auth account, access only via explicit wedding membership. **No `planner` role in the MVP**: a professional planner joins only through a MembershipInvite as an ordinary `collaborator` and gets exactly the collaborator permission set. Planner-specific roles and permissions are Phase 3. *Amended (LB-24A, [ADR-017](ADR-017-dual-couple-planner-use.md)): a planner may be an `owner` or `collaborator`; no planner role is planned; a persona or subscription never grants access.* |
 | Platform admin | No in-app admin surface in MVP. Operations through the Supabase dashboard / CLI by named accounts. If an in-app admin is ever built: an explicit server-checked allowlist table, never `user_metadata`, never a shared password. |
 | Guest (Phase 2) | No account. Scoped GuestInvitation token (see §5). |
 

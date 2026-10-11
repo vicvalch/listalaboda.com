@@ -24,6 +24,7 @@ export type WeddingSummary = Readonly<{
   id: string;
   name: string;
   weddingDate: string | null;
+  city: string | null;
   role: WeddingRole;
 }>;
 
@@ -93,8 +94,8 @@ export async function createWedding(
 
 /**
  * Every wedding the user belongs to (RLS decides visibility), with their
- * role. Returns null on failure so callers can show an error instead of a
- * misleading empty state.
+ * role: the only source for `/app` and "Mis bodas" (LB-24A). Returns null
+ * on failure so callers can show an error instead of a misleading empty state.
  */
 export async function listMyWeddings(
   supabase: Client,
@@ -103,7 +104,7 @@ export async function listMyWeddings(
   try {
     const { data, error } = await supabase
       .from("wedding_memberships")
-      .select("role, weddings(id, name, wedding_date)")
+      .select("role, weddings(id, name, wedding_date, city)")
       .eq("user_id", userId);
     if (error || !data) return null;
 
@@ -115,6 +116,7 @@ export async function listMyWeddings(
                 id: row.weddings.id,
                 name: row.weddings.name,
                 weddingDate: row.weddings.wedding_date,
+                city: row.weddings.city,
                 role: row.role,
               },
             ]

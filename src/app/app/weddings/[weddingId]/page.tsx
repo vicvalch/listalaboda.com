@@ -14,6 +14,7 @@ import { listGuestPartyOptions } from "@/lib/guests/service";
 import { formatNumber, getMessages } from "@/lib/i18n";
 import { listMembershipInvites } from "@/lib/membership-invites/service";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { MY_WEDDINGS_LIST_PATH } from "@/lib/weddings/entry";
 import { formatTimestampDate, formatWeddingDate } from "@/lib/weddings/format";
 import { labelMembers } from "@/lib/weddings/members";
 import { getWeddingDetail, listWeddingMembers } from "@/lib/weddings/service";
@@ -264,7 +265,7 @@ export default async function WeddingPage({
       </section>
 
       <p>
-        <Link href="/app" className={textLinkClass}>
+        <Link href={MY_WEDDINGS_LIST_PATH} className={textLinkClass}>
           {copy.backToWeddings}
         </Link>
       </p>

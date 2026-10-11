@@ -36,7 +36,7 @@ export const es = {
       passwordHint: "Mínimo 8 caracteres.",
     },
     login: {
-      title: "Entra a tu boda",
+      title: "Entra a tu cuenta",
       intro: "Usa el correo y la contraseña de tu cuenta.",
       submit: "Entrar",
       submitting: "Entrando…",
@@ -79,9 +79,10 @@ export const es = {
     },
     weddings: {
       title: "Mis bodas",
-      emptyTitle: "Todavía no tienes una boda",
-      emptyBody: "Crea tu boda para empezar a organizarla, y luego invita a tu pareja.",
-      emptyCta: "Crear mi boda",
+      emptyTitle: "Todavía no tienes bodas",
+      emptyBody: "Crea una boda para empezar a organizarla.",
+      emptyInviteHint: "Si te invitaron a colaborar en una boda, abre el enlace que te compartieron.",
+      emptyCta: "Crear una boda",
       createAnother: "Crear otra boda",
       noDate: "Fecha por definir",
       roleOwner: "Organizas esta boda",
@@ -89,7 +90,7 @@ export const es = {
     },
   },
   weddingNew: {
-    title: "Crea tu boda",
+    title: "Nueva boda",
     intro: "Puedes cambiar estos datos más adelante.",
     nameLabel: "Nombre de la boda",
     nameHint: "Por ejemplo: «Boda de Ana y Luis».",

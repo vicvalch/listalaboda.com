@@ -156,6 +156,10 @@ The path from couple-first to planner support is:
 
 Each step is additive. None requires changing `wedding_id` ownership.
 
+*Amendment (LB-24A, [ADR-017](ADR-017-dual-couple-planner-use.md)):* steps 1–2 are superseded for planner access. A
+planner is an ordinary `owner` or `collaborator` of each wedding they work on; no `planner` role is planned. The
+multi-wedding "my weddings" view lists the user's own memberships. Step 3 (Organization) stays deferred.
+
 ### 7. Guest domain shape (Phase 2, decided now to fix the boundary)
 
 ```

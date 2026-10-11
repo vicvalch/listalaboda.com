@@ -42,7 +42,8 @@ export async function logIn(page: Page, email: string) {
   await page.goto("/login");
   await fillCredentials(page, email);
   await page.getByRole("button", { name: es.auth.login.submit }).click();
-  await expect(page).toHaveURL(/\/app$/);
+  // LB-24A: /app opens the only wedding directly (0 or 2+ stay on /app).
+  await expect(page).toHaveURL(/\/app(?:\/weddings\/[0-9a-f-]{36})?$/);
 }
 
 export async function logOut(page: Page) {

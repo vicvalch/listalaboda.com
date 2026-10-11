@@ -24,6 +24,7 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - `docs/architecture/ADR-014-wedding-vendor-engagement-model.md` (wedding-scoped vendor engagements, quote/contract)
 - `docs/architecture/ADR-015-wedding-budget-and-payment-model.md` (budget estimates, vendor schedules and payments)
 - `docs/architecture/ADR-016-wedding-run-of-show-model.md` (wedding-day run of show, "Cronograma")
+- `docs/architecture/ADR-017-dual-couple-planner-use.md` (couples and planners on the same Wedding membership model)
 
 ## Product rules
 
@@ -574,6 +575,22 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - Member RLS (owners = collaborators), column grants, `@/lib/timeline/service`, two read queries. No RPC, SECURITY
   DEFINER, service role, activity events, public itinerary, RSVP/site exposure or vendor access. Basic print CSS only.
 
+## Dual couple/planner use (LB-24A, ADR-017)
+
+- Couple and planner are product personas, never authorization roles; never stored (no profile, `account_type`,
+  persona or planner flag) and never read from `user_metadata`/`app_metadata`.
+- Wedding access comes only from `wedding_memberships` through `@/lib/authz/wedding` and RLS. Roles stay
+  `owner | collaborator`; a planner is one or the other in each wedding.
+- `[weddingId]` URL tenancy is authoritative: no stored/cookie/session "active" wedding; a switcher only navigates.
+- Operational domains stay Wedding-scoped. `/app` / "Mis bodas" lists (and may later aggregate) only the caller's
+  memberships via `listMyWeddings` on their RLS client; no service-role or SECURITY DEFINER overview shortcut.
+- `/app` entry is `decideWeddingEntry` (`@/lib/weddings/entry`): list failed → error (never empty or a redirect);
+  0 → empty state; 1 → redirect to `/app/weddings/{id}` (no query copied); 2+ → list. `MY_WEDDINGS_LIST_PATH`
+  (`/app?all=1`, closed value, presentation only) always lists; "Mis bodas" links use it so one wedding never loops.
+- Billing/entitlements (future) gate features, never Wedding access: a purchase or subscription never creates or
+  implies a membership. Organizations are deferred until an explicit milestone.
+- No Project/Program/Portfolio/PMO vocabulary for account navigation ("Mis bodas"); no "workspace"/"tenant" in Spanish UI.
+
 ## Commands
 
 - `npm run verify`: lint, typecheck, unit tests, build (same as CI)
@@ -633,4 +650,7 @@ LB-23 adds the wedding-day run of show, "Cronograma": wedding-relative wall-cloc
 continuation after midnight, a window CHECK), optional duration, phase badge, free-text location and responsible, zero
 or one same-wedding vendor (`ON DELETE SET NULL (wedding_vendor_id)`), derived "Ahora / Siguiente" and basic print
 styles (ADR-016; no status, public itinerary, multi-vendor, templates, realtime or activity).
+LB-24A freezes dual couple (B2C) / planner (B2B) use of the same Wedding workspace on the existing membership model
+(ADR-017; no migration, role, persona or organization): `/app` adapts to 0 / 1 / N weddings, "Mis bodas" lists with
+city, and the account-level copy is persona-neutral (no cross-wedding summaries, switcher or billing yet).
 Don't implement ahead of the current prompt.

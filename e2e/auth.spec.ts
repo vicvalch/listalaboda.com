@@ -38,7 +38,7 @@ test.describe("authentication", () => {
 
     // The wedding is listed on /app.
     await page.getByRole("link", { name: es.app.nav.myWeddings, exact: true }).click();
-    await expect(page.getByRole("link", { name: /Boda de prueba E2E/ })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 3, name: "Boda de prueba E2E" })).toBeVisible();
   });
 
   test("wedding form rejects a blank name with a Spanish field error", async ({ page }) => {

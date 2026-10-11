@@ -611,6 +611,23 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   converted. Minimal projections: no guest names, contacts, tokens, notes, labels or vendor contacts.
 - LB-24C renders and formats; it never recomputes summaries, triggers, levels or order.
 
+## "Mis bodas" UI and wedding switcher (LB-24C, ADR-017 §13, ADR-018 §13)
+
+- `/app` = `loadMyWeddingsPage` (`@/lib/weddings/my-weddings-page`): membership list → `decideWeddingEntry`; only list
+  mode calls `loadWeddingsOverview`, once, with the page's one `new Date()` (7 requests). Empty/redirect/error never pay
+  for it (1 request). Overview `error`/`over_limit` → basic cards from the first list + a notice; never the empty state.
+- The UI never recomputes LB-24B: copy, caps and gating live in pure `@/lib/weddings/overview/presentation`; attention
+  order, levels, `complete`, `allClear` and counts come from the overview. Cards keep the list order.
+- Attention hrefs come only from `attentionPath`. Incomplete data never shows an all-clear; an unavailable domain shows
+  "No disponible", never zero.
+- Money is formatted per currency on the server (`formatMoney`); CRC and USD are never combined; no raw `bigint` reaches
+  a client component.
+- The switcher (`[weddingId]/layout.tsx` + client `WeddingSwitcher`) uses `listMyWeddings` only (one request; never the
+  overview), hides itself with ≤ 1 wedding or a failed read, and is navigation only. The current wedding is the URL's:
+  no cookie, storage, context, store or column remembers one (no active/current/selected wedding state).
+- `switchWeddingPath` (`@/lib/weddings/navigation`) keeps only known sections (home, guests, seating, vendors → list,
+  budget, timeline, site, activity; settings only for an owner target), else home; it always drops queries and hashes.
+
 ## Commands
 
 - `npm run verify`: lint, typecheck, unit tests, build (same as CI)
@@ -676,4 +693,7 @@ city, and the account-level copy is persona-neutral (no cross-wedding summaries,
 LB-24B adds the multi-wedding overview read model and derived attention as a library only (ADR-018): six batched
 caller-RLS requests whatever the wedding count, exact counts against PostgREST's embedded `max_rows` truncation, a
 100-wedding `over_limit`, per-domain `unavailable`, eight closed attention kinds, no persistence, score or UI (LB-24C).
+LB-24C renders it: the operational "Mis bodas" (global attention, rich cards, partial/error/over-limit fallbacks) and a
+URL-only wedding switcher inside weddings that keeps known sections (ADR-017 §13, ADR-018 §13; no migration, quick
+writes, notifications or active-wedding state).
 Don't implement ahead of the current prompt.

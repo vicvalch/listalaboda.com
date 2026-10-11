@@ -112,6 +112,24 @@ Wedding-scoped operational records (as checklist templates already are, ADR-001 
 The account-level surface is "Mis bodas" / a multi-wedding overview. Never Project/Program/Portfolio/PMO language in
 UI, routes, module or type names (Constitution §6, §14). No "workspace", "portfolio" or "tenant" in user-facing Spanish.
 
+### 13. Wedding switcher (LB-24C)
+
+Inside a wedding (`/app/weddings/[weddingId]/layout.tsx`), a slim switcher appears when the caller belongs to 2+
+weddings. It reads the caller's memberships through `listMyWeddings` (ONE request on their RLS client; never the
+overview, never a separate read of the current wedding); if that read fails, the page renders without it. The layout
+is not a security boundary: every page keeps its own `requireUser` + `requireWeddingMembership`.
+
+- **URL-only selection.** "Current" = the URL's `weddingId` matched against that list; an id not in the list shows a
+  neutral "Cambiar de boda" and never a foreign name (a non-member URL is a 404 rendered outside the wedding frame, so
+  no switcher shows there at all). No cookie, local/session storage, context, store, database
+  column or session field remembers a wedding.
+- **Known sections only** (`switchWeddingPath`, `@/lib/weddings/navigation`): home, guests, seating, vendors
+  (`vendors/*` → the target's vendor list), budget, timeline, site and activity are kept; anything else opens the
+  target's home. Query strings and hashes are always dropped.
+- **Settings by the target role:** kept only when the caller owns the target wedding; a collaborator target opens home.
+- Navigation only: the client component receives identity fields (id, name, formatted date, city, role), no overview,
+  attention or money. Search (name/city, accent- and case-insensitive, local) appears from 8 weddings.
+
 ## Accepted risk: symmetric co-owners
 
 Several owners of a wedding have identical authority. Any owner may remove another owner, as long as the final-owner

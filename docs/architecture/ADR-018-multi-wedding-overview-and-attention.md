@@ -157,6 +157,22 @@ LB-24C calls `loadWeddingsOverview` once per request (after `decideWeddingEntry`
 on the server (`formatMoney`) before anything reaches a client component, adds the catalog copy and deep-links with
 `attentionPath`. It may choose display caps. It never recomputes a summary, a trigger, a level or the order.
 
+### 13. LB-24C presentation
+
+- `/app` runs `listMyWeddings` → `decideWeddingEntry` first; only list mode (2+, or `?all=1`) calls
+  `loadWeddingsOverview`, once, with the request's one clock read: 7 requests (1 + 6). Empty, redirect and error stay
+  at 1. The duplicate membership read is deliberate: the first list is the fallback.
+- `error` and `over_limit` render basic cards (name, date, city, role) from the first list plus one info notice:
+  never the empty state, never a partial summary, never a silent slice.
+- Global panel "Lo que necesita atención": only with 2+ weddings and attention; the overview's order, first 6, then
+  "Y {n} temas más…". Never regrouped or resorted. Cards keep the list order.
+- Cards: top 2 items, the rest in a native `<details>` ("Ver {n} más"); 3 facts (checklist, guests, vendors);
+  an unavailable domain reads "No disponible", never zero. Card accent from `attentionLevel` (overdue/due_soon only).
+- No all-clear when incomplete: the page line needs `complete && allClear` and 2+ weddings; a card's needs no attention
+  and no unavailable domain. An incomplete header says "Encontramos pendientes en {n} bodas", never "n de total".
+- Every row's href is `attentionPath` (collaborator setup → home, with copy saying only the organizer can define it).
+  Money is formatted per currency on the server (`formatMoney`); no `bigint` reaches a client component.
+
 ## Consequences
 
 - Measured locally (WSL Docker, 50 weddings × 100 checklist items, 300 guests, 15 vendors with 5 items and 5

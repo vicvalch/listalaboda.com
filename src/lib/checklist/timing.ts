@@ -22,6 +22,19 @@ export function addDaysToIsoDate(isoDate: string, days: number): string | null {
 }
 
 /**
+ * Whole calendar days from `from` to `to` (negative when `to` is earlier).
+ * Returns null for a malformed date. UTC-midnight arithmetic, like above.
+ */
+export function daysBetweenIsoDates(from: string, to: string): number | null {
+  const a = ISO_DATE.exec(from);
+  const b = ISO_DATE.exec(to);
+  if (!a || !b) return null;
+  const [ay, am, ad] = a.slice(1).map(Number);
+  const [by, bm, bd] = b.slice(1).map(Number);
+  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / DAY_MS);
+}
+
+/**
  * The calendar date an item is due, or null when it has none or it can't be
  * known yet (a relative item while the wedding has no date).
  *

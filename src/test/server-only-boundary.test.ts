@@ -41,6 +41,8 @@ describe("server-only boundary", () => {
     "@/lib/vendors/service",
     // LB-23 (ADR-016)
     "@/lib/timeline/service",
+    // LB-24B (ADR-018)
+    "@/lib/weddings/overview/service",
   ])("refuses to load %s outside a server runtime", async (specifier) => {
     await expect(import(/* @vite-ignore */ specifier)).rejects.toThrow(
       /cannot be imported from a Client Component/,

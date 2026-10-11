@@ -25,6 +25,8 @@ export type WeddingSummary = Readonly<{
   name: string;
   weddingDate: string | null;
   city: string | null;
+  /** IANA zone, or null (LB-24B: the overview derives each wedding's local "today" from it). */
+  timeZone: string | null;
   role: WeddingRole;
 }>;
 
@@ -104,7 +106,7 @@ export async function listMyWeddings(
   try {
     const { data, error } = await supabase
       .from("wedding_memberships")
-      .select("role, weddings(id, name, wedding_date, city)")
+      .select("role, weddings(id, name, wedding_date, city, time_zone)")
       .eq("user_id", userId);
     if (error || !data) return null;
 
@@ -117,6 +119,7 @@ export async function listMyWeddings(
                 name: row.weddings.name,
                 weddingDate: row.weddings.wedding_date,
                 city: row.weddings.city,
+                timeZone: row.weddings.time_zone,
                 role: row.role,
               },
             ]

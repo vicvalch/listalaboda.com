@@ -51,6 +51,17 @@ export type TimelineEntry = Readonly<{
   createdAt: string;
 }>;
 
+/**
+ * What the derivations below actually read from an entry. A full
+ * `TimelineEntry` is one; the multi-wedding overview (LB-24B) loads only
+ * this, never location, responsible, notes or vendor contact.
+ */
+export type TimelineSlot = Pick<
+  TimelineEntry,
+  "id" | "title" | "dayOffset" | "startTime" | "durationMinutes" | "phase" | "createdAt"
+> &
+  Readonly<{ vendor: Readonly<{ id: string }> | null }>;
+
 // ----------------------------------------------------------------- spans
 
 export type TimelineSpan = Readonly<{
@@ -61,7 +72,7 @@ export type TimelineSpan = Readonly<{
 }>;
 
 /** The wall-clock span of a timed entry; null when it has no start time. */
-export function entrySpan(entry: TimelineEntry): TimelineSpan | null {
+export function entrySpan(entry: TimelineSlot): TimelineSpan | null {
   if (entry.startTime === null) return null;
   const start = absoluteMinutes(entry.dayOffset, entry.startTime);
   if (start === null) return null;
@@ -73,14 +84,14 @@ export function entrySpan(entry: TimelineEntry): TimelineSpan | null {
  * day 1 23:30 + 30 → day 2 00:00 (the end of the window). Null without a
  * start time or without a duration.
  */
-export function entryEnd(entry: TimelineEntry): WallClockPoint | null {
+export function entryEnd(entry: TimelineSlot): WallClockPoint | null {
   const span = entrySpan(entry);
   return span?.end == null ? null : wallClockPoint(span.end);
 }
 
 // -------------------------------------------------------------- ordering
 
-function compareCreated(a: TimelineEntry, b: TimelineEntry): number {
+function compareCreated(a: TimelineSlot, b: TimelineSlot): number {
   const at = Date.parse(a.createdAt);
   const bt = Date.parse(b.createdAt);
   if (at !== bt && !Number.isNaN(at) && !Number.isNaN(bt)) return at - bt;
@@ -92,7 +103,7 @@ function compareCreated(a: TimelineEntry, b: TimelineEntry): number {
  * The canonical order: day, timed before untimed, start time, then creation
  * (created_at, id) — simultaneous entries keep the order they were added.
  */
-export function compareTimelineEntries(a: TimelineEntry, b: TimelineEntry): number {
+export function compareTimelineEntries(a: TimelineSlot, b: TimelineSlot): number {
   if (a.dayOffset !== b.dayOffset) return a.dayOffset - b.dayOffset;
   const as = entrySpan(a);
   const bs = entrySpan(b);
@@ -103,18 +114,18 @@ export function compareTimelineEntries(a: TimelineEntry, b: TimelineEntry): numb
 }
 
 /** A sorted copy in canonical order; the input is never reordered. */
-export function sortTimelineEntries<T extends TimelineEntry>(entries: readonly T[]): T[] {
+export function sortTimelineEntries<T extends TimelineSlot>(entries: readonly T[]): T[] {
   return [...entries].sort(compareTimelineEntries);
 }
 
-export type TimelineDaySection<T extends TimelineEntry> = Readonly<{
+export type TimelineDaySection<T extends TimelineSlot> = Readonly<{
   dayOffset: TimelineDayOffset;
   /** The calendar date from the CURRENT wedding date, or null without one. */
   date: string | null;
   entries: readonly T[];
 }>;
 
-export type TimelineSections<T extends TimelineEntry> = Readonly<{
+export type TimelineSections<T extends TimelineSlot> = Readonly<{
   /** Timed entries by day, only days that have any, in canonical order. */
   days: readonly TimelineDaySection<T>[];
   /** "Sin hora": entries without a start time, by day then creation. */
@@ -122,7 +133,7 @@ export type TimelineSections<T extends TimelineEntry> = Readonly<{
 }>;
 
 /** Splits the timeline into its day sections and the "Sin hora" bucket. */
-export function timelineSections<T extends TimelineEntry>(
+export function timelineSections<T extends TimelineSlot>(
   entries: readonly T[],
   weddingDate: string | null,
 ): TimelineSections<T> {
@@ -149,7 +160,7 @@ export type TimelineContext = Readonly<{
   now: Date;
 }>;
 
-export type TimelineNow<T extends TimelineEntry> = Readonly<{
+export type TimelineNow<T extends TimelineSlot> = Readonly<{
   /** Wedding-local now, in timeline minutes. */
   minutes: number;
   /** Wedding-local now as "HH:MM". */
@@ -181,7 +192,7 @@ export function timelineNowMinutes(context: TimelineContext): number | null {
  * are never either; moments (no duration) can be next but never current.
  * Past entries are simply past: nothing is "late".
  */
-export function timelineNow<T extends TimelineEntry>(
+export function timelineNow<T extends TimelineSlot>(
   entries: readonly T[],
   context: TimelineContext,
 ): TimelineNow<T> | null {
@@ -203,7 +214,7 @@ export function timelineNow<T extends TimelineEntry>(
 
 // ------------------------------------------------------------- overview
 
-export type TimelineOverview<T extends TimelineEntry> = Readonly<{
+export type TimelineOverview<T extends TimelineSlot> = Readonly<{
   entryCount: number;
   timedCount: number;
   untimedCount: number;
@@ -218,7 +229,7 @@ export type TimelineOverview<T extends TimelineEntry> = Readonly<{
 }>;
 
 /** What the page header (and a future dashboard, LB-24) can show. */
-export function timelineOverview<T extends TimelineEntry>(
+export function timelineOverview<T extends TimelineSlot>(
   entries: readonly T[],
   context?: TimelineContext,
 ): TimelineOverview<T> {

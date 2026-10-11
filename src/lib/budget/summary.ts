@@ -19,28 +19,34 @@ import { VENDOR_CATEGORIES, type VendorCategory, type VendorStatus } from "@/lib
 /** Days after "today" that still count as "Vence pronto" (inclusive). */
 export const DUE_SOON_DAYS = 14;
 
-export type FinanceScheduleItem = Readonly<{ id: string; label: string; amountMinor: number; dueOn: string }>;
+/**
+ * The facts every derivation reads. The label and the note are display text
+ * only: the multi-wedding overview (LB-24B) never loads them.
+ */
+export type ScheduleItemFacts = Readonly<{ id: string; amountMinor: number; dueOn: string }>;
+export type FinanceScheduleItem = ScheduleItemFacts & Readonly<{ label: string }>;
 
-export type FinancePayment = Readonly<{
+export type PaymentFacts = Readonly<{
   id: string;
   amountMinor: number;
   paidOn: string;
   scheduleItemId: string | null;
-  note: string | null;
 }>;
+export type FinancePayment = PaymentFacts & Readonly<{ note: string | null }>;
 
 /** A vendor with its financial children (one embedded read; children carry no currency). */
-export type FinanceVendor = Readonly<{
-  id: string;
-  name: string;
-  category: VendorCategory;
-  customCategory: string | null;
-  status: VendorStatus;
-  currency: VendorCurrency | null;
-  contractedAmountMinor: number | null;
-  scheduleItems: readonly FinanceScheduleItem[];
-  payments: readonly FinancePayment[];
-}>;
+export type FinanceVendor<I extends ScheduleItemFacts = FinanceScheduleItem, P extends PaymentFacts = FinancePayment> =
+  Readonly<{
+    id: string;
+    name: string;
+    category: VendorCategory;
+    customCategory: string | null;
+    status: VendorStatus;
+    currency: VendorCurrency | null;
+    contractedAmountMinor: number | null;
+    scheduleItems: readonly I[];
+    payments: readonly P[];
+  }>;
 
 export type BudgetTotal = Readonly<{ currency: VendorCurrency; amountMinor: number }>;
 export type BudgetAllocation = Readonly<{ category: VendorCategory; currency: VendorCurrency; amountMinor: number }>;
@@ -55,8 +61,8 @@ export type ItemProgress = "pending" | "partial" | "paid";
 /** Only for an item with something left to pay, and only when "today" is known. */
 export type ItemTiming = "overdue" | "due_soon" | "later";
 
-export type ItemFinance = Readonly<{
-  item: FinanceScheduleItem;
+export type ItemFinance<I extends ScheduleItemFacts = FinanceScheduleItem> = Readonly<{
+  item: I;
   paidMinor: bigint;
   remainingMinor: bigint;
   progress: ItemProgress;
@@ -79,11 +85,11 @@ export function dueTiming(dueOn: string, today: string | null): ItemTiming | nul
   return dueOn <= horizon ? "due_soon" : "later";
 }
 
-export function itemFinance(
-  item: FinanceScheduleItem,
-  payments: readonly FinancePayment[],
+export function itemFinance<I extends ScheduleItemFacts>(
+  item: I,
+  payments: readonly PaymentFacts[],
   today: string | null,
-): ItemFinance {
+): ItemFinance<I> {
   const paidMinor = sum(payments.filter((p) => p.scheduleItemId === item.id).map((p) => big(p.amountMinor)));
   const amount = big(item.amountMinor);
   const remainingMinor = amount - paidMinor;
@@ -100,21 +106,21 @@ export function itemFinance(
   return { item, paidMinor, remainingMinor, progress, timing, display };
 }
 
-function compareItems(a: FinanceScheduleItem, b: FinanceScheduleItem): number {
+function compareItems(a: ScheduleItemFacts, b: ScheduleItemFacts): number {
   if (a.dueOn !== b.dueOn) return a.dueOn < b.dueOn ? -1 : 1;
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
 /** Newest first: paid date, then id. */
-function comparePayments(a: FinancePayment, b: FinancePayment): number {
+function comparePayments(a: PaymentFacts, b: PaymentFacts): number {
   if (a.paidOn !== b.paidOn) return a.paidOn < b.paidOn ? 1 : -1;
   return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
 }
 
 // -------------------------------------------------------------------- vendor
 
-export type VendorFinance = Readonly<{
-  vendor: FinanceVendor;
+export type VendorFinance<V extends FinanceVendor<ScheduleItemFacts, PaymentFacts> = FinanceVendor> = Readonly<{
+  vendor: V;
   /** Null without a contracted amount (then nothing can be scheduled or paid). */
   contractedMinor: bigint | null;
   paidMinor: bigint;
@@ -128,9 +134,9 @@ export type VendorFinance = Readonly<{
   recordedFloorMinor: bigint;
   unlinkedPaidMinor: bigint;
   /** Due date order. */
-  items: readonly ItemFinance[];
+  items: readonly ItemFinance<V["scheduleItems"][number]>[];
   /** Newest first. */
-  payments: readonly FinancePayment[];
+  payments: readonly V["payments"][number][];
   hasFinancialRecords: boolean;
 }>;
 
@@ -139,7 +145,10 @@ export type VendorFinance = Readonly<{
  * (Σ items + Σ unlinked ≤ contract, linked ≤ item) the identity
  * `remaining = scheduledRemaining + unscheduled` always holds.
  */
-export function vendorFinance(vendor: FinanceVendor, today: string | null): VendorFinance {
+export function vendorFinance<V extends FinanceVendor<ScheduleItemFacts, PaymentFacts>>(
+  vendor: V,
+  today: string | null,
+): VendorFinance<V> {
   const items = [...vendor.scheduleItems].sort(compareItems).map((item) => itemFinance(item, vendor.payments, today));
   const paidMinor = sum(vendor.payments.map((p) => big(p.amountMinor)));
   const unlinkedPaidMinor = sum(vendor.payments.filter((p) => p.scheduleItemId === null).map((p) => big(p.amountMinor)));
@@ -161,7 +170,9 @@ export function vendorFinance(vendor: FinanceVendor, today: string | null): Vend
 }
 
 /** Booked with a contracted amount (and therefore a currency): what counts as committed. */
-export function isCommitted(vendor: FinanceVendor): vendor is FinanceVendor & { currency: VendorCurrency } {
+export function isCommitted<V extends FinanceVendor<ScheduleItemFacts, PaymentFacts>>(
+  vendor: V,
+): vendor is V & { currency: VendorCurrency } {
   return vendor.status === "booked" && vendor.contractedAmountMinor !== null && vendor.currency !== null;
 }
 
@@ -208,11 +219,11 @@ export type CurrencyBudget = Readonly<{
   categories: readonly CategoryBudget[];
 }>;
 
-export type ScheduledObligation = Readonly<{
+export type ScheduledObligation<I extends ScheduleItemFacts = FinanceScheduleItem> = Readonly<{
   vendorId: string;
   vendorName: string;
   currency: VendorCurrency;
-  entry: ItemFinance;
+  entry: ItemFinance<I>;
 }>;
 
 export type BookedVendorLine = Readonly<{
@@ -237,13 +248,13 @@ export type AttentionVendor = Readonly<{
   paymentCount: number;
 }>;
 
-export type BudgetSummary = Readonly<{
+export type BudgetSummary<I extends ScheduleItemFacts = FinanceScheduleItem> = Readonly<{
   /** One independent block per currency in use (CRC, then USD). Never a combined total. */
   currencies: readonly CurrencyBudget[];
   /** Overdue obligations of non-discarded vendors, earliest first. */
-  overdue: readonly ScheduledObligation[];
+  overdue: readonly ScheduledObligation<I>[];
   /** Due within 14 days (today included), non-discarded vendors, earliest first. */
-  dueSoon: readonly ScheduledObligation[];
+  dueSoon: readonly ScheduledObligation<I>[];
   booked: readonly BookedVendorLine[];
   attention: readonly AttentionVendor[];
   /** Nothing to show: no estimate, no commitment, no schedule, no payment. */
@@ -252,8 +263,8 @@ export type BudgetSummary = Readonly<{
   timingUnavailable: boolean;
 }>;
 
-export type BudgetInput = Readonly<{
-  vendors: readonly FinanceVendor[];
+export type BudgetInput<I extends ScheduleItemFacts = FinanceScheduleItem, P extends PaymentFacts = FinancePayment> = Readonly<{
+  vendors: readonly FinanceVendor<I, P>[];
   totals: readonly BudgetTotal[];
   allocations: readonly BudgetAllocation[];
   today: string | null;
@@ -261,14 +272,19 @@ export type BudgetInput = Readonly<{
 
 const nameCollator = new Intl.Collator("es", { sensitivity: "base" });
 
-function compareObligations(a: ScheduledObligation, b: ScheduledObligation): number {
+function compareObligations(a: ScheduledObligation<ScheduleItemFacts>, b: ScheduledObligation<ScheduleItemFacts>): number {
   if (a.entry.item.dueOn !== b.entry.item.dueOn) return a.entry.item.dueOn < b.entry.item.dueOn ? -1 : 1;
   return nameCollator.compare(a.vendorName, b.vendorName) || compareItems(a.entry.item, b.entry.item);
 }
 
-export function summarizeBudget({ vendors, totals, allocations, today }: BudgetInput): BudgetSummary {
+export function summarizeBudget<I extends ScheduleItemFacts, P extends PaymentFacts>({
+  vendors,
+  totals,
+  allocations,
+  today,
+}: BudgetInput<I, P>): BudgetSummary<I> {
   const finances = vendors
-    .filter((vendor): vendor is FinanceVendor & { currency: VendorCurrency } => vendor.currency !== null)
+    .filter((vendor): vendor is FinanceVendor<I, P> & { currency: VendorCurrency } => vendor.currency !== null)
     .map((vendor) => ({ vendor, finance: vendorFinance(vendor, today) }));
 
   const currencies = VENDOR_CURRENCIES.flatMap((currency): CurrencyBudget[] => {

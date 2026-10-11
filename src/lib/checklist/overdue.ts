@@ -22,7 +22,10 @@ export type PlanningDateContext = Readonly<{
   today: string | null;
 }>;
 
-export function isOverdue(item: ChecklistItem, { weddingDate, today }: PlanningDateContext): boolean {
+export function isOverdue(
+  item: Pick<ChecklistItem, "status" | "timing">,
+  { weddingDate, today }: PlanningDateContext,
+): boolean {
   if (item.status !== "pending" || today === null) return false;
   const due = effectiveDueDate(item.timing, weddingDate);
   return due !== null && due < today;

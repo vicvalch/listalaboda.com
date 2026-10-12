@@ -162,11 +162,10 @@ test.describe("account entry (/app)", () => {
     await expect(me.page.getByRole("heading", { level: 1, name: copy.title })).toBeVisible();
     const cards = me.page.getByTestId("wedding-card");
     // Soonest first, undated last.
-    await expect(cards.locator("h2")).toHaveText(["Boda B de un cliente", "Boda A", "Boda C sin fecha"]);
-    await expect(cards.nth(0)).toContainText("2 de marzo de 2027");
-    await expect(cards.nth(0)).not.toContainText("·");
+    await expect(cards.locator("h3")).toHaveText(["Boda B de un cliente", "Boda A", "Boda C sin fecha"]);
+    await expect(cards.nth(0).getByTestId("wedding-card-date")).toHaveText("2 de marzo de 2027");
     await expect(cards.nth(0).getByTestId("wedding-card-role")).toHaveText(copy.roleCollaborator);
-    await expect(cards.nth(1)).toContainText("14 de agosto de 2027 · Escazú");
+    await expect(cards.nth(1).getByTestId("wedding-card-date")).toHaveText("14 de agosto de 2027 · Escazú");
     await expect(cards.nth(1).getByTestId("wedding-card-role")).toHaveText(copy.roleOwner);
     await expect(cards.nth(2)).toContainText(copy.noDate);
     await expect(cards.nth(2).getByTestId("wedding-card-role")).toHaveText(copy.roleOwner);
@@ -174,9 +173,9 @@ test.describe("account entry (/app)", () => {
     await expect(me.page.getByText("Cartago")).toHaveCount(0);
 
     for (const [index, id] of [b, a, c].entries()) {
-      await expect(cards.nth(index)).toHaveAttribute("href", `/app/weddings/${id}`);
+      await expect(cards.nth(index).locator("h3 a")).toHaveAttribute("href", `/app/weddings/${id}`);
     }
-    await cards.nth(1).click();
+    await cards.nth(1).locator("h3 a").click();
     await expect(me.page).toHaveURL(WEDDING_URL(a));
 
     // The foreign wedding is still a 404 by direct URL, whatever /app showed.

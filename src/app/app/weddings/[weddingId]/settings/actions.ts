@@ -55,7 +55,8 @@ export async function updateWeddingSettingsAction(
     return { ok: false, formError: common.unexpectedError, values };
   }
 
-  revalidatePath(weddingPath);
+  // "layout": the wedding frame (switcher) shows the name and date too.
+  revalidatePath(weddingPath, "layout");
   revalidatePath(settingsPath);
   // A fixed flag, no user data: the wedding page shows "saved".
   redirect(`${weddingPath}?saved=settings`);

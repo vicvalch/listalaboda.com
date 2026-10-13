@@ -6,13 +6,13 @@
  * markup and classes. Nothing here is a CSS, class name, HTML or URL string.
  *
  * A key is never removed, so a stored choice always resolves. Classic is
- * today's public page, unchanged. Editorial and Minimal exist in code only
- * (CP2): nothing stores or selects a theme yet, so every public site is still
- * Classic.
+ * today's public page, unchanged. Editorial, Minimal, Romantic and Tropical
+ * exist in code only (CP2, CP3): nothing stores or selects a theme yet, so
+ * every public site is still Classic.
  */
 
 /** Closed set of theme keys. Becomes the database enum once designs are stored (CP4). */
-export const WEDDING_SITE_THEME_KEYS = ["classic", "editorial", "minimal"] as const;
+export const WEDDING_SITE_THEME_KEYS = ["classic", "editorial", "minimal", "romantic", "tropical"] as const;
 
 export type WeddingSiteThemeKey = (typeof WEDDING_SITE_THEME_KEYS)[number];
 
@@ -24,16 +24,20 @@ export const DEFAULT_WEDDING_SITE_THEME: WeddingSiteThemeKey = "classic";
  * are site palettes defined in `globals.css`, each with a light and a dark
  * variant that follows the visitor's preference.
  */
-export type SitePalette = "app" | "ivory" | "mono";
+export type SitePalette = "app" | "ivory" | "mono" | "rose" | "sand";
 
-/** Font pairing: `system` inherits the app font; `serif` sets serif text with sans labels; `sans` is all sans. */
-export type Typography = "system" | "serif" | "sans";
+/**
+ * Font pairing: `system` inherits the app font; `serif` sets serif text with
+ * sans labels; `sans` is all sans; `italic` is serif text with italic serif
+ * headings; `mixed` is serif headings over sans text.
+ */
+export type Typography = "system" | "serif" | "sans" | "italic" | "mixed";
 
 /** Size, weight and tracking of the name and the section headings. */
 export type HeadingScale = "regular" | "display" | "compact";
 
 /** How the site's opening (name, date, city) is laid out. */
-export type HeroVariant = "simple" | "editorial" | "grid";
+export type HeroVariant = "simple" | "editorial" | "grid" | "framed" | "banner";
 
 /** How wide the site's column is. */
 export type ContentWidth = "regular" | "narrow" | "wide";
@@ -45,10 +49,10 @@ export type Density = "regular" | "airy" | "compact";
 export type Alignment = "center" | "start";
 
 /** How each content section is drawn. */
-export type SectionStyle = "plain" | "editorial" | "ruled";
+export type SectionStyle = "plain" | "editorial" | "ruled" | "centered" | "tiles";
 
 /** A static decoration drawn by the renderer (never an asset or URL). */
-export type Ornament = "none" | "rule";
+export type Ornament = "none" | "rule" | "flourish" | "frond";
 
 export type ThemeDefinition = Readonly<{
   key: WeddingSiteThemeKey;
@@ -117,7 +121,49 @@ const MINIMAL: ThemeDefinition = {
   ornament: "none",
 };
 
-export const THEME_REGISTRY: ThemeRegistry = { classic: CLASSIC, editorial: EDITORIAL, minimal: MINIMAL };
+/**
+ * Romantic: warm and graceful. Italic serif headings on a soft rose-paper
+ * palette, the opening inside a fine double frame with a drawn flourish, and
+ * centered sections with plenty of air. No hearts, florals or script fonts.
+ */
+const ROMANTIC: ThemeDefinition = {
+  key: "romantic",
+  palette: "rose",
+  typography: "italic",
+  headingScale: "display",
+  hero: "framed",
+  width: "regular",
+  density: "airy",
+  alignment: "center",
+  sectionStyle: "centered",
+  ornament: "flourish",
+};
+
+/**
+ * Tropical: a fresh destination look. Sand and deep botanical green with a
+ * terracotta accent, the opening on a solid green band with a line-drawn
+ * frond, serif headings over sans text and sections as tinted tiles.
+ */
+const TROPICAL: ThemeDefinition = {
+  key: "tropical",
+  palette: "sand",
+  typography: "mixed",
+  headingScale: "display",
+  hero: "banner",
+  width: "regular",
+  density: "compact",
+  alignment: "start",
+  sectionStyle: "tiles",
+  ornament: "frond",
+};
+
+export const THEME_REGISTRY: ThemeRegistry = {
+  classic: CLASSIC,
+  editorial: EDITORIAL,
+  minimal: MINIMAL,
+  romantic: ROMANTIC,
+  tropical: TROPICAL,
+};
 
 export function isWeddingSiteThemeKey(value: unknown): value is WeddingSiteThemeKey {
   return typeof value === "string" && (WEDDING_SITE_THEME_KEYS as readonly string[]).includes(value);

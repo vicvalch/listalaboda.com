@@ -6,7 +6,7 @@ import { expect, test, type Page } from "@playwright/test";
 import type { WeddingSiteThemeKey } from "../src/lib/wedding-site/design/themes";
 import { THEME_FIXTURES } from "../src/test/fixtures/wedding-site-themes";
 
-// ADR-019 CP2: Editorial and Minimal exist in code only. Nothing in the app
+// ADR-019 CP2/CP3: the non-Classic themes exist in code only. Nothing in the app
 // stores or selects a theme, so no route can draw them. Instead, this check
 // takes the real `WeddingSite` markup for each fixture (rendered by Vitest
 // into src/test/__golden__/wedding-site-themes/, which fails if the renderer's
@@ -14,23 +14,54 @@ import { THEME_FIXTURES } from "../src/test/fixtures/wedding-site-themes";
 // production build's own stylesheet, taken from a real /boda response.
 // Nothing test-only ships with the app.
 
-type Palette = { background: string; foreground: string; font: (family: string) => boolean };
+/** Page background, the couple's name color and the section text color. */
+type Palette = { background: string; name: string; text: string };
+type Family = (family: string) => boolean;
+type ThemeExpectation = {
+  /** Fonts of the name (and section headings) and of the section text. */
+  heading: Family;
+  body: Family;
+  italicHeading: boolean;
+  light: Palette;
+  dark: Palette;
+};
 
-const serif = (family: string) => family.startsWith("ui-serif, Georgia") && family.endsWith("serif");
-const sans = (family: string) => !family.includes("Georgia") && family.includes("sans-serif");
+const serif: Family = (family) => family.startsWith("ui-serif, Georgia") && family.endsWith("serif");
+const sans: Family = (family) => !family.includes("Georgia") && family.includes("sans-serif");
 
-const THEMES: Record<Exclude<WeddingSiteThemeKey, "classic">, Record<"light" | "dark", Palette>> = {
+const THEMES: Record<Exclude<WeddingSiteThemeKey, "classic">, ThemeExpectation> = {
   editorial: {
-    light: { background: "rgb(251, 248, 242)", foreground: "rgb(31, 27, 22)", font: serif },
-    dark: { background: "rgb(21, 19, 15)", foreground: "rgb(237, 230, 217)", font: serif },
+    heading: serif,
+    body: serif,
+    italicHeading: false,
+    light: { background: "rgb(251, 248, 242)", name: "rgb(31, 27, 22)", text: "rgb(31, 27, 22)" },
+    dark: { background: "rgb(21, 19, 15)", name: "rgb(237, 230, 217)", text: "rgb(237, 230, 217)" },
   },
   minimal: {
-    light: { background: "rgb(255, 255, 255)", foreground: "rgb(17, 17, 17)", font: sans },
-    dark: { background: "rgb(15, 15, 16)", foreground: "rgb(242, 242, 242)", font: sans },
+    heading: sans,
+    body: sans,
+    italicHeading: false,
+    light: { background: "rgb(255, 255, 255)", name: "rgb(17, 17, 17)", text: "rgb(17, 17, 17)" },
+    dark: { background: "rgb(15, 15, 16)", name: "rgb(242, 242, 242)", text: "rgb(242, 242, 242)" },
+  },
+  romantic: {
+    heading: serif,
+    body: serif,
+    italicHeading: true,
+    light: { background: "rgb(250, 245, 241)", name: "rgb(43, 29, 31)", text: "rgb(43, 29, 31)" },
+    dark: { background: "rgb(28, 21, 23)", name: "rgb(242, 232, 229)", text: "rgb(242, 232, 229)" },
+  },
+  tropical: {
+    heading: serif,
+    body: sans,
+    italicHeading: false,
+    // The name sits on the green band, in the band's text color.
+    light: { background: "rgb(245, 239, 227)", name: "rgb(245, 239, 227)", text: "rgb(31, 42, 36)" },
+    dark: { background: "rgb(17, 24, 20)", name: "rgb(235, 231, 218)", text: "rgb(235, 231, 218)" },
   },
 };
 
-const WIDTHS = [360, 390, 1280] as const;
+const WIDTHS = [360, 390, 768, 1280] as const;
 
 /** The production stylesheets, as absolute URLs, from a real public-site response. */
 async function appStylesheets(page: Page): Promise<string[]> {
@@ -53,8 +84,8 @@ function documentFor(stylesheets: string[], fixture: string, theme: WeddingSiteT
   );
 }
 
-for (const [theme, palettes] of Object.entries(THEMES) as Array<[keyof typeof THEMES, (typeof THEMES)["editorial"]]>) {
-  test(`${theme}: every fixture fits 360, 390 and 1280 px in light and dark, with the theme's palette and type`, async ({
+for (const [theme, expected] of Object.entries(THEMES) as Array<[keyof typeof THEMES, ThemeExpectation]>) {
+  test(`${theme}: every fixture fits 360, 390, 768 and 1280 px in light and dark, readable and with the theme's palette and type`, async ({
     browser,
     baseURL,
   }, testInfo) => {
@@ -78,6 +109,9 @@ for (const [theme, palettes] of Object.entries(THEMES) as Array<[keyof typeof TH
           await page.setContent(documentFor(stylesheets, name, theme), { waitUntil: "load" });
 
           await expect(page.getByRole("heading", { level: 1, name: site.name }), label).toBeVisible();
+          // Heading outline: the couple, then one heading per section; decorations add none.
+          await expect(page.getByRole("heading"), label).toHaveCount(1 + site.sections.length);
+          await expect(page.getByRole("heading", { level: 2 }), label).toHaveCount(site.sections.length);
           const kinds = await page
             .locator('[data-testid="public-site-section"]')
             .evaluateAll((sections) => sections.map((section) => section.getAttribute("data-kind")));
@@ -93,20 +127,61 @@ for (const [theme, palettes] of Object.entries(THEMES) as Array<[keyof typeof TH
               .map((element) => element.tagName.toLowerCase());
             const main = document.querySelector("main") as HTMLElement;
             const h1 = document.querySelector("h1") as HTMLElement;
+            const body = document.querySelector('[data-testid="public-site-section"] p') as HTMLElement;
+
+            // WCAG contrast of every element that holds text, against the
+            // nearest painted background behind it.
+            const rgb = (value: string) => (value.match(/[\d.]+/g) ?? []).map(Number);
+            const luminance = ([r, g, b]: number[]) =>
+              [r, g, b]
+                .map((v) => v / 255)
+                .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+                .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+            const backgroundOf = (element: Element | null): number[] => {
+              for (let node = element; node; node = node.parentElement) {
+                const color = rgb(getComputedStyle(node).backgroundColor);
+                if (color.length === 3 || (color.length === 4 && color[3] > 0)) return color;
+              }
+              return [255, 255, 255];
+            };
+            const lowContrast = [...document.querySelectorAll("main *")]
+              .filter((element) => [...element.childNodes].some((n) => n.nodeType === 3 && n.textContent?.trim()))
+              .map((element) => {
+                const [a, b] = [luminance(rgb(getComputedStyle(element).color)), luminance(backgroundOf(element))];
+                return { element: element.tagName.toLowerCase(), ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) };
+              })
+              .filter(({ ratio }) => ratio < 4.5)
+              .map(({ element, ratio }) => `${element} ${ratio.toFixed(2)}`);
+
+            const textElements = [...document.querySelectorAll("main h1, main h2, main p, main time")];
             return {
               scrolls: root.scrollWidth > root.clientWidth,
               overflowing,
               background: getComputedStyle(main).backgroundColor,
-              foreground: getComputedStyle(h1).color,
-              font: getComputedStyle(h1).fontFamily,
+              name: getComputedStyle(h1).color,
+              text: getComputedStyle(body).color,
+              headingFont: getComputedStyle(h1).fontFamily,
+              headingStyle: getComputedStyle(h1).fontStyle,
+              bodyFont: getComputedStyle(body).fontFamily,
+              lowContrast,
+              unselectable: textElements.filter((element) => getComputedStyle(element).userSelect === "none").length,
+              decorationsExposed: [...document.querySelectorAll("main svg")].filter(
+                (svg) => svg.getAttribute("aria-hidden") !== "true",
+              ).length,
               fillsViewport: main.getBoundingClientRect().height >= window.innerHeight - 1,
             };
           });
           expect(layout.scrolls, `${label}: no horizontal scroll`).toBe(false);
           expect(layout.overflowing, `${label}: nothing sticks out of the screen`).toEqual([]);
-          expect(layout.background, label).toBe(palettes[colorScheme].background);
-          expect(layout.foreground, label).toBe(palettes[colorScheme].foreground);
-          expect(palettes[colorScheme].font(layout.font), `${label}: ${layout.font}`).toBe(true);
+          expect(layout.background, label).toBe(expected[colorScheme].background);
+          expect(layout.name, label).toBe(expected[colorScheme].name);
+          expect(layout.text, label).toBe(expected[colorScheme].text);
+          expect(expected.heading(layout.headingFont), `${label}: ${layout.headingFont}`).toBe(true);
+          expect(expected.body(layout.bodyFont), `${label}: ${layout.bodyFont}`).toBe(true);
+          expect(layout.headingStyle, label).toBe(expected.italicHeading ? "italic" : "normal");
+          expect(layout.lowContrast, `${label}: every text meets WCAG AA (4.5:1)`).toEqual([]);
+          expect(layout.unselectable, `${label}: text stays selectable`).toBe(0);
+          expect(layout.decorationsExposed, `${label}: ornaments are hidden from assistive technology`).toBe(0);
           expect(layout.fillsViewport, `${label}: the theme's background covers the page`).toBe(true);
 
           await page.screenshot({ path: testInfo.outputPath(`${theme}-${colorScheme}-${width}-${name}.png`), fullPage: true });

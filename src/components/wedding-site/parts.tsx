@@ -48,6 +48,40 @@ export function Ornament({ kind, alignment }: { kind: OrnamentKind; alignment: A
           <path d="M60 1L64 5L60 9L56 5Z" fill="currentColor" />
         </svg>
       );
+    case "flourish":
+      return (
+        <svg
+          aria-hidden="true"
+          focusable="false"
+          viewBox="0 0 160 16"
+          fill="none"
+          className={cx("block h-4 w-40 text-accent", alignment === "center" && "mx-auto")}
+          data-testid="public-site-ornament"
+        >
+          <path d="M6 8C30 8 46 3 68 8M154 8C130 8 114 3 92 8" stroke="currentColor" strokeWidth="1" />
+          <path d="M80 3L85 8L80 13L75 8Z" stroke="currentColor" strokeWidth="1" />
+          <circle cx="71" cy="8" r="1.25" fill="currentColor" />
+          <circle cx="89" cy="8" r="1.25" fill="currentColor" />
+        </svg>
+      );
+    case "frond":
+      return (
+        <svg
+          aria-hidden="true"
+          focusable="false"
+          viewBox="0 0 72 24"
+          fill="none"
+          className={cx("block h-6 w-18 text-(--site-ornament)", alignment === "center" && "mx-auto")}
+          data-testid="public-site-ornament"
+        >
+          <path d="M4 12C20 1 48 1 68 12C48 23 20 23 4 12Z" stroke="currentColor" strokeWidth="1.25" />
+          <path
+            d="M4 12H60M22 12L30 5.5M22 12L30 18.5M36 12L44 5M36 12L44 19M50 12L56 7.5M50 12L56 16.5"
+            stroke="currentColor"
+            strokeWidth="1"
+          />
+        </svg>
+      );
   }
 }
 

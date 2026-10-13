@@ -53,6 +53,15 @@ const LONG_NAME = siteFrom([
   }),
 ]);
 
+/** One very long surname with no break opportunity, in the name itself. */
+const LONG_WORD = siteFrom([
+  row({
+    wedding_name: "Ana Wolfeschlegelsteinhausenbergerdorffvoralternwarengewissenhaft & Luis",
+    section_kind: "intro",
+    section_body: "Bienvenidos.",
+  }),
+]);
+
 const NO_DATE = siteFrom([
   row({ wedding_date: null, section_kind: "ceremony", section_body: "Capilla del Carmen." }),
   row({ wedding_date: null, section_kind: "rsvp" }),
@@ -80,6 +89,7 @@ const MULTILINE = siteFrom([
 export const THEME_FIXTURES = {
   full: FULL,
   "long-name": LONG_NAME,
+  "long-word": LONG_WORD,
   "no-date": NO_DATE,
   "long-city": LONG_CITY,
   multiline: MULTILINE,

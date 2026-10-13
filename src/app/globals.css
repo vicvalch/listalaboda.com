@@ -77,6 +77,29 @@
   --focus: #111111;
 }
 
+[data-site-palette="rose"] {
+  --background: #faf5f1;
+  --foreground: #2b1d1f;
+  --muted: #6c5859;
+  --border: #e3d2cb;
+  --accent: #8a4550;
+  --focus: #8a4550;
+}
+
+/* Sand also has its own band (the opening) and ornament colors. */
+[data-site-palette="sand"] {
+  --background: #f5efe3;
+  --foreground: #1f2a24;
+  --muted: #59605a;
+  --border: #dcd3c0;
+  --accent: #2a5442;
+  --accent-soft: #ebe3d1;
+  --focus: #2a5442;
+  --site-band: #23483a;
+  --site-band-text: #f5efe3;
+  --site-ornament: #c9774d;
+}
+
 @media (prefers-color-scheme: dark) {
   [data-site-palette="ivory"] {
     --background: #15130f;
@@ -94,6 +117,28 @@
     --border: #2c2c2e;
     --accent: #f2f2f2;
     --focus: #f2f2f2;
+  }
+
+  [data-site-palette="rose"] {
+    --background: #1c1517;
+    --foreground: #f2e8e5;
+    --muted: #bba8a8;
+    --border: #3f3032;
+    --accent: #e0a7ae;
+    --focus: #e0a7ae;
+  }
+
+  [data-site-palette="sand"] {
+    --background: #111814;
+    --foreground: #ebe7da;
+    --muted: #a7ad9f;
+    --border: #2b3831;
+    --accent: #9cc3a9;
+    --accent-soft: #19231e;
+    --focus: #9cc3a9;
+    --site-band: #1f3d31;
+    --site-band-text: #ebe7da;
+    --site-ornament: #d08b62;
   }
 }
 

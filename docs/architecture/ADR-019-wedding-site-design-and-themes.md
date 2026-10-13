@@ -1,6 +1,6 @@
 # ADR-019 — Wedding Site Design and Themes
 
-Status: Accepted (Wedding site themes, CP0–CP2) · Date: 2026-10-12
+Status: Accepted (Wedding site themes, CP0–CP3) · Date: 2026-10-12
 Related: [Product Constitution §8, §10.9](../product/PRODUCT-CONSTITUTION.md), [ADR-001](ADR-001-product-domain-and-tenancy.md),
 [ADR-002 §7](ADR-002-auth-and-security-boundaries.md), [ADR-003](ADR-003-donor-extraction-policy.md),
 [ADR-017](ADR-017-dual-couple-planner-use.md)
@@ -40,7 +40,18 @@ Ornaments are static inline SVG in the renderer.
 A palette is a set of CSS variables in `globals.css`, scoped by `data-site-palette` on the page's `<main>`, with a light
 and a dark variant that follows the visitor's preference. Inside the page it overrides the app color tokens, so the
 same token classes draw every theme. Fonts are system stacks; self-hosted web fonts would be a separate decision, and
-never a runtime third-party request.
+never a runtime third-party request. Every theme's text meets WCAG AA (4.5:1) in both variants, and decorations are
+`aria-hidden` and carry no information.
+
+The initial curated set (CP3) and its values:
+
+| Theme | Palette | Typography | Heading scale | Hero | Width | Density | Alignment | Sections | Ornament |
+|---|---|---|---|---|---|---|---|---|---|
+| Classic | `app` | `system` | `regular` | `simple` | `regular` | `regular` | `center` | `plain` | `none` |
+| Editorial | `ivory` | `serif` | `display` | `editorial` | `narrow` | `airy` | `center` | `editorial` | `rule` |
+| Minimal | `mono` | `sans` | `compact` | `grid` | `wide` | `compact` | `start` | `ruled` | `none` |
+| Romantic | `rose` | `italic` | `display` | `framed` | `regular` | `airy` | `center` | `centered` | `flourish` |
+| Tropical | `sand` | `mixed` | `display` | `banner` | `regular` | `compact` | `start` | `tiles` | `frond` |
 
 Keys are never removed (a retired theme still renders), so a stored choice always resolves. Theme refinements apply to
 every wedding using the theme; a breaking redesign ships as a new key. No theme version is stored until pinning is
@@ -107,7 +118,8 @@ section stays guidance only in every theme: no form, guest lookup, `/rsvp` link 
   the LB-10 page. No migration.
 - **CP2**: the shared presentation vocabulary and primitives, and the Editorial and Minimal themes, in code only. The
   public page still always renders Classic: nothing stores or selects a theme. No migration.
-- **Later**: further themes, the `wedding_site_designs` migration and projection change, the organizer selector and
+- **CP3**: the Romantic and Tropical themes, completing the initial set of five, in code only. No migration.
+- **Later**: the `wedding_site_designs` migration and projection change, the organizer selector and
   preview, then customization. Each is reviewed separately.
 
 ## Rejected alternatives

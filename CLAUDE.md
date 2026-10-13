@@ -650,9 +650,10 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - Deferred, each needing an explicit decision: images/media (no uploads, storage, image URLs or media schema; own ADR),
   section reordering (amends the LB-10 fixed order), planner presets (copy into a wedding, never live-link), custom
   design (closed, versioned schema; never an arbitrary node tree).
-- CP2 state: `classic`, `editorial` and `minimal` exist in code; the public page always resolves Classic (nothing is
-  persisted or selected; Editorial/Minimal are reachable only from test fixtures), no migration. `wedding_site_designs`,
-  other themes, the selector, preview and customization come in later checkpoints.
+- Every theme's text meets WCAG AA (4.5:1) in light and dark; decorations are `aria-hidden` and carry no information.
+- CP3 state: the five themes (`classic`, `editorial`, `minimal`, `romantic`, `tropical`) exist in code; the public page
+  always resolves Classic (nothing is persisted or selected; the others are reachable only from test fixtures), no
+  migration. `wedding_site_designs`, the selector, preview and customization come in later checkpoints.
 
 ## Commands
 
@@ -725,5 +726,6 @@ writes, notifications or active-wedding state).
 Wedding site themes (ADR-019) CP0/CP1 adds the theme engine (types, registry, resolver, `WeddingSite` renderer) with
 Classic as the only theme, identical to the LB-10 page (no migration, persistence, selector or other themes yet).
 CP2 adds the shared presentation vocabulary and primitives and the Editorial and Minimal themes, in code only (the
-public page still always renders Classic; no migration, persistence, selector or preview).
+public page still always renders Classic; no migration, persistence, selector or preview). CP3 adds the Romantic and
+Tropical themes, completing the initial set of five, in code only.
 Don't implement ahead of the current prompt.

@@ -29,13 +29,20 @@ export const PALETTE_SURFACE: Record<SitePalette, string> = {
   app: "",
   ivory: "bg-background text-foreground",
   mono: "bg-background text-foreground",
+  rose: "bg-background text-foreground",
+  sand: "bg-background text-foreground",
 };
 
-/** `body` is the text font of the whole page; `label` is for small details lines and the footer. */
-export const TYPOGRAPHY: Record<Typography, { body: string; label: string }> = {
-  system: { body: "", label: "" },
-  serif: { body: "font-serif", label: "font-sans" },
-  sans: { body: "font-sans", label: "" },
+/**
+ * `body` is the text font of the whole page; `heading` is added to the name
+ * and the section headings; `label` is for small details lines and the footer.
+ */
+export const TYPOGRAPHY: Record<Typography, { body: string; heading: string; label: string }> = {
+  system: { body: "", heading: "", label: "" },
+  serif: { body: "font-serif", heading: "", label: "font-sans" },
+  sans: { body: "font-sans", heading: "", label: "" },
+  italic: { body: "font-serif", heading: "italic", label: "" },
+  mixed: { body: "font-sans", heading: "font-serif", label: "" },
 };
 
 export const HEADING_SCALE: Record<HeadingScale, { name: string; section: string }> = {
@@ -52,6 +59,15 @@ export const HEADING_SCALE: Record<HeadingScale, { name: string; section: string
     section: "text-xs font-semibold tracking-[0.16em] break-words uppercase",
   },
 };
+
+/** The couple's name and the section headings: the scale plus the pairing's heading style. */
+export function nameClass(scale: HeadingScale, typography: Typography): string {
+  return cx(HEADING_SCALE[scale].name, TYPOGRAPHY[typography].heading);
+}
+
+export function sectionHeadingClass(scale: HeadingScale, typography: Typography): string {
+  return cx(HEADING_SCALE[scale].section, TYPOGRAPHY[typography].heading);
+}
 
 export const WIDTH: Record<ContentWidth, string> = {
   regular: "max-w-2xl",

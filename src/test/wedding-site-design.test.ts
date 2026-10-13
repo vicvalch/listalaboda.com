@@ -26,22 +26,22 @@ function classValues(html: string): string[] {
 }
 
 describe("theme registry", () => {
-  it("contains Classic (the default), Editorial and Minimal, one definition per key", () => {
+  it("contains Classic (the default), Editorial, Minimal, Romantic and Tropical, one definition per key", () => {
     expect(DEFAULT_WEDDING_SITE_THEME).toBe("classic");
-    expect([...WEDDING_SITE_THEME_KEYS].sort()).toEqual(["classic", "editorial", "minimal"]);
+    expect([...WEDDING_SITE_THEME_KEYS].sort()).toEqual(["classic", "editorial", "minimal", "romantic", "tropical"]);
     expect(Object.keys(THEME_REGISTRY).sort()).toEqual([...WEDDING_SITE_THEME_KEYS].sort());
     for (const key of WEDDING_SITE_THEME_KEYS) expect(THEME_REGISTRY[key].key).toBe(key);
   });
 
   it("recognizes only its own keys", () => {
     for (const key of WEDDING_SITE_THEME_KEYS) expect(isWeddingSiteThemeKey(key)).toBe(true);
-    for (const value of ["", "Classic", "EDITORIAL", "romantic", "tropical", "minimal ", "__proto__", "toString", null, undefined, 1]) {
+    for (const value of ["", "Classic", "EDITORIAL", "Romantic", "boho", "tropical ", "__proto__", "toString", null, undefined, 1]) {
       expect(isWeddingSiteThemeKey(value)).toBe(false);
     }
   });
 
   it("no key or an unknown key is Classic, never an error", () => {
-    for (const key of [null, undefined, "", "unknown", "romantic", "__proto__", "constructor", "<script>"]) {
+    for (const key of [null, undefined, "", "unknown", "garden", "__proto__", "constructor", "<script>"]) {
       expect(getTheme(key).key).toBe("classic");
       expect(resolveSiteDesign(key)).toEqual(resolveSiteDesign("classic"));
     }
@@ -70,7 +70,8 @@ describe("theme registry", () => {
       expect(themeKey).toBe(definitionKey);
       expect(values).toEqual(definition);
     }
-    expect(resolveSiteDesign("editorial")).not.toEqual(resolveSiteDesign("minimal"));
+    const designs = WEDDING_SITE_THEME_KEYS.map((key) => JSON.stringify({ ...resolveSiteDesign(key), themeKey: "" }));
+    expect(new Set(designs).size).toBe(WEDDING_SITE_THEME_KEYS.length);
   });
 
   it("a theme holds closed presentation values only, no free text", () => {
@@ -100,12 +101,22 @@ describe("theme identity", () => {
     expect(html("minimal")).not.toContain("public-site-ornament");
   });
 
+  it("Romantic uses its rose palette and its flourish, hidden from assistive technology", () => {
+    expect(html("romantic")).toContain('data-site-palette="rose"');
+    expect(html("romantic")).toMatch(/<svg aria-hidden="true" focusable="false"[^>]*data-testid="public-site-ornament"/);
+  });
+
+  it("Tropical uses its sand palette and its frond, hidden from assistive technology", () => {
+    expect(html("tropical")).toContain('data-site-palette="sand"');
+    expect(html("tropical")).toMatch(/<svg aria-hidden="true" focusable="false"[^>]*data-testid="public-site-ornament"/);
+  });
+
   it("the themes draw the same content differently", () => {
-    const [classic, editorial, minimal] = (["classic", "editorial", "minimal"] as const).map(html);
-    expect(new Set([classic, editorial, minimal]).size).toBe(3);
+    const pages = WEDDING_SITE_THEME_KEYS.map(html);
+    expect(new Set(pages).size).toBe(WEDDING_SITE_THEME_KEYS.length);
+    // Theme presentation adds no text: every theme says exactly what Classic says.
     const text = (markup: string) => markup.replace(/<svg[\s\S]*?<\/svg>/g, "").replace(/<[^>]+>/g, "");
-    expect(text(editorial)).toBe(text(classic));
-    expect(text(minimal)).toBe(text(classic));
+    for (const page of pages) expect(text(page)).toBe(text(html("classic")));
   });
 });
 
@@ -117,6 +128,17 @@ describe.each(WEDDING_SITE_THEME_KEYS)("%s renderer", (key) => {
     expect(html).toMatch(/Sofía &amp; Andrés<\/h1>/);
     expect(html).toContain('<time dateTime="2027-02-14">14 de febrero de 2027</time>');
     expect(html).toContain("San José");
+  });
+
+  it("has one h1 (the couple) and one h2 per section, and hides every decoration from assistive technology", () => {
+    const html = render(FULL, key);
+    expect(html.match(/<h1[\s>]/g)).toHaveLength(1);
+    expect(html.match(/<h2[\s>]/g)).toHaveLength(FULL.sections.length);
+    expect(html).not.toMatch(/<h[3-6][\s>]/);
+    for (const svg of html.match(/<svg[^>]*>/g) ?? []) expect(svg).toContain('aria-hidden="true"');
+    // Decorative elements are empty and hidden; nothing with text is hidden.
+    for (const empty of html.match(/<span[^>]*><\/span>/g) ?? []) expect(empty).toContain('aria-hidden="true"');
+    expect(html).not.toMatch(/aria-hidden="true"[^>]*>[^<]/);
   });
 
   it("leaves out the details line when there is no date and no city", () => {
@@ -156,9 +178,12 @@ describe.each(WEDDING_SITE_THEME_KEYS)("%s renderer", (key) => {
     expect(html).toContain('data-kind="faq"');
   });
 
-  it("keeps long names, long cities and multi-line text whole", () => {
+  it("keeps long names, long words, long cities and multi-line text whole", () => {
     expect(render(THEME_FIXTURES["long-name"], key)).toContain(
       "Maximiliano Fernández-Altamirano &amp; Guadalupe Villalobos-Quesada</h1>",
+    );
+    expect(render(THEME_FIXTURES["long-word"], key)).toContain(
+      "Ana Wolfeschlegelsteinhausenbergerdorffvoralternwarengewissenhaft &amp; Luis</h1>",
     );
     expect(render(THEME_FIXTURES["long-city"], key)).toContain(
       "Santa María de los Ángeles de Monteverde, Puntarenas, Costa Rica",

@@ -265,8 +265,10 @@ The smallest version of listalaboda.com that delivers the original promise:
 | Gallery | OUT for now (media storage + privacy cost) |
 
 The published website may be shown in one of several curated visual themes (amended, ADR-019). A theme is
-presentation only: it never stores or changes wedding content, never adds public fields beyond the theme itself, and
-"custom" never means user HTML, CSS or code. Images and media stay deferred with Gallery until their own decision.
+presentation only: it never stores or changes wedding content, and "custom" never means user HTML, CSS or code. A
+wedding site design may add only the selected theme and its validated presentation choices to the public projection;
+it never exposes private wedding, membership, guest, RSVP capability, financial, operational or internal data. Images
+and media stay deferred with Gallery until their own decision.
 
 ## 9. Explicit Non-Goals
 

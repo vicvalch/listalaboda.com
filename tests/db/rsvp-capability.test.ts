@@ -287,7 +287,7 @@ describe("capability secret privacy", () => {
       expect(src).not.toMatch(/(insert\s+into|update|delete\s+from)\s+private\.guest_invitation_capability_secrets/i);
     }
     expect(await sql("select 1 from pg_proc where proname = 'store_guest_invitation_capability_secret'")).toEqual([]);
-    // In `private`, clients can execute only the two RLS helpers.
+    // In `private`, clients can execute only the two RLS helpers (and the CP6 CHECK validator).
     const privateCallable = await sql<{ name: string }>(
       `select p.proname as name from pg_proc p
        where p.pronamespace = 'private'::regnamespace
@@ -295,7 +295,13 @@ describe("capability secret privacy", () => {
               or has_function_privilege('anon', p.oid, 'execute'))
        order by 1`,
     );
-    expect(privateCallable.map((r) => r.name)).toEqual(["has_wedding_role", "is_wedding_member"]);
+    // ADR-019 CP6: the customization validator is executable by authenticated
+    // only for its CHECK constraint; it reads its two arguments and nothing else.
+    expect(privateCallable.map((r) => r.name)).toEqual([
+      "has_wedding_role",
+      "is_wedding_member",
+      "wedding_site_customization_is_valid",
+    ]);
   });
 
   it("creating (and so writing an envelope) is members-only, scoped to the target wedding", async () => {

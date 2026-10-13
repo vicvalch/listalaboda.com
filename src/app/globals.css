@@ -52,6 +52,326 @@
   }
 }
 
+/*
+ * Wedding site palettes (ADR-019). The public site's renderer sets
+ * data-site-palette on its <main> for themes with their own colors; inside it
+ * these override the app tokens, so the same token classes draw the theme.
+ * Classic uses the app palette and sets nothing. Each palette has a light and
+ * a dark variant that follows the visitor's preference.
+ */
+[data-site-palette="ivory"] {
+  --background: #fbf8f2;
+  --foreground: #1f1b16;
+  --muted: #675d52;
+  --border: #ddd3c3;
+  --accent: #7f6230;
+  --focus: #7f6230;
+}
+
+[data-site-palette="mono"] {
+  --background: #ffffff;
+  --foreground: #111111;
+  --muted: #5e5e5e;
+  --border: #e2e2e2;
+  --accent: #111111;
+  --focus: #111111;
+}
+
+[data-site-palette="rose"] {
+  --background: #faf5f1;
+  --foreground: #2b1d1f;
+  --muted: #6c5859;
+  --border: #e3d2cb;
+  --accent: #8a4550;
+  --focus: #8a4550;
+}
+
+/* Sand also has its own band (the opening) and ornament colors. */
+[data-site-palette="sand"] {
+  --background: #f5efe3;
+  --foreground: #1f2a24;
+  --muted: #59605a;
+  --border: #dcd3c0;
+  --accent: #2a5442;
+  --accent-soft: #ebe3d1;
+  --focus: #2a5442;
+  --site-band: #23483a;
+  --site-band-text: #f5efe3;
+  --site-ornament: #c9774d;
+}
+
+/*
+ * Palette presets (CP6): the alternatives a theme offers next to its own
+ * palette (Classic: warm, slate; Editorial: parchment, charcoal; Minimal:
+ * stone, ink; Romantic: wine, champagne; Tropical: forest, sunset). Same
+ * tokens; Tropical's also define the band and ornament colors.
+ */
+[data-site-palette="warm"] {
+  --background: #fbf6ef;
+  --foreground: #2d2219;
+  --muted: #6a5a4b;
+  --border: #e6d9c7;
+  --accent: #9a4a22;
+  --focus: #9a4a22;
+}
+
+[data-site-palette="slate"] {
+  --background: #f6f7f9;
+  --foreground: #1c2330;
+  --muted: #556070;
+  --border: #dde2e8;
+  --accent: #34557a;
+  --focus: #34557a;
+}
+
+[data-site-palette="parchment"] {
+  --background: #f4ecdc;
+  --foreground: #2a2117;
+  --muted: #64563f;
+  --border: #d9caa9;
+  --accent: #7a4b22;
+  --focus: #7a4b22;
+}
+
+[data-site-palette="charcoal"] {
+  --background: #f2f2f0;
+  --foreground: #1d1d1f;
+  --muted: #5a5a5c;
+  --border: #d6d6d3;
+  --accent: #3d3d40;
+  --focus: #3d3d40;
+}
+
+[data-site-palette="stone"] {
+  --background: #f7f6f3;
+  --foreground: #1c1b19;
+  --muted: #5f5c56;
+  --border: #e2dfd8;
+  --accent: #1c1b19;
+  --focus: #1c1b19;
+}
+
+[data-site-palette="ink"] {
+  --background: #ffffff;
+  --foreground: #0f1a2b;
+  --muted: #4f5b6d;
+  --border: #dfe4ec;
+  --accent: #1d3a6b;
+  --focus: #1d3a6b;
+}
+
+[data-site-palette="wine"] {
+  --background: #f8f1f0;
+  --foreground: #2a1518;
+  --muted: #6b4f53;
+  --border: #e5cfcf;
+  --accent: #7a2333;
+  --focus: #7a2333;
+}
+
+[data-site-palette="champagne"] {
+  --background: #faf6ee;
+  --foreground: #2b2318;
+  --muted: #685b49;
+  --border: #e6dac4;
+  --accent: #80612c;
+  --focus: #80612c;
+}
+
+[data-site-palette="forest"] {
+  --background: #eef2ea;
+  --foreground: #17261f;
+  --muted: #4f5e55;
+  --border: #cfd9cc;
+  --accent: #1f5a45;
+  --accent-soft: #e0e8da;
+  --focus: #1f5a45;
+  --site-band: #173d30;
+  --site-band-text: #eef2ea;
+  --site-ornament: #b7863b;
+}
+
+[data-site-palette="sunset"] {
+  --background: #fbf1e8;
+  --foreground: #2c1d16;
+  --muted: #6a5245;
+  --border: #ead6c5;
+  --accent: #9a3f1f;
+  --accent-soft: #f4e2d2;
+  --focus: #9a3f1f;
+  --site-band: #8f3a1d;
+  --site-band-text: #fbf1e8;
+  --site-ornament: #2f6b57;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-site-palette="ivory"] {
+    --background: #15130f;
+    --foreground: #ede6d9;
+    --muted: #aca291;
+    --border: #3b352b;
+    --accent: #c9a96b;
+    --focus: #c9a96b;
+  }
+
+  [data-site-palette="mono"] {
+    --background: #0f0f10;
+    --foreground: #f2f2f2;
+    --muted: #a3a3a3;
+    --border: #2c2c2e;
+    --accent: #f2f2f2;
+    --focus: #f2f2f2;
+  }
+
+  [data-site-palette="rose"] {
+    --background: #1c1517;
+    --foreground: #f2e8e5;
+    --muted: #bba8a8;
+    --border: #3f3032;
+    --accent: #e0a7ae;
+    --focus: #e0a7ae;
+  }
+
+  [data-site-palette="sand"] {
+    --background: #111814;
+    --foreground: #ebe7da;
+    --muted: #a7ad9f;
+    --border: #2b3831;
+    --accent: #9cc3a9;
+    --accent-soft: #19231e;
+    --focus: #9cc3a9;
+    --site-band: #1f3d31;
+    --site-band-text: #ebe7da;
+    --site-ornament: #d08b62;
+  }
+
+  [data-site-palette="warm"] {
+    --background: #191410;
+    --foreground: #f0e7dc;
+    --muted: #b5a593;
+    --border: #3d3228;
+    --accent: #e3a27a;
+    --focus: #e3a27a;
+  }
+
+  [data-site-palette="slate"] {
+    --background: #12161c;
+    --foreground: #e6eaf0;
+    --muted: #a3adba;
+    --border: #2c343f;
+    --accent: #9dbbe0;
+    --focus: #9dbbe0;
+  }
+
+  [data-site-palette="parchment"] {
+    --background: #1a160f;
+    --foreground: #ece2cd;
+    --muted: #b1a389;
+    --border: #3d3526;
+    --accent: #d7aa72;
+    --focus: #d7aa72;
+  }
+
+  [data-site-palette="charcoal"] {
+    --background: #1b1b1d;
+    --foreground: #e9e7e3;
+    --muted: #a9a7a2;
+    --border: #38383b;
+    --accent: #d2cec6;
+    --focus: #d2cec6;
+  }
+
+  [data-site-palette="stone"] {
+    --background: #151412;
+    --foreground: #eeece7;
+    --muted: #a8a49c;
+    --border: #302e2a;
+    --accent: #eeece7;
+    --focus: #eeece7;
+  }
+
+  [data-site-palette="ink"] {
+    --background: #0c111a;
+    --foreground: #e8edf5;
+    --muted: #9ea9ba;
+    --border: #263042;
+    --accent: #a8c1ea;
+    --focus: #a8c1ea;
+  }
+
+  [data-site-palette="wine"] {
+    --background: #1b1012;
+    --foreground: #f3e4e4;
+    --muted: #bfa2a5;
+    --border: #432a2e;
+    --accent: #e79aa6;
+    --focus: #e79aa6;
+  }
+
+  [data-site-palette="champagne"] {
+    --background: #19150f;
+    --foreground: #f1e9db;
+    --muted: #b8aa92;
+    --border: #3f362a;
+    --accent: #d8b77e;
+    --focus: #d8b77e;
+  }
+
+  [data-site-palette="forest"] {
+    --background: #0d1611;
+    --foreground: #e3ebe2;
+    --muted: #9fb0a3;
+    --border: #253a2e;
+    --accent: #8ccaa8;
+    --accent-soft: #15241b;
+    --focus: #8ccaa8;
+    --site-band: #163527;
+    --site-band-text: #e3ebe2;
+    --site-ornament: #d1a65e;
+  }
+
+  [data-site-palette="sunset"] {
+    --background: #1a120e;
+    --foreground: #f2e6dc;
+    --muted: #b9a294;
+    --border: #43302a;
+    --accent: #f0a07c;
+    --accent-soft: #2a1c16;
+    --focus: #f0a07c;
+    --site-band: #6e2c15;
+    --site-band-text: #f6e9de;
+    --site-ornament: #7fbfa5;
+  }
+}
+
+/*
+ * Custom wedding site colors (ADR-019 §11, CP7): LIGHT MODE ONLY. The
+ * renderer sets data-site-custom-colors and six fixed custom properties
+ * (canonical #rrggbb, validated for WCAG AA) on the site's root; here they
+ * replace the site tokens. Every text pair drawn maps to a checked pair:
+ * tiles use the surface, the Tropical band uses accent / accent text. Borders
+ * and ornaments are decorative. With a dark preference nothing here applies,
+ * so the theme's own palette (data-site-palette) draws its dark variant.
+ * Placed after the palettes: same specificity, so this wins in light mode.
+ */
+@media not (prefers-color-scheme: dark) {
+  [data-site-custom-colors] {
+    --background: var(--site-custom-background);
+    --surface: var(--site-custom-surface);
+    --foreground: var(--site-custom-text);
+    --muted: var(--site-custom-muted);
+    --accent: var(--site-custom-accent);
+    --accent-hover: var(--site-custom-accent);
+    --accent-foreground: var(--site-custom-accent-text);
+    --accent-soft: var(--site-custom-surface);
+    --border: color-mix(in srgb, var(--site-custom-muted) 35%, var(--site-custom-background));
+    --focus: var(--site-custom-accent);
+    --site-band: var(--site-custom-accent);
+    --site-band-text: var(--site-custom-accent-text);
+    --site-ornament: var(--site-custom-muted);
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

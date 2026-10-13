@@ -3,6 +3,8 @@
 Status: Accepted (LB-01) · Date: 2026-09-30 · Baseline: `7c050f3`
 Amended: LB-24A (2026-10-09, [ADR-017](../architecture/ADR-017-dual-couple-planner-use.md)) — dual couple/planner use
 of the same Wedding workspace: §2, §3, §6, §7 (item 11), §8, §9, §11, §14, §17.
+Amended: Wedding site themes (2026-10-12, [ADR-019](../architecture/ADR-019-wedding-site-design-and-themes.md)) —
+curated visual themes for the published wedding website: §8.
 
 This document governs every subsequent product and implementation decision for
 listalaboda.com. Changing a rule here requires an explicit, reviewed amendment —
@@ -261,6 +263,14 @@ The smallest version of listalaboda.com that delivers the original promise:
 | Local recommendations | OPTIONAL |
 | Gifts (info/links) | OPTIONAL — must not become a registry product |
 | Gallery | OUT for now (media storage + privacy cost) |
+
+The published website may be shown in one of several curated visual themes (amended, ADR-019). A wedding site design
+is presentation-only: it changes how already-public wedding-site content is rendered, never which wedding data is
+public. It never stores or changes wedding content, never publishes or unpublishes a wedding (publication stays
+owner-only), and "custom" never means user HTML, CSS, URLs or code. A wedding site design may add only the selected
+theme and its validated presentation choices, closed by the design contract, to the public projection; it never
+exposes private wedding, membership, guest, RSVP capability, financial, operational or internal data. Images and media
+stay deferred with Gallery; section reordering, planner presets and AI-generated design each need their own decision.
 
 ## 9. Explicit Non-Goals
 

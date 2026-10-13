@@ -9,6 +9,21 @@ import {
 } from "@/lib/authz/wedding";
 import type { Database } from "@/lib/supabase/database.types";
 import {
+  overridesForTheme,
+  parseCustomization,
+  resetOverrides,
+  type CustomizationError,
+  toStoredCustomization,
+  type CustomizationGroup,
+  type SiteOverrides,
+} from "@/lib/wedding-site/design/customization";
+import { toWeddingSiteDesign, type WeddingSiteDesign } from "@/lib/wedding-site/design/resolve";
+import {
+  isWeddingSiteThemeKey,
+  type CustomizableField,
+  type WeddingSiteThemeKey,
+} from "@/lib/wedding-site/design/themes";
+import {
   toEditorSections,
   type EditorSection,
   type SectionInput,
@@ -66,19 +81,21 @@ export type WeddingSiteEditor = Readonly<{
   publication: SitePublication | null;
   /** All seven sections, canonical order. */
   sections: readonly EditorSection[];
+  /** The chosen theme and customization, next to the content (never inside it); no row = Classic. */
+  design: WeddingSiteDesign;
 }>;
 
 /**
- * The editor's data in two queries (publication + sections), after a
- * successful membership check. Members (owners and collaborators) read
- * both. Returns null on failure.
+ * The editor's data in three queries (publication, sections, design), after
+ * a successful membership check. Members (owners and collaborators) read
+ * all three. Reading never writes a design row. Returns null on failure.
  */
 export async function getWeddingSiteEditor(
   supabase: Client,
   access: WeddingAccess,
 ): Promise<WeddingSiteEditor | null> {
   try {
-    const [publication, sections] = await Promise.all([
+    const [publication, sections, design] = await Promise.all([
       supabase
         .from("wedding_publications")
         .select("slug, published_at")
@@ -88,13 +105,19 @@ export async function getWeddingSiteEditor(
         .from("content_sections")
         .select("kind, title, body, is_visible")
         .eq("wedding_id", access.weddingId),
+      supabase
+        .from("wedding_site_designs")
+        .select("theme_key, customization")
+        .eq("wedding_id", access.weddingId)
+        .maybeSingle(),
     ]);
-    if (publication.error || sections.error || !sections.data) return null;
+    if (publication.error || sections.error || !sections.data || design.error) return null;
     return {
       publication: publication.data
         ? { slug: publication.data.slug, publishedAt: publication.data.published_at }
         : null,
       sections: toEditorSections(sections.data),
+      design: toWeddingSiteDesign(design.data?.theme_key, design.data?.customization),
     };
   } catch {
     return null;
@@ -164,6 +187,143 @@ export async function saveContentSection(
   } catch {
     return { ok: false, reason: "error" };
   }
+}
+
+// ------------------------------------------------------------------ design
+
+/**
+ * Why a design wasn't saved. `invalid`: the document (or theme) isn't valid;
+ * `invalid_color`: a custom palette isn't exactly six canonical `#rrggbb`
+ * colors; `insufficient_contrast`: it misses a WCAG AA pair (CP7). Closed
+ * reasons only: parser and database details never leave the service.
+ */
+export type DesignRefusal = "invalid" | "invalid_color" | "insufficient_contrast";
+
+export type SaveDesignResult =
+  | Readonly<{ ok: true; design: WeddingSiteDesign }>
+  | Readonly<{ ok: false; reason: AccessDenial | DesignRefusal }>;
+
+function designRefusal(reason: CustomizationError): DesignRefusal {
+  return reason === "invalid_customization" ? "invalid" : reason;
+}
+
+/**
+ * The one design write (ADR-019): theme + customization together, through
+ * `save_wedding_site_design` (any member, SECURITY INVOKER, RLS). The
+ * customization is checked against the theme before the call (the database
+ * CHECK repeats it) and stored normalized: overrides only, `{}` for none.
+ * It never publishes, unpublishes or touches content; on a published site
+ * the new look is public at once.
+ */
+async function writeDesign(
+  supabase: Client,
+  access: WeddingAccess,
+  themeKey: WeddingSiteThemeKey,
+  overrides: SiteOverrides,
+): Promise<SaveDesignResult> {
+  const stored = toStoredCustomization(overrides);
+  const parsed = parseCustomization(themeKey, stored);
+  if (!parsed.ok) return { ok: false, reason: designRefusal(parsed.reason) };
+  try {
+    const { data, error } = await supabase.rpc("save_wedding_site_design", {
+      target_wedding_id: access.weddingId,
+      new_theme: themeKey,
+      new_customization: toStoredCustomization(parsed.overrides),
+    });
+    if (error) {
+      // invalid_text_representation (not a theme), the null/validity checks
+      // or the CHECK constraint.
+      if (error.code === "22P02" || error.code === "22023" || error.code === "23514") {
+        return { ok: false, reason: "invalid" };
+      }
+      // The membership changed since the check.
+      if (error.code === "P0002" || error.code === "42501") return { ok: false, reason: "not_found" };
+      return { ok: false, reason: "error" };
+    }
+    if (!isWeddingSiteThemeKey(data)) return { ok: false, reason: "error" };
+    return { ok: true, design: { themeKey: data, customization: parsed.overrides } };
+  } catch {
+    return { ok: false, reason: "error" };
+  }
+}
+
+/** The wedding's stored design (the caller's RLS read), re-read leniently; null on failure. */
+async function readDesign(supabase: Client, access: WeddingAccess): Promise<WeddingSiteDesign | null> {
+  try {
+    const { data, error } = await supabase
+      .from("wedding_site_designs")
+      .select("theme_key, customization")
+      .eq("wedding_id", access.weddingId)
+      .maybeSingle();
+    if (error) return null;
+    return toWeddingSiteDesign(data?.theme_key, data?.customization);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Saves a theme and a customization chosen for it ("Personalizar", CP6).
+ * `customization` is the raw document built from the form: anything the
+ * theme doesn't offer refuses the whole save (`invalid`), and so does a
+ * custom palette that isn't canonical (`invalid_color`) or AA-compliant
+ * (`insufficient_contrast`); nothing is stored partially.
+ */
+export async function saveWeddingSiteDesign(
+  supabase: Client,
+  weddingId: string,
+  themeKey: WeddingSiteThemeKey,
+  customization: unknown,
+): Promise<SaveDesignResult> {
+  const access = await requireWeddingMembership(supabase, weddingId);
+  if (!access.ok) return { ok: false, reason: accessDenial(access.reason) };
+  const parsed = parseCustomization(themeKey, customization);
+  if (!parsed.ok) return { ok: false, reason: designRefusal(parsed.reason) };
+  return writeDesign(supabase, access.access, themeKey, parsed.overrides);
+}
+
+export type SaveThemeResult =
+  | Readonly<{ ok: true; themeKey: WeddingSiteThemeKey; dropped: readonly CustomizableField[] }>
+  | Readonly<{ ok: false; reason: AccessDenial | DesignRefusal }>;
+
+/**
+ * Chooses the website's theme ("Usar este estilo", CP5) for any member. One
+ * row per wedding, inserted the first time and updated afterwards. The
+ * stored customization is carried over (CP6): only the overrides the new
+ * theme also offers are kept, the rest fall back to its defaults and are
+ * removed from the stored document (`dropped`), so no invalid combination is
+ * ever kept. It never publishes, unpublishes or touches content.
+ */
+export async function saveWeddingSiteTheme(
+  supabase: Client,
+  weddingId: string,
+  themeKey: WeddingSiteThemeKey,
+): Promise<SaveThemeResult> {
+  const access = await requireWeddingMembership(supabase, weddingId);
+  if (!access.ok) return { ok: false, reason: accessDenial(access.reason) };
+  const current = await readDesign(supabase, access.access);
+  if (!current) return { ok: false, reason: "error" };
+  const { overrides, dropped } = overridesForTheme(themeKey, current.customization);
+  const result = await writeDesign(supabase, access.access, themeKey, overrides);
+  if (!result.ok) return result;
+  return { ok: true, themeKey: result.design.themeKey, dropped };
+}
+
+/**
+ * Resets one customization group of the STORED design to the theme's
+ * defaults, or all of it (`{}`). The theme stays as it is: resetting never
+ * goes back to Classic. Unsaved choices in the form play no part.
+ */
+export async function resetWeddingSiteCustomization(
+  supabase: Client,
+  weddingId: string,
+  group: CustomizationGroup | "all",
+): Promise<SaveDesignResult> {
+  const access = await requireWeddingMembership(supabase, weddingId);
+  if (!access.ok) return { ok: false, reason: accessDenial(access.reason) };
+  const current = await readDesign(supabase, access.access);
+  if (!current) return { ok: false, reason: "error" };
+  return writeDesign(supabase, access.access, current.themeKey, resetOverrides(current.customization, group));
 }
 
 // ------------------------------------------------------------- publication

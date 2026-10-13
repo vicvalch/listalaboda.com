@@ -26,6 +26,7 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - `docs/architecture/ADR-016-wedding-run-of-show-model.md` (wedding-day run of show, "Cronograma")
 - `docs/architecture/ADR-017-dual-couple-planner-use.md` (couples and planners on the same Wedding membership model)
 - `docs/architecture/ADR-018-multi-wedding-overview-and-attention.md` (multi-wedding read model, derived attention)
+- `docs/architecture/ADR-019-wedding-site-design-and-themes.md` (wedding site themes: presentation-only design)
 
 ## Product rules
 
@@ -628,6 +629,27 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - `switchWeddingPath` (`@/lib/weddings/navigation`) keeps only known sections (home, guests, seating, vendors → list,
   budget, timeline, site, activity; settings only for an owner target), else home; it always drops queries and hashes.
 
+## Wedding site design and themes (ADR-019)
+
+- Three separate authorities: `content_sections` = content and visibility, `wedding_publications` = the only publish
+  gate (owner-only, unchanged), design = presentation only. The renderer takes the content DTO (`PublishedWeddingSite`,
+  no design fields) and a `ResolvedSiteDesign` side by side; never merge them or store one inside the other.
+- Design never stores wedding data (names, dates, places, section text), guest data or RSVP capabilities, and changing
+  it never copies or rewrites wedding data.
+- Themes are code (`@/lib/wedding-site/design/themes`): closed keys → `ThemeDefinition` of closed values; the renderer
+  (`@/components/wedding-site/WeddingSite`) maps each value to its own markup/classes. No copy in themes; no CSS, class
+  name, HTML, script, iframe or URL strings from themes or user input, ever. Keys are never removed.
+- No design state or an unknown key = Classic (`resolveSiteDesign`): the original LB-10 page, kept pixel/markup-identical
+  (golden tests in `src/test/__golden__/wedding-site-classic/`; never regenerate them to make a change pass).
+- Owners and collaborators may change the design; publishing stays owner-only. Saved changes apply live on a published
+  site; the member-only preview is the pre-save check. No drafts/versions until advanced custom mode.
+- The RSVP section stays guidance only in every theme: no form, `/rsvp` link or guest-specific call to action.
+- Deferred, each needing an explicit decision: images/media (no uploads, storage, image URLs or media schema; own ADR),
+  section reordering (amends the LB-10 fixed order), planner presets (copy into a wedding, never live-link), custom
+  design (closed, versioned schema; never an arbitrary node tree).
+- CP1 state: only `classic` exists, nothing is persisted, no migration. `wedding_site_designs`, other themes, the
+  selector, preview and customization come in later checkpoints.
+
 ## Commands
 
 - `npm run verify`: lint, typecheck, unit tests, build (same as CI)
@@ -696,4 +718,6 @@ caller-RLS requests whatever the wedding count, exact counts against PostgREST's
 LB-24C renders it: the operational "Mis bodas" (global attention, rich cards, partial/error/over-limit fallbacks) and a
 URL-only wedding switcher inside weddings that keeps known sections (ADR-017 §13, ADR-018 §13; no migration, quick
 writes, notifications or active-wedding state).
+Wedding site themes (ADR-019) CP0/CP1 adds the theme engine (types, registry, resolver, `WeddingSite` renderer) with
+Classic as the only theme, identical to the LB-10 page (no migration, persistence, selector or other themes yet).
 Don't implement ahead of the current prompt.

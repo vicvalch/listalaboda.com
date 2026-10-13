@@ -542,6 +542,48 @@ test.describe("wedding website", () => {
     }
     await visitor.context.close();
   });
+
+  // ADR-019 (Classic parity): the themed public page keeps today's look in
+  // both color schemes at phone and desktop widths. Screenshots go to the
+  // test output folder for before/after comparison.
+  test("Q: the public site keeps the Classic look in light and dark (360, 390 and 1280 px)", async ({
+    page,
+    browser,
+  }, testInfo) => {
+    await logIn(page, await createAccount("lb-site-classic"));
+    const weddingId = await createFullWedding(page, "Boda de prueba Clásica");
+    await openSite(page, weddingId);
+    await saveSection(page, "intro", { body: "Bienvenidos.\nNos alegra compartir este día.", visible: true });
+    await saveSection(page, "ceremony", { body: "Capilla de prueba, 4:00 p. m.", visible: true });
+    await saveSection(page, "rsvp", { visible: true });
+    const slug = uniqueSlug("clasica");
+    await saveSlug(page, slug);
+    await publishSite(page);
+
+    // The global tokens (globals.css) the Classic page is drawn with.
+    const tokens = {
+      light: { background: "rgb(253, 250, 247)", foreground: "rgb(42, 34, 32)" },
+      dark: { background: "rgb(23, 19, 18)", foreground: "rgb(241, 235, 232)" },
+    } as const;
+    for (const colorScheme of ["light", "dark"] as const) {
+      const context = await browser.newContext({ colorScheme });
+      const visitor = await context.newPage();
+      for (const width of [360, 390, 1280]) {
+        await visitor.setViewportSize({ width, height: 800 });
+        await visitor.goto(`/boda/${slug}`);
+        await expect(visitor.getByRole("heading", { level: 1, name: "Boda de prueba Clásica" })).toBeVisible();
+        await expect(visitor.locator('[data-testid="public-site-section"]')).toHaveCount(3);
+        await expectNoHorizontalScroll(visitor);
+        const colors = await visitor.evaluate(() => ({
+          background: getComputedStyle(document.body).backgroundColor,
+          foreground: getComputedStyle(document.querySelector("h1") as Element).color,
+        }));
+        expect(colors).toEqual(tokens[colorScheme]);
+        await visitor.screenshot({ path: testInfo.outputPath(`classic-${colorScheme}-${width}.png`), fullPage: true });
+      }
+      await context.close();
+    }
+  });
 });
 
 async function saveSectionExpectingError(page: Page, kind: keyof typeof site.kinds, error: string) {

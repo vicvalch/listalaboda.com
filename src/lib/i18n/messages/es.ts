@@ -1823,12 +1823,47 @@ export const es = {
       resetAllDone: "Quitamos toda la personalización. El sitio usa «{name}» tal como viene.",
       none: "Sin personalización: el estilo tal como viene.",
       invalid: "Alguna opción no está disponible para este estilo. Recarga la página e inténtalo de nuevo.",
+      invalidColor: "Algún color no es válido. Escribe cada uno como # seguido de seis cifras o letras de la a a la f, por ejemplo #1f1b16.",
+      insufficientContrast: "Algunos colores no tienen suficiente contraste entre sí. Revisa los avisos junto a cada color.",
       /** One per customization group (the reset buttons name them). */
       groups: {
         palette: "Paleta",
         typography: "Tipografía",
         hero: "Encabezado",
         layout: "Diseño de página",
+        colors: "Colores personalizados",
+      },
+      /** Custom colors (ADR-019 CP7): a palette option, its six colors and their checks. */
+      colors: {
+        option: "Colores personalizados",
+        legend: "Tus colores",
+        intro: "Elige seis colores. Comprobamos que el texto se lea bien sobre cada fondo antes de guardar.",
+        lightOnly: "Los colores personalizados se usan en modo claro. Si quien visita el sitio tiene activado el modo oscuro, verá la paleta oscura de «{name}».",
+        roles: {
+          background: "Fondo",
+          surface: "Superficie",
+          text: "Texto",
+          muted: "Texto secundario",
+          accent: "Acento",
+          accentText: "Texto sobre acento",
+        },
+        picker: "{role}: selector de color",
+        code: "{role}: código del color",
+        format: "Escribe el color como # seguido de seis cifras o letras de la a a la f, por ejemplo #1f1b16.",
+        ratio: "Contraste actual: {ratio}:1 (mínimo {min}:1).",
+        valid: "Todos los colores tienen suficiente contraste.",
+        problems: "Hay {count} problemas con los colores. Corrígelos para poder ver la vista previa o guardar.",
+        problem: "Hay 1 problema con los colores. Corrígelo para poder ver la vista previa o guardar.",
+        /** One per contrast pair (CONTRAST_PAIRS in colors.ts). */
+        pairs: {
+          textBackground: "El texto no tiene suficiente contraste con el fondo.",
+          mutedBackground: "El texto secundario no tiene suficiente contraste con el fondo.",
+          textSurface: "El texto no tiene suficiente contraste con la superficie.",
+          mutedSurface: "El texto secundario no tiene suficiente contraste con la superficie.",
+          accentBackground: "El color de acento no tiene suficiente contraste con el fondo (se usa en títulos).",
+          accentSurface: "El color de acento no tiene suficiente contraste con la superficie (se usa en títulos).",
+          accentTextAccent: "El texto sobre el color de acento necesita más contraste.",
+        },
       },
       fields: {
         palette: "Paleta",

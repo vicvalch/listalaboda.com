@@ -138,7 +138,7 @@ describe("saveCustomizationAction", () => {
     expect(service.saveWeddingSiteTheme).not.toHaveBeenCalled();
   });
 
-  it.each([["delete"], ["reset:colors"], ["reset"], [""], ["save:all"]])("an unknown intent %j does nothing", async (intent) => {
+  it.each([["delete"], ["reset:fonts"], ["reset"], [""], ["save:all"]])("an unknown intent %j does nothing", async (intent) => {
     const state = await saveCustomizationAction(null, form({ ...editorialChoices, intent }));
     expect(state).toEqual({ ok: false, formError: copy.customize.invalid });
     for (const fn of Object.values(service)) expect(fn).not.toHaveBeenCalled();
@@ -162,5 +162,89 @@ describe("saveCustomizationAction", () => {
     requireUser.mockRejectedValueOnce(new Error("NEXT_REDIRECT /login"));
     await expect(saveCustomizationAction(null, form({ ...editorialChoices, intent: "save" }))).rejects.toThrow("NEXT_REDIRECT");
     for (const fn of Object.values(service)) expect(fn).not.toHaveBeenCalled();
+  });
+});
+
+describe("saveCustomizationAction: custom colors (CP7)", () => {
+  const colors = {
+    colorBackground: "#f3f7f6",
+    colorSurface: "#ffffff",
+    colorText: "#10201d",
+    colorMuted: "#4a5b57",
+    colorAccent: "#0f5c55",
+    colorAccentText: "#ffffff",
+  };
+  const stored = { background: "#f3f7f6", surface: "#ffffff", text: "#10201d", muted: "#4a5b57", accent: "#0f5c55", accentText: "#ffffff" };
+
+  beforeEach(() => {
+    for (const fn of Object.values(service)) fn.mockReset();
+    navigation.redirect.mockClear();
+  });
+
+  it("palette=custom sends the six colors and no preset through the one design write", async () => {
+    service.saveWeddingSiteDesign.mockResolvedValue({ ok: true, design: { themeKey: "editorial", customization: { colors: stored } } });
+    const state = await saveCustomizationAction(null, form({ ...editorialChoices, palette: "custom", ...colors, intent: "save" }));
+    expect(state).toMatchObject({ ok: true });
+    const [, , theme, document] = service.saveWeddingSiteDesign.mock.calls[0];
+    expect(theme).toBe("editorial");
+    expect(document).toMatchObject({ schemaVersion: 1, colors: stored });
+    expect(document).not.toHaveProperty("palette");
+  });
+
+  it("an uppercase code is lowercased; nothing else is repaired", async () => {
+    service.saveWeddingSiteDesign.mockResolvedValue({ ok: true, design: { themeKey: "editorial", customization: { colors: stored } } });
+    await saveCustomizationAction(null, form({ ...editorialChoices, palette: "custom", ...colors, colorSurface: "#FFFFFF", intent: "save" }));
+    expect(service.saveWeddingSiteDesign.mock.calls[0][3]).toMatchObject({ colors: stored });
+  });
+
+  it("choosing a preset ignores the color fields, so saving clears custom colors", async () => {
+    service.saveWeddingSiteDesign.mockResolvedValue({ ok: true, design: { themeKey: "editorial", customization: { palette: "parchment" } } });
+    await saveCustomizationAction(null, form({ ...editorialChoices, ...colors, intent: "save" }));
+    const document = service.saveWeddingSiteDesign.mock.calls[0][3];
+    expect(document).toMatchObject({ palette: { kind: "preset", key: "parchment" } });
+    expect(document).not.toHaveProperty("colors");
+  });
+
+  it.each([
+    ["invalid_color", copy.customize.invalidColor],
+    ["insufficient_contrast", copy.customize.insufficientContrast],
+    ["invalid", copy.customize.invalid],
+  ])("a %s refusal shows its own closed message", async (reason, message) => {
+    service.saveWeddingSiteDesign.mockResolvedValue({ ok: false, reason });
+    const state = await saveCustomizationAction(null, form({ ...editorialChoices, palette: "custom", ...colors, intent: "save" }));
+    expect(state).toEqual({ ok: false, formError: message });
+  });
+
+  it("preview opens fixed color parameters and never writes", async () => {
+    await expect(
+      saveCustomizationAction(null, form({ ...editorialChoices, palette: "custom", ...colors, intent: "preview" })),
+    ).rejects.toThrow("NEXT_REDIRECT");
+    const target = new URL(navigation.redirect.mock.calls[0][0] as string, "http://x.test");
+    expect(target.pathname).toBe(PREVIEW);
+    expect(target.searchParams.get("palette")).toBe("custom");
+    for (const [name, value] of Object.entries(colors)) expect(target.searchParams.get(name)).toBe(value);
+    for (const fn of Object.values(service)) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a malformed color", { colorText: " #10201d" }, copy.customize.invalidColor],
+    ["a missing color", { colorMuted: "" }, copy.customize.invalidColor],
+    ["CSS in a color", { colorAccent: "#000;background:url(x)" }, copy.customize.invalidColor],
+    ["low contrast", { colorText: "#eeeeee" }, copy.customize.insufficientContrast],
+  ])("%s is refused before any preview", async (_label, override, message) => {
+    const state = await saveCustomizationAction(
+      null,
+      form({ ...editorialChoices, palette: "custom", ...colors, ...override, intent: "preview" }),
+    );
+    expect(state).toEqual({ ok: false, formError: message });
+    expect(navigation.redirect).not.toHaveBeenCalled();
+    for (const fn of Object.values(service)) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("reset:colors resets the stored custom colors only", async () => {
+    service.resetWeddingSiteCustomization.mockResolvedValue({ ok: true, design: { themeKey: "editorial", customization: {} } });
+    const state = await saveCustomizationAction(null, form({ weddingId: WEDDING_ID, theme: "editorial", intent: "reset:colors" }));
+    expect(service.resetWeddingSiteCustomization).toHaveBeenCalledWith(userClient, WEDDING_ID, "colors");
+    expect(state).toMatchObject({ ok: true, data: { message: copy.customize.resetDone.replace("{group}", copy.customize.groups.colors) } });
   });
 });

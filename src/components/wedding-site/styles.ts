@@ -1,3 +1,6 @@
+import type { CSSProperties } from "react";
+
+import { isCanonicalHex, SITE_COLOR_ROLES, type SiteColorRole, type SiteColors } from "@/lib/wedding-site/design/colors";
 import type {
   Alignment,
   ContentWidth,
@@ -42,6 +45,39 @@ export const PALETTE_SURFACE: Record<SitePalette, string> = {
   forest: "bg-background text-foreground",
   sunset: "bg-background text-foreground",
 };
+
+/**
+ * Custom colors (CP7): the fixed CSS custom property each role is written
+ * to. `globals.css` maps them onto the site tokens in LIGHT mode only
+ * (`[data-site-custom-colors]`); dark mode keeps the theme's own palette.
+ * These names are constants in code, never built from data.
+ */
+export const CUSTOM_COLOR_PROPERTIES: Record<SiteColorRole, `--site-custom-${string}`> = {
+  background: "--site-custom-background",
+  surface: "--site-custom-surface",
+  text: "--site-custom-text",
+  muted: "--site-custom-muted",
+  accent: "--site-custom-accent",
+  accentText: "--site-custom-accent-text",
+};
+
+/**
+ * The inline style of a site with custom colors: exactly the six fixed
+ * properties above, each set to its canonical `#rrggbb` value (checked again
+ * here; the resolver already re-validated the palette). Nothing else can be
+ * in it: no property name or value comes from anywhere but this map and a
+ * value matching `^#[0-9a-f]{6}$`, so no declaration, selector or markup can
+ * be injected. Null when anything isn't canonical (draw no custom colors).
+ */
+export function customColorStyle(colors: SiteColors): CSSProperties | null {
+  const style: Record<string, string> = {};
+  for (const role of SITE_COLOR_ROLES) {
+    const value = colors[role];
+    if (!isCanonicalHex(value)) return null;
+    style[CUSTOM_COLOR_PROPERTIES[role]] = value;
+  }
+  return style as CSSProperties;
+}
 
 /**
  * `body` is the text font of the whole page; `heading` is added to the name

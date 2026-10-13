@@ -307,7 +307,7 @@ describe("saveWeddingSiteDesign", () => {
   it.each([
     ["a palette of another theme", { schemaVersion: 1, palette: { kind: "preset", key: "rose" } }],
     ["a hero the theme doesn't offer", { schemaVersion: 1, hero: { variant: "banner" } }],
-    ["an unknown group", { schemaVersion: 1, colors: { background: "#ff0000" } }],
+    ["an unknown group", { schemaVersion: 1, fonts: { body: "Comic Sans" } }],
     ["a wrong version", { schemaVersion: 2 }],
     ["CSS in a value", { schemaVersion: 1, layout: { width: "url(https://x.test)" } }],
   ])("%s never reaches the database", async (_label, document) => {
@@ -660,5 +660,73 @@ describe("getGuestPartySiteSlug", () => {
     expect(await getGuestPartySiteSlug(none.supabase, TOKEN)).toBeNull();
     const down = clientFor({ networkDown: "POST /rest/v1/rpc/get_guest_invitation_site_slug" });
     expect(await getGuestPartySiteSlug(down.supabase, TOKEN)).toBeNull();
+  });
+});
+
+describe("custom colors (CP7)", () => {
+  const colors = { background: "#f3f7f6", surface: "#ffffff", text: "#10201d", muted: "#4a5b57", accent: "#0f5c55", accentText: "#ffffff" };
+
+  it("saves a complete accessible palette as given, with no preset", async () => {
+    const { supabase, requests } = clientFor({ role: "collaborator", replies: { [DESIGN_SAVE]: { status: 200, body: "romantic" } } });
+    const document = { schemaVersion: 1, colors };
+    expect(await saveWeddingSiteDesign(supabase, WEDDING_ID, "romantic", document)).toEqual({
+      ok: true,
+      design: { themeKey: "romantic", customization: { colors } },
+    });
+    expect(rpcCalls(requests).map((r) => r.body)).toEqual([
+      { target_wedding_id: WEDDING_ID, new_theme: "romantic", new_customization: document },
+    ]);
+  });
+
+  it.each([
+    ["a malformed color", { ...colors, text: "#10201D" }, "invalid_color"],
+    ["CSS in a color", { ...colors, accent: "var(--x)" }, "invalid_color"],
+    ["a partial palette", { background: "#ffffff" }, "invalid_color"],
+    ["low contrast", { ...colors, muted: "#c9d3d0" }, "insufficient_contrast"],
+  ])("%s is refused with a closed reason and never reaches the database", async (_label, value, reason) => {
+    const { supabase, requests } = clientFor({ role: "owner", replies: { [DESIGN_SAVE]: { status: 200, body: "editorial" } } });
+    expect(await saveWeddingSiteDesign(supabase, WEDDING_ID, "editorial", { schemaVersion: 1, colors: value })).toEqual({
+      ok: false,
+      reason,
+    });
+    expect(rpcCalls(requests)).toEqual([]);
+  });
+
+  it("a preset with custom colors is refused as invalid", async () => {
+    const { supabase, requests } = clientFor({ role: "owner", replies: { [DESIGN_SAVE]: { status: 200, body: "editorial" } } });
+    const document = { schemaVersion: 1, palette: { kind: "preset", key: "parchment" }, colors };
+    expect(await saveWeddingSiteDesign(supabase, WEDDING_ID, "editorial", document)).toEqual({ ok: false, reason: "invalid" });
+    expect(rpcCalls(requests)).toEqual([]);
+  });
+
+  it("changing the theme keeps the custom colors", async () => {
+    const { supabase, requests } = clientFor({
+      role: "owner",
+      replies: {
+        [DESIGN_READ]: { status: 200, body: { theme_key: "editorial", customization: { schemaVersion: 1, colors, hero: { variant: "framed" } } } },
+        [DESIGN_SAVE]: { status: 200, body: "minimal" },
+      },
+    });
+    expect(await saveWeddingSiteTheme(supabase, WEDDING_ID, "minimal")).toEqual({ ok: true, themeKey: "minimal", dropped: ["hero"] });
+    expect(rpcCalls(requests).map((r) => r.body)).toEqual([
+      { target_wedding_id: WEDDING_ID, new_theme: "minimal", new_customization: { schemaVersion: 1, colors } },
+    ]);
+  });
+
+  it("reset colors removes them from the stored document and keeps the theme", async () => {
+    const { supabase, requests } = clientFor({
+      role: "collaborator",
+      replies: {
+        [DESIGN_READ]: { status: 200, body: { theme_key: "tropical", customization: { schemaVersion: 1, colors, layout: { width: "wide" } } } },
+        [DESIGN_SAVE]: { status: 200, body: "tropical" },
+      },
+    });
+    expect(await resetWeddingSiteCustomization(supabase, WEDDING_ID, "colors")).toEqual({
+      ok: true,
+      design: { themeKey: "tropical", customization: { width: "wide" } },
+    });
+    expect(rpcCalls(requests).map((r) => r.body)).toEqual([
+      { target_wedding_id: WEDDING_ID, new_theme: "tropical", new_customization: { schemaVersion: 1, layout: { width: "wide" } } },
+    ]);
   });
 });

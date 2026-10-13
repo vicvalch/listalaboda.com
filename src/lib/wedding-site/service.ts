@@ -12,6 +12,7 @@ import {
   overridesForTheme,
   parseCustomization,
   resetOverrides,
+  type CustomizationError,
   toStoredCustomization,
   type CustomizationGroup,
   type SiteOverrides,
@@ -190,9 +191,21 @@ export async function saveContentSection(
 
 // ------------------------------------------------------------------ design
 
+/**
+ * Why a design wasn't saved. `invalid`: the document (or theme) isn't valid;
+ * `invalid_color`: a custom palette isn't exactly six canonical `#rrggbb`
+ * colors; `insufficient_contrast`: it misses a WCAG AA pair (CP7). Closed
+ * reasons only: parser and database details never leave the service.
+ */
+export type DesignRefusal = "invalid" | "invalid_color" | "insufficient_contrast";
+
 export type SaveDesignResult =
   | Readonly<{ ok: true; design: WeddingSiteDesign }>
-  | Readonly<{ ok: false; reason: AccessDenial | "invalid" }>;
+  | Readonly<{ ok: false; reason: AccessDenial | DesignRefusal }>;
+
+function designRefusal(reason: CustomizationError): DesignRefusal {
+  return reason === "invalid_customization" ? "invalid" : reason;
+}
 
 /**
  * The one design write (ADR-019): theme + customization together, through
@@ -210,7 +223,7 @@ async function writeDesign(
 ): Promise<SaveDesignResult> {
   const stored = toStoredCustomization(overrides);
   const parsed = parseCustomization(themeKey, stored);
-  if (!parsed.ok) return { ok: false, reason: "invalid" };
+  if (!parsed.ok) return { ok: false, reason: designRefusal(parsed.reason) };
   try {
     const { data, error } = await supabase.rpc("save_wedding_site_design", {
       target_wedding_id: access.weddingId,
@@ -252,8 +265,9 @@ async function readDesign(supabase: Client, access: WeddingAccess): Promise<Wedd
 /**
  * Saves a theme and a customization chosen for it ("Personalizar", CP6).
  * `customization` is the raw document built from the form: anything the
- * theme doesn't offer refuses the whole save (`invalid`), nothing is
- * stored partially.
+ * theme doesn't offer refuses the whole save (`invalid`), and so does a
+ * custom palette that isn't canonical (`invalid_color`) or AA-compliant
+ * (`insufficient_contrast`); nothing is stored partially.
  */
 export async function saveWeddingSiteDesign(
   supabase: Client,
@@ -264,13 +278,13 @@ export async function saveWeddingSiteDesign(
   const access = await requireWeddingMembership(supabase, weddingId);
   if (!access.ok) return { ok: false, reason: accessDenial(access.reason) };
   const parsed = parseCustomization(themeKey, customization);
-  if (!parsed.ok) return { ok: false, reason: "invalid" };
+  if (!parsed.ok) return { ok: false, reason: designRefusal(parsed.reason) };
   return writeDesign(supabase, access.access, themeKey, parsed.overrides);
 }
 
 export type SaveThemeResult =
   | Readonly<{ ok: true; themeKey: WeddingSiteThemeKey; dropped: readonly CustomizableField[] }>
-  | Readonly<{ ok: false; reason: AccessDenial | "invalid" }>;
+  | Readonly<{ ok: false; reason: AccessDenial | DesignRefusal }>;
 
 /**
  * Chooses the website's theme ("Usar este estilo", CP5) for any member. One

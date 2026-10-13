@@ -177,7 +177,8 @@ describe("Personalizar (CP6)", () => {
       const options = theme.options[field] as readonly string[];
       const offered = radios(html, field).map((radio) => radio.value);
       if (options.length > 1) {
-        expect(offered, `${key} ${field}`).toEqual([...options]);
+        // The palette also offers custom colors (CP7), after the presets.
+        expect(offered, `${key} ${field}`).toEqual(field === "palette" ? [...options, "custom"] : [...options]);
         expect(checked(html, field), `${key} ${field}`).toBe(theme[field]);
         expect(html).toContain(`<legend class="text-sm font-semibold">${copy.customize.fields[field]}</legend>`);
       } else {
@@ -328,5 +329,65 @@ describe("preview page", () => {
     const html = await preview("editorial", { customize: "1", palette: "parchment" });
     expect(html).toContain(copy.preview.currentDesign);
     expect(html).not.toContain('data-testid="site-preview-unsaved"');
+  });
+});
+
+describe("Personalizar: custom colors (CP7)", () => {
+  const site = toPreviewSite(WEDDING, SECTIONS, "");
+  const section = (themeKey: WeddingSiteThemeKey, customization: SiteOverrides = {}) =>
+    render(createElement(ThemeSection, { weddingId: WEDDING_ID, site, design: { themeKey, customization }, isPublished: true }));
+  const colors = { background: "#f3f7f6", surface: "#ffffff", text: "#10201d", muted: "#4a5b57", accent: "#0f5c55", accentText: "#ffffff" };
+  const PARAMS = ["colorBackground", "colorSurface", "colorText", "colorMuted", "colorAccent", "colorAccentText"];
+  /** The visible code fields, by name. */
+  const codes = (html: string) =>
+    Object.fromEntries(
+      [...html.matchAll(/<input[^>]*type="text"[^>]*>/g)]
+        .map((m) => m[0])
+        .map((input) => [input.match(/ name="(\w+)"/)?.[1], input.match(/ value="([^"]*)"/)?.[1]]),
+    );
+
+  it.each(WEDDING_SITE_THEME_KEYS)("%s: offers custom colors after the presets, starting from the theme's colors", (key) => {
+    const html = section(key);
+    expect(checked(html, "palette")).toBe(THEME_REGISTRY[key].palette);
+    expect(html).toContain(copy.customize.colors.option);
+    // Six labelled roles, each a native picker and a visible code field.
+    for (const role of Object.values(copy.customize.colors.roles)) {
+      expect(html).toContain(`>${role}</label>`);
+      expect(html).toContain(`aria-label="${role}: selector de color"`);
+    }
+    expect((html.match(/type="color"/g) ?? []).length).toBe(6);
+    expect(Object.keys(codes(html))).toEqual(PARAMS);
+    for (const value of Object.values(codes(html))) expect(value).toMatch(/^#[0-9a-f]{6}$/);
+    // Light mode only, said in words with the theme's name.
+    expect(html).toContain(interpolateName(copy.customize.colors.lightOnly, copy.themes[key].name));
+    // Hidden until "Colores personalizados" is checked (CSS, so it works without JavaScript).
+    expect(html).toMatch(/class="hidden [^"]*group-has-\[\[value=custom\]:checked\]\/palette:block"/);
+  });
+
+  it("starts from saved colors, with custom checked and a reset for them only", () => {
+    const html = section("editorial", { colors, width: "regular" });
+    expect(checked(html, "palette")).toBe("custom");
+    expect(codes(html)).toEqual(Object.fromEntries(PARAMS.map((param, index) => [param, Object.values(colors)[index]])));
+    expect(html).toContain('value="reset:colors"');
+    expect(html).toContain(`aria-label="${copy.customize.reset}: ${copy.customize.groups.colors}"`);
+    expect(html).not.toContain('value="reset:palette"');
+    expect(html).toContain(copy.customize.colors.valid);
+    // The thumbnails show what each theme would look like with the same colors.
+    expect((html.match(/data-site-custom-colors=""/g) ?? []).length).toBe(WEDDING_SITE_THEME_KEYS.length);
+  });
+
+  it("the preview draws unsaved colors exactly as the public renderer would, and writes nothing", async () => {
+    data.access = { ok: true, access: { weddingId: WEDDING_ID, userId: "user", membershipId: "m-1", role: "collaborator" } };
+    data.wedding = WEDDING;
+    data.editor = editor("editorial");
+    const query = Object.fromEntries(PARAMS.map((param, index) => [param, Object.values(colors)[index]]));
+    const html = await preview("editorial", { customize: "1", palette: "custom", ...query });
+    expect(html).toContain(publicMarkup("editorial", { colors }));
+    expect(html).toContain(copy.preview.customNote);
+    expect(checked(html, "palette")).toBe("custom");
+    // A low-contrast palette in the URL is ignored whole.
+    const bad = await preview("editorial", { customize: "1", palette: "custom", ...query, colorText: "#f3f7f6" });
+    expect(bad).toContain(publicMarkup("editorial"));
+    expect(bad).not.toContain("data-site-custom-colors");
   });
 });

@@ -76,12 +76,14 @@ describe("theme registry", () => {
       alignment: "center",
       sectionStyle: "plain",
       ornament: "none",
+      colors: null,
     });
   });
 
   it("resolves each known key to its own design", () => {
     for (const key of WEDDING_SITE_THEME_KEYS) {
-      const { themeKey, ...values } = resolveSiteDesign(key);
+      const { themeKey, colors, ...values } = resolveSiteDesign(key);
+      expect(colors).toBeNull();
       const { key: definitionKey } = THEME_REGISTRY[key];
       // The definition's values, without its key and option lists (CP6).
       const definition = Object.fromEntries(

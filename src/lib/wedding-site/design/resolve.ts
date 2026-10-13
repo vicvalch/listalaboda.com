@@ -1,3 +1,4 @@
+import type { SiteColors } from "@/lib/wedding-site/design/colors";
 import { normalizeOverrides, readCustomization, type SiteOverrides } from "@/lib/wedding-site/design/customization";
 import {
   DEFAULT_WEDDING_SITE_THEME,
@@ -39,8 +40,13 @@ export function toWeddingSiteDesign(themeKey: unknown, customization?: unknown):
  * values, with nothing optional or raw (no JSON, no user strings). It sits
  * next to the content DTO (`PublishedWeddingSite`), never inside it, so a
  * design never carries wedding data and content never carries layout.
+ * `colors` is a complete, re-validated custom palette (canonical hex, WCAG
+ * AA, light mode only; CP7) or null; with colors, `palette` is the theme's
+ * own palette, which still draws dark mode.
  */
-export type ResolvedSiteDesign = Readonly<{ themeKey: WeddingSiteThemeKey } & Omit<ThemeDefinition, "key" | "options">>;
+export type ResolvedSiteDesign = Readonly<
+  { themeKey: WeddingSiteThemeKey; colors: SiteColors | null } & Omit<ThemeDefinition, "key" | "options">
+>;
 
 /**
  * Resolves a wedding's theme and overrides into its design: the theme's
@@ -64,6 +70,7 @@ export function resolveSiteDesign(themeKey: string | null | undefined, overrides
     alignment: chosen.alignment ?? theme.alignment,
     sectionStyle: chosen.sectionStyle ?? theme.sectionStyle,
     ornament: theme.ornament,
+    colors: chosen.colors ?? null,
   };
 }
 

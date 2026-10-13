@@ -344,6 +344,34 @@
   }
 }
 
+/*
+ * Custom wedding site colors (ADR-019 §11, CP7): LIGHT MODE ONLY. The
+ * renderer sets data-site-custom-colors and six fixed custom properties
+ * (canonical #rrggbb, validated for WCAG AA) on the site's root; here they
+ * replace the site tokens. Every text pair drawn maps to a checked pair:
+ * tiles use the surface, the Tropical band uses accent / accent text. Borders
+ * and ornaments are decorative. With a dark preference nothing here applies,
+ * so the theme's own palette (data-site-palette) draws its dark variant.
+ * Placed after the palettes: same specificity, so this wins in light mode.
+ */
+@media not (prefers-color-scheme: dark) {
+  [data-site-custom-colors] {
+    --background: var(--site-custom-background);
+    --surface: var(--site-custom-surface);
+    --foreground: var(--site-custom-text);
+    --muted: var(--site-custom-muted);
+    --accent: var(--site-custom-accent);
+    --accent-hover: var(--site-custom-accent);
+    --accent-foreground: var(--site-custom-accent-text);
+    --accent-soft: var(--site-custom-surface);
+    --border: color-mix(in srgb, var(--site-custom-muted) 35%, var(--site-custom-background));
+    --focus: var(--site-custom-accent);
+    --site-band: var(--site-custom-accent);
+    --site-band-text: var(--site-custom-accent-text);
+    --site-ornament: var(--site-custom-muted);
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

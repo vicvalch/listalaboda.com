@@ -23,8 +23,8 @@ function uniqueSlug(label: string): string {
   return `${label}-${randomBytes(4).toString("hex")}`;
 }
 
-async function freshPage(browser: Browser) {
-  const context = await browser.newContext();
+async function freshPage(browser: Browser, options: Parameters<Browser["newContext"]>[0] = {}) {
+  const context = await browser.newContext(options);
   return { context, page: await context.newPage() };
 }
 
@@ -908,7 +908,8 @@ test.describe("wedding website", () => {
     // The controls are the registry's: Editorial's own options, in Spanish.
     const panel = page.getByTestId("site-customize");
     await expect(panel.getByRole("heading", { name: `Personalizar «${site.themes.editorial.name}»` })).toBeVisible();
-    await expect(customizeField(page, "palette").getByRole("radio")).toHaveCount(3);
+    // Three presets, plus custom colors (CP7).
+    await expect(customizeField(page, "palette").getByRole("radio")).toHaveCount(4);
     await expect(customizeField(page, "hero").getByRole("radio")).toHaveCount(3);
     await expect(radio(page, "palette", customize.values.palette.ivory)).toBeChecked();
     await expect(panel.getByText("ivory", { exact: true })).toHaveCount(0);
@@ -1164,7 +1165,337 @@ test.describe("wedding website", () => {
       await expect(page.getByRole("group", { name: customize.fields[field] })).toBeVisible();
     }
   });
+  test("Y: custom colors: switch from a preset, check contrast live, preview, save, light mode only, reset", async ({
+    page,
+    browser,
+  }, testInfo) => {
+    const customize = site.customize;
+    const colors = customize.colors;
+    const ownerEmail = await createAccount("lb-site-colors-owner");
+    await logIn(page, ownerEmail);
+    const weddingId = await createFullWedding(page, "Boda de prueba Colores");
+    await openSite(page, weddingId);
+    await saveSection(page, "intro", { body: "Bienvenidos a la boda de colores.", visible: true });
+    await saveSection(page, "faq", { title: "Preguntas", body: "¿Hay parqueo?\nSí, en el hotel.", visible: true });
+    const slug = uniqueSlug("colores");
+    await saveSlug(page, slug);
+    await publishSite(page);
+    const before = await siteState(weddingId);
+
+    // 1. Editorial, with a preset saved first.
+    await chooseTheme(page, "editorial");
+    const panel = page.getByTestId("site-customize");
+    await radio(page, "palette", customize.values.palette.parchment).check();
+    await panel.getByRole("button", { name: customize.save }).click();
+    await expect(panel.getByTestId("site-customize-status")).toHaveText(
+      `Guardamos la personalización de «${site.themes.editorial.name}».`,
+    );
+    const light = await freshPage(browser);
+    await light.page.goto(`/boda/${slug}`);
+    await expect(light.page.locator("main")).toHaveAttribute("data-site-palette", "parchment");
+    const parchmentBackground = await backgroundOf(light.page);
+
+    // 2. Custom colors open only when chosen; six colors, each labelled.
+    const fields = panel.getByTestId("site-customize-colors");
+    await expect(fields).toBeHidden();
+    await radio(page, "palette", colors.option).check();
+    await expect(fields).toBeVisible();
+    await expect(fields.getByTestId("site-customize-colors-light-only")).toHaveText(
+      colors.lightOnly.replace("{name}", site.themes.editorial.name),
+    );
+    for (const role of Object.values(colors.roles)) {
+      await expect(fields.getByLabel(role, { exact: true })).toBeVisible();
+      await expect(fields.getByLabel(`${role}: selector de color`, { exact: true })).toBeVisible();
+    }
+
+    // 3. A valid accessible palette (dark background, still the light-mode look).
+    await fillColors(page, NIGHT);
+    await expect(fields.getByTestId("site-customize-colors-status")).toHaveText(colors.valid);
+    await expect(panel.getByRole("button", { name: customize.save })).toBeEnabled();
+
+    // 4. Previewed before saving: fixed parameters, never JSON.
+    await panel.getByRole("button", { name: customize.preview, exact: true }).click();
+    await expect(page).toHaveURL(/\/site\/preview\?theme=editorial&customize=1&palette=custom&colorBackground=%231d1b2e/);
+    expect(page.url()).not.toMatch(/%7B|\{/);
+    const canvas = page.getByTestId("site-preview").locator("[data-site-custom-colors]");
+    await expect(canvas).toHaveCSS("background-color", "rgb(29, 27, 46)");
+    await expect(page.getByTestId("site-preview-unsaved")).toHaveText(site.preview.customNote);
+    await screenshotPreview(page, testInfo, "colors-preview");
+
+    // 5. Nothing saved: the public page is unchanged.
+    expect(await customizationOf(weddingId)).toEqual({
+      theme: "editorial",
+      customization: { schemaVersion: 1, palette: { kind: "preset", key: "parchment" } },
+    });
+    await light.page.reload();
+    expect(await backgroundOf(light.page)).toBe(parchmentBackground);
+
+    // 6. Saved from the preview: the preset is replaced, never kept next to the colors.
+    await page.getByTestId("site-customize").getByRole("button", { name: customize.saveDesign }).click();
+    await expect(page.getByTestId("site-customize-status")).toHaveText(
+      `Guardamos la personalización de «${site.themes.editorial.name}».`,
+    );
+    expect(await customizationOf(weddingId)).toEqual({ theme: "editorial", customization: { schemaVersion: 1, colors: NIGHT } });
+
+    // 7. Light mode: the public page draws the custom colors.
+    await light.page.reload();
+    const main = light.page.locator("main");
+    await expect(main).toHaveAttribute("data-site-custom-colors", "");
+    await expect(main).toHaveAttribute("data-site-palette", "ivory");
+    await expect(main).toHaveCSS("background-color", "rgb(29, 27, 46)");
+    await expect(light.page.getByRole("heading", { level: 1 })).toHaveCSS("color", "rgb(244, 241, 255)");
+    await expect(light.page.getByTestId("public-site-details")).toHaveCSS("color", "rgb(195, 189, 219)");
+    await expect(light.page.getByText("Bienvenidos a la boda de colores.")).toBeVisible();
+    expect(await lowContrastTexts(light.page)).toEqual([]);
+    await light.page.screenshot({ path: testInfo.outputPath("colors-public-light.png"), fullPage: true });
+
+    // 8. Dark mode: Editorial's normal dark palette, not the custom colors.
+    const dark = await freshPage(browser, { colorScheme: "dark" });
+    await dark.page.goto(`/boda/${slug}`);
+    await expect(dark.page.locator("main")).toHaveCSS("background-color", "rgb(21, 19, 15)");
+    await expect(dark.page.getByRole("heading", { level: 1 })).toHaveCSS("color", "rgb(237, 230, 217)");
+    expect(await lowContrastTexts(dark.page)).toEqual([]);
+    await dark.page.screenshot({ path: testInfo.outputPath("colors-public-dark.png"), fullPage: true });
+
+    // 9–10. A low-contrast palette: explained next to the fields, preview and save wait.
+    await openSite(page, weddingId);
+    await expect(radio(page, "palette", colors.option)).toBeChecked();
+    const text = fields.getByLabel(colors.roles.text, { exact: true });
+    await expect(text).toHaveValue(NIGHT.text);
+    await text.fill("#3a3850");
+    await expect(fields.getByText(colors.pairs.textBackground)).toBeVisible();
+    await expect(text).toHaveAttribute("aria-invalid", "true");
+    await expect(text).toHaveAccessibleDescription(new RegExp(colors.pairs.textBackground));
+    await expect(fields.getByTestId("site-customize-colors-status")).toContainText("problemas");
+    await expect(panel.getByRole("button", { name: customize.save })).toBeDisabled();
+    await expect(panel.getByRole("button", { name: customize.preview, exact: true })).toBeDisabled();
+    // A malformed code says how to write one.
+    const accent = fields.getByLabel(colors.roles.accent, { exact: true });
+    await accent.fill("rojo");
+    await expect(accent).toHaveAccessibleDescription(new RegExp(colors.format.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    await accent.fill(NIGHT.accent);
+    await text.fill(NIGHT.text);
+    await expect(panel.getByRole("button", { name: customize.save })).toBeEnabled();
+    // The server refuses it too: the real save request with a low-contrast text color.
+    const saveRequest = await captureAction(page, () => panel.getByRole("button", { name: customize.save }).click());
+    const forged = { ...saveRequest, body: Buffer.from(saveRequest.body.toString("latin1").replace(NIGHT.text, "#3a3850"), "latin1") };
+    expect(forged.body.toString("latin1")).toContain("#3a3850");
+    await openSite(page, weddingId);
+    await replayAction(page, forged);
+    expect(await customizationOf(weddingId)).toEqual({ theme: "editorial", customization: { schemaVersion: 1, colors: NIGHT } });
+
+    // 11–12. Reset custom colors: Editorial's own palette is back (the preset was replaced).
+    await panel.getByRole("button", { name: `${customize.reset}: ${customize.groups.colors}` }).click();
+    await expect(panel.getByTestId("site-customize-status")).toHaveText(
+      `Restablecimos «${customize.groups.colors}» a como viene el estilo.`,
+    );
+    expect(await customizationOf(weddingId)).toEqual({ theme: "editorial", customization: {} });
+    await expect(radio(page, "palette", customize.values.palette.ivory)).toBeChecked();
+    await light.page.reload();
+    await expect(light.page.locator("main")).not.toHaveAttribute("data-site-custom-colors", /.*/);
+    await expect(light.page.locator("main")).toHaveCSS("background-color", "rgb(251, 248, 242)");
+
+    // 13. A collaborator saves custom colors (and they survive a theme change).
+    const collaboratorEmail = await createAccount("lb-site-colors-collab");
+    await addCollaborator(weddingId, collaboratorEmail);
+    const collab = await freshPage(browser);
+    await logIn(collab.page, collaboratorEmail);
+    await openSite(collab.page, weddingId);
+    await radio(collab.page, "palette", colors.option).check();
+    await fillColors(collab.page, MEADOW);
+    const collabPanel = collab.page.getByTestId("site-customize");
+    const collabSave = await captureAction(collab.page, () => collabPanel.getByRole("button", { name: customize.save }).click());
+    await openSite(collab.page, weddingId);
+    await radio(collab.page, "palette", colors.option).check();
+    await fillColors(collab.page, MEADOW);
+    await collabPanel.getByRole("button", { name: customize.save }).click();
+    await expect(collabPanel.getByTestId("site-customize-status")).toHaveText(
+      `Guardamos la personalización de «${site.themes.editorial.name}».`,
+    );
+    expect(await customizationOf(weddingId)).toEqual({ theme: "editorial", customization: { schemaVersion: 1, colors: MEADOW } });
+    await themeOption(collab.page, "tropical").getByRole("button", { name: `${site.design.use}: ${site.themes.tropical.name}` }).click();
+    await expect(collab.page.getByTestId("site-theme-status")).toHaveText(`Guardamos el estilo «${site.themes.tropical.name}».`);
+    expect(await customizationOf(weddingId)).toEqual({ theme: "tropical", customization: { schemaVersion: 1, colors: MEADOW } });
+    await light.page.reload();
+    await expect(light.page.locator("main")).toHaveCSS("background-color", "rgb(243, 247, 246)");
+    expect(await lowContrastTexts(light.page)).toEqual([]);
+
+    // 14. The collaborator's save request from an outsider or a signed-out visitor: nothing changes.
+    await withDb((db) => db.query("update public.wedding_site_designs set customization = '{}' where wedding_id = $1", [weddingId]));
+    const outsider = await freshPage(browser);
+    await logIn(outsider.page, await createAccount("lb-site-colors-outsider"));
+    await replayAction(outsider.page, collabSave);
+    const anonymous = await freshPage(browser);
+    await replayAction(anonymous.page, collabSave);
+    expect(await customizationOf(weddingId)).toEqual({ theme: "tropical", customization: {} });
+    expect((await outsider.page.goto(`/app/weddings/${weddingId}/site`))?.status()).toBe(404);
+
+    // Nothing but the design ever changed.
+    expect(await siteState(weddingId)).toEqual(before);
+    expect(await publication(weddingId)).toEqual({ slug, published: true });
+    for (const ctx of [light, dark, collab, outsider, anonymous]) await ctx.context.close();
+  });
+
+  test("Z: custom colors on an unpublished wedding (404 until published); the controls fit 360–1280 px, keyboard included", async ({
+    page,
+    browser,
+  }, testInfo) => {
+    const customize = site.customize;
+    const colors = customize.colors;
+    const ownerEmail = await createAccount("lb-site-colors-private");
+    await logIn(page, ownerEmail);
+    const weddingId = await createFullWedding(page, "Boda de prueba de María Fernanda de los Ángeles y Juan Sebastián Rodríguez");
+    await openSite(page, weddingId);
+    await saveSection(page, "intro", { body: "Texto de la boda privada con colores.", visible: true });
+    await saveSection(page, "faq", { title: "Preguntas", body: "¿Hay parqueo?\nSí.", visible: true });
+    const slug = uniqueSlug("colores-privada");
+    await saveSlug(page, slug);
+    await chooseTheme(page, "tropical");
+    const visitor = await freshPage(browser);
+
+    // Customize and preview while unpublished.
+    const panel = page.getByTestId("site-customize");
+    await radio(page, "palette", colors.option).check();
+    await fillColors(page, NIGHT);
+    await panel.getByRole("button", { name: customize.preview, exact: true }).click();
+    await expect(page.getByText(site.preview.unpublished)).toBeVisible();
+    await expect(page.getByTestId("site-preview").locator("[data-site-custom-colors]")).toHaveCSS("background-color", "rgb(29, 27, 46)");
+    await expectPublicNotFound(visitor.page, slug);
+
+    // Save: still private.
+    await page.getByTestId("site-customize").getByRole("button", { name: customize.saveDesign }).click();
+    await expect(page.getByTestId("site-customize-status")).toHaveText(
+      `Guardamos la personalización de «${site.themes.tropical.name}».`,
+    );
+    expect(await customizationOf(weddingId)).toEqual({ theme: "tropical", customization: { schemaVersion: 1, colors: NIGHT } });
+    expect(await publication(weddingId)).toEqual({ slug, published: false });
+    await expectPublicNotFound(visitor.page, slug);
+
+    // Hostile preview parameters are ignored whole (the theme's palette), never echoed.
+    await page.goto(
+      `/app/weddings/${weddingId}/site/preview?theme=tropical&customize=1&palette=custom&colorBackground=url(x)&colorSurface=%23ffffff&colorText=%23111111&colorMuted=%23555555&colorAccent=%230f5c55&colorAccentText=%23ffffff`,
+    );
+    await expect(page.getByTestId("site-preview").locator("[data-site-palette]")).toHaveAttribute("data-site-palette", "sand");
+    await expect(page.getByTestId("site-preview").locator("[data-site-custom-colors]")).toHaveCount(0);
+    await expect(page.getByText("url(x)")).toHaveCount(0);
+
+    // Every width: the controls (custom colors open) and the preview fit; text stays readable.
+    for (const width of [360, 390, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await openSite(page, weddingId);
+      await expect(page.getByTestId("site-customize-colors")).toBeVisible();
+      await page.getByTestId("site-customize-colors").scrollIntoViewIfNeeded();
+      await expectNoHorizontalScroll(page);
+      await page.getByTestId("site-customize").screenshot({ path: testInfo.outputPath(`colors-customize-${width}.png`) });
+      await page.goto(
+        `/app/weddings/${weddingId}/site/preview?theme=tropical&customize=1&width=wide&hero=banner&palette=custom&${new URLSearchParams(
+          colorParams(MEADOW),
+        ).toString()}`,
+      );
+      await expect(page.getByTestId("site-preview").locator("[data-site-custom-colors]")).toBeVisible();
+      await expectNoHorizontalScroll(page);
+      await screenshotPreview(page, testInfo, `colors-preview-${width}`);
+    }
+
+    // Keyboard: the palette radios move with the arrows into custom colors,
+    // the code fields take typing, focus is visible, and the save is announced.
+    await page.setViewportSize({ width: 390, height: 900 });
+    await openSite(page, weddingId);
+    const sunset = radio(page, "palette", customize.values.palette.sunset);
+    await sunset.focus();
+    await page.keyboard.press("ArrowRight");
+    const custom = radio(page, "palette", colors.option);
+    await expect(custom).toBeFocused();
+    await expect(custom).toBeChecked();
+    expect(await custom.evaluate((el) => getComputedStyle(el.closest("label") as Element).fontWeight)).toBe("600");
+    const background = page.getByTestId("site-customize-colors").getByLabel(colors.roles.background, { exact: true });
+    await background.focus();
+    expect(await background.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe("solid");
+    await background.press("Control+a");
+    await page.keyboard.type("#FAFAF7");
+    await expect(background).toHaveValue("#fafaf7");
+    await expect(page.getByTestId("site-customize-colors-status")).toContainText("problemas");
+    await page.getByTestId("site-customize-colors").getByLabel(colors.roles.surface, { exact: true }).fill(MEADOW.surface);
+    for (const role of ["text", "muted", "accent", "accentText"] as const) {
+      await page.getByTestId("site-customize-colors").getByLabel(colors.roles[role], { exact: true }).fill(MEADOW[role]);
+    }
+    await expect(page.getByTestId("site-customize-colors-status")).toHaveText(colors.valid);
+    const save = page.getByTestId("site-customize").getByRole("button", { name: customize.save });
+    await save.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("site-customize-status")).toHaveText(
+      `Guardamos la personalización de «${site.themes.tropical.name}».`,
+    );
+    expect(await customizationOf(weddingId)).toEqual({
+      theme: "tropical",
+      customization: { schemaVersion: 1, colors: { ...MEADOW, background: "#fafaf7" } },
+    });
+
+    // The owner publishes: the saved colors are what the public sees (light mode).
+    await publishSite(page);
+    await visitor.page.goto(`/boda/${slug}`);
+    await expect(visitor.page.locator("main")).toHaveCSS("background-color", "rgb(250, 250, 247)");
+    await expect(visitor.page.getByText("Texto de la boda privada con colores.")).toBeVisible();
+    expect(await lowContrastTexts(visitor.page)).toEqual([]);
+    await visitor.context.close();
+  });
 });
+
+/** Custom palettes used by the E2E (both pass every contrast pair). */
+const NIGHT = { background: "#1d1b2e", surface: "#2a2740", text: "#f4f1ff", muted: "#c3bddb", accent: "#f2c46d", accentText: "#1d1b2e" };
+const MEADOW = { background: "#f3f7f6", surface: "#ffffff", text: "#10201d", muted: "#4a5b57", accent: "#0f5c55", accentText: "#ffffff" };
+
+/** The preview parameters of a palette. */
+function colorParams(colors: typeof NIGHT): Record<string, string> {
+  return {
+    colorBackground: colors.background,
+    colorSurface: colors.surface,
+    colorText: colors.text,
+    colorMuted: colors.muted,
+    colorAccent: colors.accent,
+    colorAccentText: colors.accentText,
+  };
+}
+
+/** Types a palette into the open custom color fields (by their visible labels). */
+async function fillColors(page: Page, colors: typeof NIGHT) {
+  const fields = page.getByTestId("site-customize").getByTestId("site-customize-colors");
+  for (const role of Object.keys(colors) as (keyof typeof NIGHT)[]) {
+    await fields.getByLabel(site.customize.colors.roles[role], { exact: true }).fill(colors[role]);
+  }
+}
+
+/** The public page's background color. */
+async function backgroundOf(page: Page): Promise<string> {
+  return page.locator("main").evaluate((el) => getComputedStyle(el).backgroundColor);
+}
+
+/** Texts under 4.5:1 against the nearest painted background (WCAG AA). */
+async function lowContrastTexts(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const rgb = (value: string) => (value.match(/[\d.]+/g) ?? []).map(Number);
+    const luminance = ([r, g, b]: number[]) =>
+      [r, g, b]
+        .map((v) => v / 255)
+        .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+        .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+    const backgroundOf = (element: Element | null): number[] => {
+      for (let node = element; node; node = node.parentElement) {
+        const color = rgb(getComputedStyle(node).backgroundColor);
+        if (color.length === 3 || (color.length === 4 && color[3] > 0)) return color;
+      }
+      return [255, 255, 255];
+    };
+    return [...document.querySelectorAll("main *")]
+      .filter((element) => [...element.childNodes].some((n) => n.nodeType === 3 && n.textContent?.trim()))
+      .map((element) => {
+        const [a, b] = [luminance(rgb(getComputedStyle(element).color)), luminance(backgroundOf(element))];
+        return { element: element.tagName.toLowerCase(), ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) };
+      })
+      .filter(({ ratio }) => ratio < 4.5)
+      .map(({ element, ratio }) => `${element} ${ratio.toFixed(2)}`);
+  });
+}
 
 function themeOptions(page: Page): Locator {
   return page.getByTestId("site-theme-option");

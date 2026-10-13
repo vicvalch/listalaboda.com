@@ -1,3 +1,4 @@
+import { COLOR_PARAMS, CUSTOM_PALETTE_CHOICE, SITE_COLOR_ROLES, type SiteColorRole } from "@/lib/wedding-site/design/colors";
 import {
   isAllowedValue,
   normalizeOverrides,
@@ -113,7 +114,12 @@ export type PreviewQuery = Readonly<Record<string, string | string[] | undefined
  *     (`designForTheme`, the current design for the current theme);
  *   * with `customize=1`: unsaved choices, one parameter per field
  *     (`palette`, `typography`, …), each kept only when it is exactly one of
- *     the theme's options; anything else is that theme's default.
+ *     the theme's options; anything else is that theme's default;
+ *   * `palette=custom` (CP7) plus the six fixed color parameters
+ *     (`colorBackground`, …): a custom palette, used only when every value
+ *     is exactly one canonical `#rrggbb` (7 characters, no repeats) and the
+ *     palette passes every contrast pair; anything else is ignored whole
+ *     (the theme's palette).
  * Closed values only: no JSON, nothing echoed or stored. `custom` says
  * whether the preview shows unsaved customization choices.
  */
@@ -129,7 +135,14 @@ export function previewDesign(
     const value = query[field];
     if (isAllowedValue(theme, field, value)) chosen[field] = value;
   }
-  return { design: { themeKey, customization: normalizeOverrides(themeKey, chosen as SiteOverrides) }, custom: true };
+  let colors: Record<SiteColorRole, unknown> | undefined;
+  if (query.palette === CUSTOM_PALETTE_CHOICE) {
+    colors = {} as Record<SiteColorRole, unknown>;
+    for (const role of SITE_COLOR_ROLES) colors[role] = query[COLOR_PARAMS[role]];
+  }
+  // normalizeOverrides keeps the colors only when complete, canonical and AA.
+  const overrides = { ...chosen, ...(colors ? { colors } : {}) } as SiteOverrides;
+  return { design: { themeKey, customization: normalizeOverrides(themeKey, overrides) }, custom: true };
 }
 
 /** The organizer preview path for a theme (lookup keys only). */
@@ -140,7 +153,9 @@ export function sitePreviewPath(weddingId: string, themeKey: WeddingSiteThemeKey
 /**
  * The preview path for unsaved customization choices: the theme, the
  * `customize=1` marker and one parameter per override, every value a closed
- * key already checked against the theme (`normalizeOverrides`).
+ * key already checked against the theme (`normalizeOverrides`); a custom
+ * palette as `palette=custom` plus one fixed parameter per color, each a
+ * re-validated canonical `#rrggbb`.
  */
 export function siteCustomPreviewPath(weddingId: string, design: WeddingSiteDesign): string {
   const params = new URLSearchParams({ theme: design.themeKey, customize: "1" });
@@ -148,6 +163,10 @@ export function siteCustomPreviewPath(weddingId: string, design: WeddingSiteDesi
   for (const field of CUSTOMIZABLE_FIELDS) {
     const value = overrides[field];
     if (value !== undefined) params.set(field, value);
+  }
+  if (overrides.colors) {
+    params.set("palette", CUSTOM_PALETTE_CHOICE);
+    for (const role of SITE_COLOR_ROLES) params.set(COLOR_PARAMS[role], overrides.colors[role]);
   }
   return `/app/weddings/${encodeURIComponent(weddingId)}/site/preview?${params.toString()}`;
 }

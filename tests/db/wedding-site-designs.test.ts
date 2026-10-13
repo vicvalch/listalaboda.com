@@ -3,7 +3,8 @@ import { randomBytes } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
 
 import type { Json } from "@/lib/supabase/database.types";
-import { FIELD_LOCATION } from "@/lib/wedding-site/design/customization";
+import { contrastRatio, parseSiteColors, SITE_COLOR_ROLES, type SiteColors } from "@/lib/wedding-site/design/colors";
+import { FIELD_LOCATION, MAX_CUSTOMIZATION_BYTES } from "@/lib/wedding-site/design/customization";
 import {
   CUSTOMIZABLE_FIELDS,
   FIELD_VOCABULARY,
@@ -16,7 +17,7 @@ import { toPublishedSite } from "@/lib/wedding-site/sections";
 import type { TestUserKey } from "./context";
 import { PERMISSION_DENIED, addMember, as, createWedding as createFixtureWedding, sql } from "./support";
 
-// ADR-019 CP4/CP6: the wedding website's design (theme and customization) —
+// ADR-019 CP4/CP6/CP7: the wedding website's design (theme and customization) —
 // wedding_site_designs, its CHECK, save_wedding_site_design and the design in
 // get_published_wedding_site — exercised as real anon and authenticated users
 // through the Data API. The superuser connection only arranges fixtures,
@@ -656,5 +657,197 @@ describe("customization in the public read", () => {
     for (const actor of ["anon", "outsider", "ownerA"] as const) {
       expect((await publicSite(actor, slug)).data, actor).toEqual([]);
     }
+  });
+});
+
+// ------------------------------------------------------------ custom colors
+
+describe("custom colors validator (CP7)", () => {
+  const COLORS: SiteColors = {
+    background: "#f3f7f6",
+    surface: "#ffffff",
+    text: "#10201d",
+    muted: "#4a5b57",
+    accent: "#0f5c55",
+    accentText: "#ffffff",
+  };
+  const withColor = (role: string, value: unknown) => doc({ colors: { ...COLORS, [role]: value } });
+
+  /** The validator's verdicts for many documents, in one round trip. */
+  async function verdicts(theme: Theme, documents: unknown[]): Promise<boolean[]> {
+    const rows = await sql<{ valid: boolean }>(
+      `select private.wedding_site_customization_is_valid($1::public.wedding_site_theme, d.value) as valid
+         from jsonb_array_elements($2::jsonb) with ordinality as d(value, n)
+        order by d.n`,
+      [theme, JSON.stringify(documents)],
+    );
+    return rows.map((row) => row.valid);
+  }
+
+  it.each(THEMES)("%s accepts a complete accessible palette, and a preset or no colors as before", async (theme) => {
+    expect(await isValid(theme, doc({ colors: COLORS }))).toBe(true);
+    expect(await isValid(theme, doc({ colors: COLORS, typography: { headingScale: "regular" } }))).toBe(true);
+    expect(await isValid(theme, doc({ palette: { kind: "preset", key: THEME_REGISTRY[theme].options.palette[1] } }))).toBe(true);
+    expect(await isValid(theme, {})).toBe(true);
+  });
+
+  it.each([
+    ["3-digit hex", withColor("text", "#111")],
+    ["8-digit hex", withColor("text", "#111111ff")],
+    ["uppercase hex", withColor("background", "#F3F7F6")],
+    ["no #", withColor("background", "f3f7f6")],
+    ["whitespace", withColor("background", " #f3f7f6")],
+    ["a trailing newline", withColor("background", "#f3f7f\n")],
+    ["a newline injection", withColor("background", "#f3f7f6\n;x:y")],
+    ["a named color", withColor("accent", "teal")],
+    ["rgb()", withColor("accent", "rgb(15,92,85)")],
+    ["var()", withColor("accent", "var(--x)")],
+    ["url()", withColor("accent", "url(x)")],
+    ["expression()", withColor("accent", "expression(1)")],
+    ["<script>", withColor("accent", "<script>")],
+    ["javascript:", withColor("accent", "javascript:x")],
+    ["a declaration break-out", withColor("accent", '";background:red')],
+    ["a number", withColor("accent", 1)],
+    ["null", withColor("accent", null)],
+    ["an object", withColor("accent", { hex: "#0f5c55" })],
+    ["an array", withColor("accent", ["#0f5c55"])],
+    ["non-hex letters", withColor("accent", "#0g5c55")],
+    ["an extra role", doc({ colors: { ...COLORS, border: "#cccccc" } })],
+    ["a partial palette", doc({ colors: { background: "#ffffff", text: "#000000" } })],
+    ["an empty group", doc({ colors: {} })],
+    ["a non-object group", doc({ colors: "#ffffff" })],
+    ["a preset and colors together", doc({ palette: { kind: "preset", key: "parchment" }, colors: COLORS })],
+    ["text vs background", withColor("text", "#8a9a96")],
+    ["muted vs surface", withColor("muted", "#9aa8a4")],
+    ["accent vs background", withColor("accent", "#7fb5ad")],
+    ["accentText vs accent", withColor("accentText", "#2a6a63")],
+    ["the largest-looking oversized document", doc({ colors: COLORS, pad: "x".repeat(MAX_CUSTOMIZATION_BYTES) })],
+  ])("refuses %s", async (_label, document) => {
+    expect(await isValid("editorial", document)).toBe(false);
+  });
+
+  it("enforces 4.5:1 at the boundary exactly as the application does", async () => {
+    // #767676 on white is 4.54:1 (passes); #777777 is 4.48:1 (fails).
+    expect(contrastRatio("#767676", "#ffffff")).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio("#777777", "#ffffff")).toBeLessThan(4.5);
+    const gray = (muted: string) => doc({ colors: { ...COLORS, background: "#ffffff", surface: "#ffffff", muted } });
+    expect(await verdicts("editorial", [gray("#767676"), gray("#777777")])).toEqual([true, false]);
+  });
+
+  it("agrees with the application parser on thousands of palettes (same formula, pairs and threshold)", async () => {
+    // A deterministic generator biased toward borderline contrast.
+    let seed = 20261024;
+    const next = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+    const channel = (low: number, high: number) => Math.floor(low + next() * (high - low + 1));
+    const hex = (low: number, high: number) =>
+      `#${[0, 1, 2].map(() => channel(low, high).toString(16).padStart(2, "0")).join("")}`;
+    const palettes = Array.from({ length: 3000 }, () => ({
+      background: hex(200, 255),
+      surface: hex(200, 255),
+      text: hex(0, 90),
+      muted: hex(60, 130),
+      accent: hex(30, 130),
+      accentText: next() < 0.5 ? hex(200, 255) : hex(0, 60),
+    }));
+    const app = palettes.map((colors) => parseSiteColors(colors).ok);
+    const database = await verdicts("tropical", palettes.map((colors) => doc({ colors })));
+    expect(database).toEqual(app);
+    // Both outcomes are well represented.
+    expect(app.filter(Boolean).length).toBeGreaterThan(300);
+    expect(app.filter((ok) => !ok).length).toBeGreaterThan(300);
+  });
+
+  it("validates the roles the application defines, and no others", () => {
+    expect([...SITE_COLOR_ROLES].sort()).toEqual(["accent", "accentText", "background", "muted", "surface", "text"]);
+  });
+
+  it("is still not callable through the Data API, and keeps its privileges", async () => {
+    for (const actor of ["anon", "ownerA"] as const) {
+      const { error } = await (as[actor] as unknown as {
+        rpc: (fn: string, args: object) => Promise<{ error: { code?: string } | null }>;
+      }).rpc("wedding_site_customization_is_valid", { theme: "editorial", doc: doc({ colors: COLORS }) });
+      expect(error, actor).not.toBeNull();
+    }
+    const [row] = await sql<{ anon: boolean; authenticated: boolean; volatility: string }>(
+      `select has_function_privilege('anon', p.oid, 'execute') as anon,
+              has_function_privilege('authenticated', p.oid, 'execute') as authenticated,
+              p.provolatile as volatility
+         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'private' and p.proname = 'wedding_site_customization_is_valid'`,
+    );
+    expect(row).toEqual({ anon: false, authenticated: true, volatility: "i" });
+  });
+});
+
+describe("saving custom colors (CP7)", () => {
+  const COLORS = { background: "#1d1b2e", surface: "#2a2740", text: "#f4f1ff", muted: "#c3bddb", accent: "#f2c46d", accentText: "#1d1b2e" };
+  const CUSTOM = doc({ colors: COLORS, layout: { width: "regular" } });
+
+  it("owners and collaborators save; outsiders and anon can't", async () => {
+    const { a } = await twoWeddings();
+    expect(await saveDesign("collabA", a, "editorial", CUSTOM)).toMatchObject({ data: "editorial", error: null });
+    expect((await designRows(a)).map((r) => [r.theme_key, r.customization])).toEqual([["editorial", CUSTOM]]);
+    const preset = doc({ palette: { kind: "preset", key: "parchment" } });
+    expect(await saveDesign("ownerA", a, "editorial", preset)).toMatchObject({ error: null });
+
+    expect((await saveDesign("outsider", a, "editorial", CUSTOM)).error?.message).toBe("wedding_not_found");
+    expect((await saveDesign("ownerB", a, "editorial", CUSTOM)).error?.message).toBe("wedding_not_found");
+    expect((await saveDesign("anon", a, "editorial", CUSTOM)).error?.code).toBe(PERMISSION_DENIED);
+    const update = await designs("outsider").update({ customization: CUSTOM as NonNullable<Json> }).eq("wedding_id", a).select("wedding_id");
+    expect(update.data).toEqual([]);
+    expect((await designRows(a)).map((r) => r.customization)).toEqual([preset]);
+  });
+
+  it("refuses malformed and low-contrast palettes through the RPC and direct writes alike", async () => {
+    const { a } = await twoWeddings();
+    expect((await saveDesign("ownerA", a, "minimal", CUSTOM)).error).toBeNull();
+    const lowContrast = doc({ colors: { ...COLORS, muted: "#4a4766" } });
+    const malformed = doc({ colors: { ...COLORS, accent: "#F2C46D" } });
+    for (const bad of [lowContrast, malformed, doc({ colors: { background: "#000000" } })]) {
+      expect((await saveDesign("ownerA", a, "minimal", bad)).error?.code, JSON.stringify(bad)).toBe(INVALID_PARAMETER);
+      // A member's direct table write is refused by the CHECK.
+      expect((await designs("collabA").update({ customization: bad as NonNullable<Json> }).eq("wedding_id", a)).error?.code).toBe(
+        CHECK_VIOLATION,
+      );
+    }
+    expect((await designRows(a)).map((r) => r.customization)).toEqual([CUSTOM]);
+  });
+
+  it("a theme change keeps valid custom colors (every theme accepts them)", async () => {
+    const { a } = await twoWeddings();
+    expect((await saveDesign("ownerA", a, "classic", doc({ colors: COLORS }))).error).toBeNull();
+    for (const theme of THEMES) {
+      expect((await designs("ownerA").update({ theme_key: theme }).eq("wedding_id", a)).error, theme).toBeNull();
+    }
+  });
+
+  it("saving changes only the design: no content, publication, activity or guest change, never publishes", async () => {
+    const { weddingId, slug } = await siteWedding("Boda colores sin publicar", { publish: false });
+    await addMember(weddingId, "collabA", "collaborator");
+    const before = await contentAndPublicationHash(weddingId);
+    const counts = async () =>
+      (
+        await sql<{ activity: number; guests: number; parties: number; rsvps: number }>(
+          `select (select count(*)::int from public.wedding_activity where wedding_id = $1) as activity,
+                  (select count(*)::int from public.guests where wedding_id = $1) as guests,
+                  (select count(*)::int from public.guest_invitations where wedding_id = $1) as parties,
+                  (select count(*)::int from public.rsvps where wedding_id = $1) as rsvps`,
+          [weddingId],
+        )
+      )[0];
+    const countsBefore = await counts();
+    expect((await saveDesign("collabA", weddingId, "romantic", CUSTOM)).error).toBeNull();
+    expect((await saveDesign("ownerA", weddingId, "romantic", doc({ layout: { width: "regular" } }))).error).toBeNull();
+    expect(await contentAndPublicationHash(weddingId)).toEqual(before);
+    expect(await counts()).toEqual(countsBefore);
+    expect((await publicSite("anon", slug)).data).toEqual([]);
+  });
+
+  it("the public read returns the stored colors under the unchanged publication gate", async () => {
+    const { weddingId, slug } = await siteWedding("Boda colores publicada");
+    expect((await saveDesign("ownerA", weddingId, "tropical", CUSTOM)).error).toBeNull();
+    expect((await publicSite("anon", slug)).data?.map((r) => [r.site_theme, r.site_customization])).toEqual([["tropical", CUSTOM]]);
+    await as.ownerA.rpc("unpublish_wedding_site", { target_wedding_id: weddingId });
+    expect((await publicSite("anon", slug)).data).toEqual([]);
   });
 });

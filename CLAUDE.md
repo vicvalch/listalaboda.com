@@ -166,7 +166,7 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - anon never reads `weddings`, `content_sections`, `wedding_publications`, memberships or guest tables. The only
   public read is `get_published_wedding_site(slug)` via `@/lib/wedding-site/public`: name, date, city, visible
   sections (kind, title, body) and, since ADR-019 CP4/CP6, the theme key (`site_theme`) and its customization
-  (`site_customization`, closed presentation keys only). No ids, time zone, timestamps,
+  (`site_customization`, closed presentation keys and, since CP7, AA-checked `#rrggbb` colors only). No ids, time zone, timestamps,
   members, checklist or guest data. Add a field there only as an explicit product decision.
 - Owners and collaborators edit ContentSections (`@/lib/wedding-site/service`, keyed by wedding + kind, never a
   browser-sent row id). Choosing/changing the slug, publishing and unpublishing are owner-only: service
@@ -672,8 +672,8 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   never calls or widens `get_published_wedding_site`. Unknown/repeated `?theme=` = the current theme. No iframe.
 - Customization (CP6): a wedding overrides, among ITS THEME's `options` (`ThemeDefinition.options`, default first; the
   only list: UI, parser and preview read it, the database mirrors it, a test compares them), palette preset, type
-  pairing, heading scale, hero, width, density, alignment and section style. Closed keys only: never hex, CSS, class
-  names, fonts, URLs or text. Palette presets are CSS variables in `globals.css` (light + dark, WCAG AA), each owned by
+  pairing, heading scale, hero, width, density, alignment and section style. Closed keys only: never CSS, class
+  names, fonts, URLs or text (hex colors only as CP7's validated custom palette, below). Palette presets are CSS variables in `globals.css` (light + dark, WCAG AA), each owned by
   one theme; the key is stored, never a color.
 - `wedding_site_designs.customization` (jsonb, default `{}`) stores OVERRIDES ONLY as a versioned document
   (`schemaVersion: 1`, groups `palette`/`typography`/`hero`/`layout`, never empty; `{}` = none; defaults dropped);
@@ -689,8 +689,17 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - The preview takes unsaved choices as `?theme=&customize=1&<field>=<key>`, each checked against the theme (else the
   default, never echoed); never JSON in a URL, never a write. "Vista previa" in the form is a server action that
   validates, then redirects there.
-- CP6 state: members see, preview, choose and customize the five themes; no hex colors, custom fonts, drafts,
-  reordering, presets or images.
+- Custom colors (CP7, ADR-019 §11): an optional `colors` group (`background, surface, text, muted, accent,
+  accentText`), all six or none, each exactly lowercase `#rrggbb` (`@/lib/wedding-site/design/colors`, the only color
+  rules; the form layer may lowercase `#A1B2C3`, nothing else is repaired). Mutually exclusive with a palette preset
+  (never stored together). WCAG AA (4.5:1) for every drawn pair (`CONTRAST_PAIRS`), enforced by the parser, the CHECK
+  validator (same formula; a DB test compares them) and again at render, where an invalid palette is ignored WHOLE.
+  Light mode only: `globals.css` maps the six fixed `--site-custom-*` properties under
+  `@media not (prefers-color-scheme: dark)`; dark mode is the theme's own palette. The only inline style on the
+  public page is `customColorStyle` (fixed property names, re-validated values); never a user style string. Custom
+  colors carry over on a theme change; "Restablecer: Colores personalizados" removes them.
+- CP7 state: members customize the five themes with closed options or six AA-checked custom colors; no custom fonts,
+  drafts, reordering, presets or images.
 
 ## Commands
 
@@ -770,5 +779,7 @@ CP5 adds "Estilo del sitio" (theme cards with real thumbnails, owner and collabo
 (no migration, customization or drafts). CP6 adds safe customization: closed per-theme options (ten palette presets,
 type pairing, heading scale, hero, width, density, alignment, section style) stored as a versioned overrides-only
 document with a CHECK validator, "Personalizar" with per-group/full reset, theme-change normalization and the preview of
-unsaved choices (no hex colors, fonts, drafts, reordering, presets or images).
+unsaved choices (no hex colors, fonts, drafts, reordering, presets or images). CP7 adds custom colors: six
+AA-checked `#rrggbb` roles instead of a preset, light mode only, checked by the parser, the CHECK validator and at
+render, with live contrast feedback and preview (no fonts, drafts, reordering, presets or images).
 Don't implement ahead of the current prompt.

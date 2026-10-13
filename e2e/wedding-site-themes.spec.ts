@@ -215,6 +215,7 @@ async function measureLayout(page: Page) {
 for (const fixture of CUSTOMIZATION_FIXTURES) {
   test(`customized ${fixture.name}: fits 360, 390, 768 and 1280 px in light and dark, readable`, async ({ browser }, testInfo) => {
     const palette = fixture.overrides.palette ?? THEME_REGISTRY[fixture.theme].palette;
+    const custom = fixture.overrides.colors;
     for (const colorScheme of ["light", "dark"] as const) {
       const context = await browser.newContext({ colorScheme });
       const source = await context.newPage();
@@ -229,14 +230,42 @@ for (const fixture of CUSTOMIZATION_FIXTURES) {
         if (palette === "app") await expect(page.locator("main"), label).not.toHaveAttribute("data-site-palette", /.*/);
         else await expect(page.locator("main"), label).toHaveAttribute("data-site-palette", palette);
         const layout = await measureLayout(page);
+        if (custom) {
+          // CP7: the custom colors draw light mode; dark mode is the theme's
+          // own dark palette (the same background as an element in its scope).
+          const expected =
+            colorScheme === "light" ? hexToRgb(custom.background) : await paletteBackground(page, palette);
+          expect(layout.background, `${label}: ${colorScheme === "light" ? "custom" : "theme dark"} background`).toBe(expected);
+        }
         expect(layout.scrolls, `${label}: no horizontal scroll`).toBe(false);
         expect(layout.overflowing, `${label}: nothing sticks out of the screen`).toEqual([]);
         expect(layout.lowContrast, `${label}: every text meets WCAG AA (4.5:1)`).toEqual([]);
         expect(layout.decorationsExposed, `${label}: ornaments are hidden from assistive technology`).toBe(0);
-        if (palette !== "app") expect(layout.fillsViewport, `${label}: the palette's background covers the page`).toBe(true);
+        if (palette !== "app" || custom) {
+          expect(layout.fillsViewport, `${label}: the palette's background covers the page`).toBe(true);
+        }
         await page.screenshot({ path: testInfo.outputPath(`${fixture.name}-${colorScheme}-${width}.png`), fullPage: true });
       }
       await context.close();
     }
   });
+}
+
+/** `#rrggbb` as the computed-style `rgb(r, g, b)` text. */
+function hexToRgb(hex: string): string {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+/** The background a palette scope draws in the page's current color scheme. */
+async function paletteBackground(page: Page, palette: string): Promise<string> {
+  return page.evaluate((key) => {
+    const probe = document.createElement("div");
+    if (key !== "app") probe.dataset.sitePalette = key;
+    probe.className = "bg-background";
+    document.body.append(probe);
+    const color = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return color;
+  }, palette);
 }

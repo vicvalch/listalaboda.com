@@ -8,9 +8,17 @@ import { formText, type FormState } from "@/lib/forms/result";
 import { getMessages, interpolate } from "@/lib/i18n";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
+  COLOR_PARAMS,
+  CUSTOM_PALETTE_CHOICE,
+  normalizeHexInput,
+  SITE_COLOR_ROLES,
+  type SiteColorRole,
+} from "@/lib/wedding-site/design/colors";
+import {
   CUSTOMIZATION_GROUPS,
   customizationDocument,
   parseCustomization,
+  type CustomizationError,
   type CustomizationGroup,
 } from "@/lib/wedding-site/design/customization";
 import { CUSTOMIZABLE_FIELDS, isWeddingSiteThemeKey, type CustomizableField } from "@/lib/wedding-site/design/themes";
@@ -116,7 +124,9 @@ export async function saveThemeAction(_prev: ThemeFormState, formData: FormData)
 
   const result = await saveWeddingSiteTheme(await createSupabaseServerClient(), weddingId, theme);
   if (!result.ok) {
-    if (result.reason === "invalid") return { ok: false, formError: copy.design.invalid };
+    if (result.reason === "invalid" || result.reason === "invalid_color" || result.reason === "insufficient_contrast") {
+      return { ok: false, formError: copy.design.invalid };
+    }
     return { ok: false, formError: await handleFailure(weddingId, result.reason) };
   }
 
@@ -147,6 +157,14 @@ function customizeIntent(value: string): CustomizeIntent | null {
   return null;
 }
 
+/** The form message of a refused customization: closed reasons, never parser details. */
+function customizeError(reason: CustomizationError | "invalid"): string {
+  const copy = getMessages().site.customize;
+  if (reason === "invalid_color") return copy.invalidColor;
+  if (reason === "insufficient_contrast") return copy.insufficientContrast;
+  return copy.invalid;
+}
+
 /**
  * "Personalizar" (ADR-019, CP6), from the site page or the preview. The form
  * carries the wedding id, the theme it was drawn for, one radio value per
@@ -158,7 +176,11 @@ function customizeIntent(value: string): CustomizeIntent | null {
  *     group (or everything); the theme stays.
  * Only known field names are read, every value must be one of the theme's
  * options (else nothing is saved or previewed), and the caller and
- * membership come from the server.
+ * membership come from the server. With `palette=custom` (CP7) the six fixed
+ * color fields are read instead of a preset: each exactly `#rrggbb` (an
+ * uppercase code is lowercased; nothing is trimmed or repaired), checked for
+ * contrast by the parser; otherwise they are ignored, so choosing a preset
+ * clears the custom colors.
  */
 export async function saveCustomizationAction(
   _prev: CustomizeFormState,
@@ -179,7 +201,9 @@ export async function saveCustomizationAction(
   if (typeof intent === "object") {
     const result = await resetWeddingSiteCustomization(await createSupabaseServerClient(), weddingId, intent.reset);
     if (!result.ok) {
-      if (result.reason === "invalid") return { ok: false, formError: copy.customize.invalid };
+      if (result.reason === "invalid" || result.reason === "invalid_color" || result.reason === "insufficient_contrast") {
+        return { ok: false, formError: customizeError(result.reason) };
+      }
       return { ok: false, formError: await handleFailure(weddingId, result.reason) };
     }
     return done(
@@ -189,22 +213,34 @@ export async function saveCustomizationAction(
     );
   }
 
-  const values: Partial<Record<CustomizableField, string>> = {};
+  const values: Partial<Record<CustomizableField, string>> & { colors?: Record<SiteColorRole, string> } = {};
   for (const field of CUSTOMIZABLE_FIELDS) {
     const value = formText(formData, field);
     if (value) values[field] = value;
+  }
+  if (values.palette === CUSTOM_PALETTE_CHOICE) {
+    delete values.palette;
+    const colors = {} as Record<SiteColorRole, string>;
+    for (const role of SITE_COLOR_ROLES) {
+      const raw = formText(formData, COLOR_PARAMS[role]);
+      // A malformed code stays as typed, so the parser refuses it as invalid_color.
+      colors[role] = normalizeHexInput(raw) ?? raw;
+    }
+    values.colors = colors;
   }
   const document = customizationDocument(values);
 
   if (intent === "preview") {
     const parsed = parseCustomization(theme, document);
-    if (!parsed.ok) return { ok: false, formError: copy.customize.invalid };
+    if (!parsed.ok) return { ok: false, formError: customizeError(parsed.reason) };
     redirect(siteCustomPreviewPath(weddingId, { themeKey: theme, customization: parsed.overrides }));
   }
 
   const result = await saveWeddingSiteDesign(await createSupabaseServerClient(), weddingId, theme, document);
   if (!result.ok) {
-    if (result.reason === "invalid") return { ok: false, formError: copy.customize.invalid };
+    if (result.reason === "invalid" || result.reason === "invalid_color" || result.reason === "insufficient_contrast") {
+      return { ok: false, formError: customizeError(result.reason) };
+    }
     return { ok: false, formError: await handleFailure(weddingId, result.reason) };
   }
   return done(interpolate(copy.customize.saved, { name: copy.themes[result.design.themeKey].name }));

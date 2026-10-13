@@ -1,6 +1,6 @@
 # ADR-019 — Wedding Site Design and Themes
 
-Status: Accepted (Wedding site themes, CP0–CP6) · Date: 2026-10-12
+Status: Accepted (Wedding site themes, CP0–CP7) · Date: 2026-10-12
 Related: [Product Constitution §8, §10.9](../product/PRODUCT-CONSTITUTION.md), [ADR-001](ADR-001-product-domain-and-tenancy.md),
 [ADR-002 §7](ADR-002-auth-and-security-boundaries.md), [ADR-003](ADR-003-donor-extraction-policy.md),
 [ADR-017](ADR-017-dual-couple-planner-use.md)
@@ -95,7 +95,7 @@ never breaks a page.
 
 ### 6. Customization contract
 
-Allowed, each as a closed value (CP6 implements the subset in §9–§10; hex colors and self-hosted fonts stay later): theme, preset palettes, hex colors (`#rrggbb` only, contrast-checked), curated
+Allowed, each as a closed value (CP6 implements the subset in §9–§10, CP7 the hex colors in §11; self-hosted fonts stay later): theme, preset palettes, hex colors (`#rrggbb` only, contrast-checked), curated
 font pairings (self-hosted, never a family string), heading scale, hero variants allowed by the theme, widths, density,
 alignment, section styles. Always forbidden: arbitrary HTML, Markdown or rich text in design; CSS strings or
 `style` input; class name input; JavaScript, event handlers, scripts, iframes or embeds; arbitrary URLs; guest data;
@@ -172,6 +172,55 @@ changes. Every option is a closed key; nothing is free-form (no hex, CSS, class 
 - Reset one group (palette, typography, hero, layout) removes it from the STORED customization; reset all stores `{}`.
   The theme never changes (resetting never goes back to Classic). Unsaved choices in the form play no part.
 
+### 11. Custom colors (CP7)
+
+A wedding may set six semantic colors instead of a palette preset. Still a closed, validated presentation value: never
+CSS, a class name, a variable name, a function or a URL.
+
+- **Contract.** An optional `colors` group in the SAME version-1 document (compatible: every CP6 document stays valid
+  and means the same): `{"background","surface","text","muted","accent","accentText"}`. All six or none: a partial
+  palette is invalid, absent means the preset/theme palette. Each value is exactly `#` + six LOWERCASE hex digits
+  (7 characters). Refused everywhere: 3/4/8-digit hex, uppercase, whitespace or newlines, named colors, `rgb()`,
+  `hsl()`, `color()`, `var()`, `currentColor`, `transparent`, `url()`, gradients, any function or markup, and
+  non-strings. Documents are never normalized; only the form layer lowercases an uppercase code (`#A1B2C3`), repairing
+  nothing else (no trimming, no added `#`, no short forms).
+- **Presets.** `palette` and `colors` are mutually exclusive (refused together by the parser and the CHECK). Saving
+  custom colors removes the preset; choosing a preset removes the colors; there is never contradictory palette state.
+- **Contrast (WCAG AA, 4.5:1)** for every text/background pair the renderer draws with custom colors: text and muted
+  on background and on surface; accent on background and on surface (Romantic's and Tropical's accent headings);
+  accentText on accent. The same WCAG 2.x luminance formula, pairs and threshold in `colors.ts` (`CONTRAST_PAIRS`) and
+  in the database validator; a DB test compares the two on 3,000 generated palettes and at the 4.5 boundary.
+- **Theme surfaces are derived, not guessed.** In light mode the custom colors replace every site token by fixed
+  mappings onto checked pairs: Tropical's tiles draw on the surface (`--accent-soft` = surface), its band is the accent
+  with accent text (`--site-band`/`--site-band-text`), the focus ring is the accent. Borders (a `color-mix` of muted and
+  background) and ornaments (muted) are decorative and `aria-hidden`. Because every theme draws the same roles, every
+  theme accepts custom colors.
+- **Light mode only.** `globals.css` applies the custom properties under `@media not (prefers-color-scheme: dark)`;
+  with a dark preference nothing custom applies and the theme's OWN palette (its `data-site-palette`, which stays on the
+  page) draws its normal dark variant. No dark palette is inferred or generated. The organizer form says so.
+- **Rendering safety.** The renderer never emits user-authored style strings. `resolveSiteDesign` re-validates the
+  palette (shape, format, contrast); `customColorStyle` builds a style object whose six property names are constants
+  (`--site-custom-background`, …) and whose values are checked again against `^#[0-9a-f]{6}$`. A canonical hex string
+  can't end a declaration, add a property or a selector, or reach a class, `href`, `src` or text. (A future nonce-based
+  CSP must allow style attributes, e.g. `style-src-attr 'unsafe-inline'`, or move these six values into a nonce'd
+  `<style>`; the values stay the same closed set.)
+- **Validation.** (1) `parseCustomization`: closed reasons `invalid_customization`, `invalid_color`,
+  `insufficient_contrast` (the service returns `invalid` / `invalid_color` / `insufficient_contrast`; nothing else
+  leaves it). (2) The CHECK validator (`20261024120000_lb_wedding_site_custom_colors.sql`, replaced in place, same
+  signature and privileges): exact keys, exact shape, contrast, mutual exclusion, the unchanged 1024-byte cap (the
+  largest valid document is now about 450 bytes). (3) Render time: a stored palette that isn't complete, canonical and
+  AA-compliant, or that sits next to a preset, is ignored WHOLE (the saved preset or the theme's palette applies);
+  never part of a palette.
+- **Preview.** `palette=custom` plus six fixed parameters (`colorBackground`, …), each a canonical color (7 characters,
+  no repeats), the palette checked for contrast; anything else is ignored whole. Never JSON; never a write.
+- **Theme change.** Custom colors carry over unchanged to any theme (same roles, same checks). **Reset.** "Restablecer:
+  Colores personalizados" removes them (the theme's palette applies: the preset was cleared when the colors were
+  saved); "Restablecer todo" stores `{}` and keeps the theme.
+- **Organizer UX.** "Colores personalizados" is one more palette option; it opens six labelled colors, each a native
+  picker plus the visible `#rrggbb` code the form sends. Contrast problems are shown live next to the fields (with the
+  current ratio as secondary text), tied to them with `aria-describedby`/`aria-invalid` and summarized in one polite
+  status; preview and save are disabled while the palette is invalid, and the server refuses it anyway.
+
 ## Consequences
 
 - New themes are additive: a key, a definition, the variants it needs, tests.
@@ -194,7 +243,10 @@ changes. Every option is a closed key; nothing is free-form (no hex, CSS, class 
   3-argument save, the customization in the public read (`site_customization`), the ten palette presets, "Personalizar"
   in "Estilo del sitio" with per-group and full reset, and the preview of unsaved choices
   (`20261023120000_lb_wedding_site_customization.sql`).
-- **Later**: hex colors, self-hosted fonts, section reordering, planner presets, images, drafts.
+- **CP7**: custom colors (§11): the optional `colors` group with WCAG AA checks in the parser, the CHECK validator and
+  at render time, light mode only, mutually exclusive with presets, live contrast feedback in "Personalizar" and the
+  preview of unsaved colors (`20261024120000_lb_wedding_site_custom_colors.sql`, the validator only).
+- **Later**: self-hosted fonts, section reordering, planner presets, images, drafts.
 
 ## Rejected alternatives
 

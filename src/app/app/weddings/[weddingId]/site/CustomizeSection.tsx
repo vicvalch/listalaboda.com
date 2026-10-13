@@ -1,28 +1,29 @@
 import type { ReactNode } from "react";
 
 import { getMessages, interpolate } from "@/lib/i18n";
-import {
-  CUSTOMIZATION_GROUPS,
-  customizedGroups,
-  groupFields,
-  type CustomizationGroup,
-} from "@/lib/wedding-site/design/customization";
+import { CUSTOM_COLOR_SEEDS, CUSTOM_PALETTE_CHOICE } from "@/lib/wedding-site/design/colors";
+import { customizedGroups, groupFields, type CustomizationGroup } from "@/lib/wedding-site/design/customization";
 import { resolveWeddingSiteDesign, type WeddingSiteDesign } from "@/lib/wedding-site/design/resolve";
-import { getTheme, type CustomizableField, type SitePalette } from "@/lib/wedding-site/design/themes";
+import { getTheme, type CustomizableField } from "@/lib/wedding-site/design/themes";
 
 import { CustomizeButton, CustomizeForm } from "./CustomizeForm";
+import { PaletteField } from "./PaletteField";
+
+/** The groups drawn, in order. Custom colors live inside "Paleta" (one palette choice). */
+const FORM_GROUPS = ["palette", "typography", "hero", "layout"] as const satisfies readonly CustomizationGroup[];
 
 /**
  * "Personalizar" (ADR-019, CP6): the closed options of ONE theme, read from
  * the registry (`ThemeDefinition.options`, never a list of its own), as
  * native radio groups in four groups (palette, typography, hero, layout).
  * Each option is named in words; the theme's default says so; a field the
- * theme fixes is stated, not offered.
+ * theme fixes is stated, not offered. The palette also offers "Colores
+ * personalizados" (CP7, `PaletteField`), with live contrast checks.
  *
  * `design` is what the controls start from (the saved design on the site
  * page, the previewed one in the preview). On the site page (`mode="site"`)
- * each customized group of the SAVED design (`saved`) can be reset, and so
- * can everything.
+ * each customized group of the SAVED design (`saved`) can be reset (custom
+ * colors on their own), and so can everything.
  */
 export function CustomizeSection({
   weddingId,
@@ -62,17 +63,29 @@ export function CustomizeSection({
             previous design (uncontrolled inputs don't follow defaultChecked
             once rendered). The form itself stays, so its status survives. */}
         <div key={`${theme.key}:${JSON.stringify(resolved)}`} className="space-y-4">
-          {CUSTOMIZATION_GROUPS.map((group) => (
+          {FORM_GROUPS.map((group) => (
             <Group
               key={group}
               group={group}
               GroupTitle={GroupTitle}
               mode={mode}
               resettable={resettable.includes(group)}
+              colorsResettable={group === "palette" && resettable.includes("colors")}
             >
-              {groupFields(group).map((field) => (
-                <Field key={field} field={field} options={theme.options[field]} defaultValue={theme[field]} selected={resolved[field]} />
-              ))}
+              {groupFields(group).map((field) =>
+                field === "palette" ? (
+                  <PaletteField
+                    key={field}
+                    options={theme.options.palette}
+                    defaultValue={theme.palette}
+                    selected={resolved.colors ? CUSTOM_PALETTE_CHOICE : resolved.palette}
+                    colors={resolved.colors ?? CUSTOM_COLOR_SEEDS[theme.key]}
+                    themeName={copy.themes[theme.key].name}
+                  />
+                ) : (
+                  <Field key={field} field={field} options={theme.options[field]} defaultValue={theme[field]} selected={resolved[field]} />
+                ),
+              )}
             </Group>
           ))}
         </div>
@@ -99,12 +112,15 @@ function Group({
   GroupTitle,
   mode,
   resettable,
+  colorsResettable = false,
   children,
 }: {
   group: CustomizationGroup;
   GroupTitle: "h3" | "h4";
   mode: "site" | "preview";
   resettable: boolean;
+  /** The saved design has custom colors (only in the palette group). */
+  colorsResettable?: boolean;
   children: ReactNode;
 }) {
   const copy = getMessages().site.customize;
@@ -128,6 +144,14 @@ function Group({
             pendingLabel={copy.saving}
           />
         ) : null}
+        {colorsResettable ? (
+          <CustomizeButton
+            intent="reset:colors"
+            label={copy.reset}
+            name={copy.groups.colors}
+            pendingLabel={copy.saving}
+          />
+        ) : null}
       </div>
       {children}
     </section>
@@ -135,10 +159,9 @@ function Group({
 }
 
 /**
- * One customizable field: a radio per option the theme offers, in registry
- * order, named in words (palettes also show a small decorative swatch drawn
- * from the palette's own tokens). Selection is shown by the radio itself and
- * bold text, not by color alone.
+ * One customizable field (all but the palette): a radio per option the
+ * theme offers, in registry order, named in words. Selection is shown by
+ * the radio itself and bold text, not by color alone.
  */
 function Field({
   field,
@@ -171,7 +194,6 @@ function Field({
             className="inline-flex min-h-11 max-w-full cursor-pointer items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-sm has-checked:border-accent has-checked:font-semibold"
           >
             <input type="radio" name={field} value={value} defaultChecked={value === selected} className="h-4 w-4 shrink-0 accent-accent" />
-            {field === "palette" ? <Swatch palette={value as SitePalette} /> : null}
             <span className="min-w-0 break-words">
               {names[value]}
               {value === defaultValue ? <span className="text-muted font-normal"> · {copy.themeDefault}</span> : null}
@@ -180,19 +202,5 @@ function Field({
         ))}
       </div>
     </fieldset>
-  );
-}
-
-/** Two dots in the palette's own background and accent tokens. Decorative: the name says it. */
-function Swatch({ palette }: { palette: SitePalette }) {
-  return (
-    <span
-      aria-hidden="true"
-      data-site-palette={palette === "app" ? undefined : palette}
-      className="inline-flex h-5 w-8 shrink-0 overflow-hidden rounded-full border border-border"
-    >
-      <span className="h-full w-1/2 bg-background" />
-      <span className="h-full w-1/2 bg-accent" />
-    </span>
   );
 }

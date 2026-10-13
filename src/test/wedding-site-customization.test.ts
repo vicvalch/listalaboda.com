@@ -125,7 +125,7 @@ describe("parseCustomization (write, strict)", () => {
   });
 
   it.each([
-    ["an unknown top-level key", doc({ colors: { background: "red" } })],
+    ["an unknown top-level key", doc({ fonts: { body: "Comic Sans" } })],
     ["an unknown top-level key next to valid ones", doc({ palette: { kind: "preset", key: "parchment" }, extra: true })],
     ["a wrong schemaVersion", { schemaVersion: 2, palette: { kind: "preset", key: "parchment" } }],
     ["schemaVersion as a string", { schemaVersion: "1" }],
@@ -154,12 +154,12 @@ describe("parseCustomization (write, strict)", () => {
     ["undefined", undefined],
     ["an oversized document", doc({ layout: { width: "regular" }, padding: "x".repeat(MAX_CUSTOMIZATION_BYTES) })],
   ])("refuses %s", (_label, raw) => {
-    expect(parseCustomization("editorial", raw)).toEqual({ ok: false });
+    expect(parseCustomization("editorial", raw)).toEqual({ ok: false, reason: "invalid_customization" });
   });
 
   it("a document over the byte cap is refused even when every key is valid-looking", () => {
     const big = doc({ layout: { width: "regular", sectionStyle: "plain".padEnd(MAX_CUSTOMIZATION_BYTES, " ") } });
-    expect(parseCustomization("editorial", big)).toEqual({ ok: false });
+    expect(parseCustomization("editorial", big)).toEqual({ ok: false, reason: "invalid_customization" });
   });
 });
 
@@ -169,7 +169,7 @@ describe("readCustomization (render, lenient) and resolution", () => {
       const defaults = Object.fromEntries(
         Object.entries(THEME_REGISTRY[key]).filter(([name]) => name !== "key" && name !== "options"),
       );
-      expect(resolveSiteDesign(key, readCustomization(key, {}))).toEqual({ themeKey: key, ...defaults });
+      expect(resolveSiteDesign(key, readCustomization(key, {}))).toEqual({ themeKey: key, ...defaults, colors: null });
     }
   });
 
@@ -220,9 +220,11 @@ describe("readCustomization (render, lenient) and resolution", () => {
   it("the resolved design is complete and closed: no optional values, no raw JSON", () => {
     const design = resolveSiteDesign("minimal", { palette: "ink", typography: "serif" });
     expect(Object.keys(design).sort()).toEqual(
-      ["alignment", "density", "headingScale", "hero", "ornament", "palette", "sectionStyle", "themeKey", "typography", "width"],
+      ["alignment", "colors", "density", "headingScale", "hero", "ornament", "palette", "sectionStyle", "themeKey", "typography", "width"],
     );
-    for (const value of Object.values(design)) expect(typeof value).toBe("string");
+    const { colors, ...values } = design;
+    expect(colors).toBeNull();
+    for (const value of Object.values(values)) expect(typeof value).toBe("string");
   });
 });
 
@@ -262,7 +264,7 @@ describe("resets and the stored document", () => {
   });
 
   it("knows which groups are customized", () => {
-    expect(customizedGroups(overrides)).toEqual(CUSTOMIZATION_GROUPS);
+    expect(customizedGroups(overrides)).toEqual(CUSTOMIZATION_GROUPS.filter((group) => group !== "colors"));
     expect(customizedGroups({ width: "wide" })).toEqual(["layout"]);
     expect(customizedGroups({})).toEqual([]);
   });

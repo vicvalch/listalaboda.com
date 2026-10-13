@@ -511,6 +511,7 @@ describe("public read boundary", () => {
         section_kind: "intro",
         section_title: null,
         section_body: "Hola a todos",
+        site_theme: "classic",
       },
       {
         wedding_name: "Boda pública de prueba",
@@ -519,6 +520,7 @@ describe("public read boundary", () => {
         section_kind: "ceremony",
         section_title: null,
         section_body: "Ceremonia visible",
+        site_theme: "classic",
       },
       {
         wedding_name: "Boda pública de prueba",
@@ -527,6 +529,7 @@ describe("public read boundary", () => {
         section_kind: "faq",
         section_title: "Dudas",
         section_body: "Pregunta\nRespuesta",
+        site_theme: "classic",
       },
       {
         wedding_name: "Boda pública de prueba",
@@ -535,6 +538,7 @@ describe("public read boundary", () => {
         section_kind: "rsvp",
         section_title: null,
         section_body: null,
+        site_theme: "classic",
       },
     ]);
     // Nothing private anywhere in the payload.
@@ -564,6 +568,7 @@ describe("public read boundary", () => {
         section_kind: null,
         section_title: null,
         section_body: null,
+        site_theme: "classic",
       },
     ]);
   });

@@ -34,9 +34,10 @@ export async function generateMetadata({ params }: PageProps<"/boda/[slug]">): P
  * boundary (`get_published_wedding_site`): the wedding's name, date and
  * city and its visible sections — nothing else. An unknown, unpublished or
  * malformed address is the same 404, so an unpublished wedding can't be
- * detected. The content is drawn by `WeddingSite` in the wedding's theme
- * (ADR-019): plain text only, and an RSVP section that only explains how to
- * answer with the personal link each party received.
+ * detected. The content is drawn by `WeddingSite` in the wedding's chosen
+ * theme (ADR-019; returned by the same read, Classic when none): plain text
+ * only, and an RSVP section that only explains how to answer with the
+ * personal link each party received.
  */
 export default async function PublicWeddingSitePage({ params }: PageProps<"/boda/[slug]">) {
   const { slug } = await params;
@@ -54,6 +55,5 @@ export default async function PublicWeddingSitePage({ params }: PageProps<"/boda
     );
   }
 
-  // No design state is stored or selected yet (ADR-019 CP2): every site is Classic.
-  return <WeddingSite site={result.site} design={resolveSiteDesign(null)} />;
+  return <WeddingSite site={result.site} design={resolveSiteDesign(result.design.themeKey)} />;
 }

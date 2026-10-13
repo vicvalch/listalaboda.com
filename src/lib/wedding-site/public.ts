@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/lib/supabase/database.types";
+import { toWeddingSiteDesign, type WeddingSiteDesign } from "@/lib/wedding-site/design/resolve";
 import {
   toPublishedSite,
   type PublishedSiteRow,
@@ -17,6 +18,10 @@ import { isValidSlug } from "@/lib/wedding-site/slug";
  * sections are visible) and returns a fixed safe projection, shaped here
  * into the public DTO. Whatever session the client carries is irrelevant.
  *
+ * Content and presentation come back separately: `site` (what the couple
+ * published) and `design` (the chosen theme, ADR-019). No theme, or one this
+ * code doesn't know, is Classic.
+ *
  * A malformed, unknown or unpublished slug is the same `unavailable`, so a
  * site's existence can't be probed before it is published.
  */
@@ -24,7 +29,7 @@ import { isValidSlug } from "@/lib/wedding-site/slug";
 type Client = SupabaseClient<Database>;
 
 export type PublishedSiteResult =
-  | Readonly<{ ok: true; site: PublishedWeddingSite }>
+  | Readonly<{ ok: true; site: PublishedWeddingSite; design: WeddingSiteDesign }>
   | Readonly<{ ok: false; reason: "unavailable" | "error" }>;
 
 export async function getPublishedWeddingSite(
@@ -40,7 +45,10 @@ export async function getPublishedWeddingSite(
     const rows: readonly PublishedSiteRow[] = data;
     const site = toPublishedSite(slug, rows);
     if (!site) return { ok: false, reason: "unavailable" };
-    return { ok: true, site };
+    // Every row repeats the theme. Read as unknown: a database from before
+    // the theme column (deploy skew) has none, which is Classic.
+    const theme: unknown = (data[0] as { site_theme?: unknown } | undefined)?.site_theme;
+    return { ok: true, site, design: toWeddingSiteDesign(theme) };
   } catch {
     return { ok: false, reason: "error" };
   }

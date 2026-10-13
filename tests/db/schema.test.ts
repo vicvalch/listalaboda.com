@@ -37,6 +37,8 @@ const TABLES = [
   "vendor_payments",
   // LB-23 (ADR-016)
   "wedding_timeline_entries",
+  // ADR-019 (wedding site themes, CP4)
+  "wedding_site_designs",
 ];
 
 /**
@@ -78,7 +80,7 @@ describe("schema guarantees", () => {
     expect(columns).toEqual([]);
   });
 
-  it("authenticated can INSERT only into membership invites, checklist items, the guest list, site content, seating, vendors, their finances and the timeline", async () => {
+  it("authenticated can INSERT only into membership invites, checklist items, the guest list, site content and design, seating, vendors, their finances and the timeline", async () => {
     const rows = await sql<{ table_name: string }>(
       `select table_name from information_schema.column_privileges
        where grantee = 'authenticated' and privilege_type = 'INSERT'
@@ -100,6 +102,8 @@ describe("schema guarantees", () => {
       "vendor_payments",
       "wedding_budget_allocations",
       "wedding_budget_totals",
+      // ADR-019: presentation only, member RLS.
+      "wedding_site_designs",
       // LB-23 (ADR-016): private organizer data, member RLS.
       "wedding_timeline_entries",
       // LB-21 (ADR-014): private organizer data, member RLS.
@@ -131,7 +135,7 @@ describe("schema guarantees", () => {
               and p.proname in ('create_wedding', 'accept_membership_invite',
                                 'initialize_wedding_checklist', 'set_wedding_display_name',
                                 'create_guest_invitation', 'get_guest_invitation',
-                                'submit_guest_rsvp', 'save_wedding_site_section',
+                                'submit_guest_rsvp', 'save_wedding_site_section', 'save_wedding_site_design',
                                 'set_wedding_site_slug', 'publish_wedding_site',
                                 'unpublish_wedding_site', 'get_published_wedding_site',
                                 'get_guest_invitation_site_slug', 'guest_invitation_link_is_current',
@@ -201,6 +205,7 @@ describe("schema guarantees", () => {
       "public.record_rsvp_reminder_email",
       "public.revoke_guest_invitation_link",
       "public.rotate_guest_invitation_link",
+      "public.save_wedding_site_design",
       "public.save_wedding_site_section",
       "public.set_rsvp_reminder_policy",
       "public.set_wedding_display_name",
@@ -233,6 +238,8 @@ describe("schema guarantees", () => {
       "public.publish_wedding_site",
       "public.revoke_guest_invitation_link",
       "public.rotate_guest_invitation_link",
+      // ADR-019: membership-checked, runs as the caller (RLS).
+      "public.save_wedding_site_design",
       "public.save_wedding_site_section",
       // LB-17: owner-checked inside; the five scheduler functions are NOT here.
       "public.set_rsvp_reminder_policy",
@@ -268,6 +275,7 @@ describe("schema guarantees", () => {
     expect(definer).toContain("public.rotate_guest_invitation_link");
     expect(definer).toContain("public.create_guest_invitation");
     expect(definer).not.toContain("public.save_wedding_site_section");
+    expect(definer).not.toContain("public.save_wedding_site_design");
     // LB-15 (ADR-008): revocation's one door checks the owner role itself and
     // writes the history row; the history read runs as the caller (RLS).
     expect(definer).toContain("public.revoke_guest_invitation_link");
@@ -295,7 +303,7 @@ describe("schema guarantees", () => {
                            'is_wedding_member', 'has_wedding_role',
                            'initialize_wedding_checklist', 'set_wedding_display_name',
                            'create_guest_invitation', 'get_guest_invitation',
-                           'submit_guest_rsvp', 'save_wedding_site_section',
+                           'submit_guest_rsvp', 'save_wedding_site_section', 'save_wedding_site_design',
                            'set_wedding_site_slug', 'publish_wedding_site',
                            'unpublish_wedding_site', 'get_published_wedding_site',
                            'get_guest_invitation_site_slug', 'guest_invitation_link_is_current',
@@ -358,6 +366,7 @@ describe("schema guarantees", () => {
         name: "rotate_guest_invitation_link",
         args: "target_wedding_id uuid, target_invitation_id uuid, invitation_token_hash text, invitation_token_ciphertext text",
       },
+      { name: "save_wedding_site_design", args: "target_wedding_id uuid, new_theme wedding_site_theme" },
       {
         name: "save_wedding_site_section",
         args: "target_wedding_id uuid, section_kind content_section_kind, section_title text, section_body text, section_visible boolean",

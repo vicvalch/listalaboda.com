@@ -1,6 +1,6 @@
 # ADR-019 — Wedding Site Design and Themes
 
-Status: Accepted (Wedding site themes, CP0–CP3) · Date: 2026-10-12
+Status: Accepted (Wedding site themes, CP0–CP4) · Date: 2026-10-12
 Related: [Product Constitution §8, §10.9](../product/PRODUCT-CONSTITUTION.md), [ADR-001](ADR-001-product-domain-and-tenancy.md),
 [ADR-002 §7](ADR-002-auth-and-security-boundaries.md), [ADR-003](ADR-003-donor-extraction-policy.md),
 [ADR-017](ADR-017-dual-couple-planner-use.md)
@@ -63,13 +63,21 @@ actually needed.
 system font, global color tokens and light/dark behavior. A wedding without design state, and any unknown or invalid
 key, resolves to Classic (`resolveSiteDesign`), in the database (`coalesce`) and again in the application. No backfill.
 
-### 4. Persistence: a separate `wedding_site_designs` table (later checkpoint)
+### 4. Persistence: a separate `wedding_site_designs` table (CP4)
 
 One row per wedding (`wedding_id` primary key, `ON DELETE CASCADE`), `theme_key` as a closed database enum. Not columns
 on `wedding_publications`: that table is owner-only with no client write grants and exists only once a slug is chosen,
 while a theme is presentation that any member may choose before an address exists. The public read adds only the
 theme (and, later, the validated customization) to `get_published_wedding_site`, under the existing `published_at`
 gate, with no ids or timestamps. This is the explicit product decision LB-10 requires for adding a public field.
+
+Implemented in CP4 (`20261022120000_lb_wedding_site_designs.sql`): the enum `wedding_site_theme`; the table with only
+`wedding_id`, `theme_key` (default `classic`) and timestamps; member RLS for select/insert/update with column grants
+(only `theme_key` is updatable, so a design never moves between weddings) and no delete (resetting = choosing
+Classic); the SECURITY INVOKER `save_wedding_site_design` upsert; and `get_published_wedding_site` recreated with one
+more column, `site_theme = coalesce(theme_key, 'classic')`. The application reads it as a design next to the content
+(`{ site, design }`) and falls back to Classic for a missing or unknown value, so an older database or a newer key
+never breaks a page.
 
 ### 5. Authorization and lifecycle
 
@@ -119,8 +127,9 @@ section stays guidance only in every theme: no form, guest lookup, `/rsvp` link 
 - **CP2**: the shared presentation vocabulary and primitives, and the Editorial and Minimal themes, in code only. The
   public page still always renders Classic: nothing stores or selects a theme. No migration.
 - **CP3**: the Romantic and Tropical themes, completing the initial set of five, in code only. No migration.
-- **Later**: the `wedding_site_designs` migration and projection change, the organizer selector and
-  preview, then customization. Each is reviewed separately.
+- **CP4**: `wedding_site_designs`, the member save RPC and the theme in the public read; `/boda/[slug]` renders the
+  stored theme. No organizer UI.
+- **Later**: the organizer selector and preview, then customization. Each is reviewed separately.
 
 ## Rejected alternatives
 

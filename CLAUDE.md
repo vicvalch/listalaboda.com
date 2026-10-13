@@ -164,9 +164,9 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - The public slug (`/boda/<slug>`) is a locator, never a capability or authorization input. Missing,
   unpublished and malformed slugs look identical (404). Never put a wedding UUID in a public URL.
 - anon never reads `weddings`, `content_sections`, `wedding_publications`, memberships or guest tables. The only
-  public read is `get_published_wedding_site(slug)` via `@/lib/wedding-site/public`: name, date, city and visible
-  sections (kind, title, body). No ids, time zone, timestamps, members, checklist or guest data. Add a field
-  there only as an explicit product decision.
+  public read is `get_published_wedding_site(slug)` via `@/lib/wedding-site/public`: name, date, city, visible
+  sections (kind, title, body) and, since ADR-019 CP4, the theme key (`site_theme`). No ids, time zone, timestamps,
+  members, checklist or guest data. Add a field there only as an explicit product decision.
 - Owners and collaborators edit ContentSections (`@/lib/wedding-site/service`, keyed by wedding + kind, never a
   browser-sent row id). Choosing/changing the slug, publishing and unpublishing are owner-only: service
   `requireWeddingRole` + owner-checked SECURITY DEFINER RPCs; clients have no write grant on `wedding_publications`.
@@ -651,9 +651,15 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   section reordering (amends the LB-10 fixed order), planner presets (copy into a wedding, never live-link), custom
   design (closed, versioned schema; never an arbitrary node tree).
 - Every theme's text meets WCAG AA (4.5:1) in light and dark; decorations are `aria-hidden` and carry no information.
-- CP3 state: the five themes (`classic`, `editorial`, `minimal`, `romantic`, `tropical`) exist in code; the public page
-  always resolves Classic (nothing is persisted or selected; the others are reachable only from test fixtures), no
-  migration. `wedding_site_designs`, the selector, preview and customization come in later checkpoints.
+- Persistence (CP4): `public.wedding_site_designs` = `wedding_id` (PK, cascade) + `theme_key` (`wedding_site_theme`
+  enum, mirrors `WEDDING_SITE_THEME_KEYS`) + timestamps; nothing else. Member RLS select/insert/update, only
+  `theme_key` updatable, no delete (reset = choose Classic), anon nothing. Writes only through
+  `saveWeddingSiteTheme` (`@/lib/wedding-site/service`) → SECURITY INVOKER `save_wedding_site_design`; never touches
+  content, publication or activity. No row = Classic: never backfill or write a row on read.
+- Public read: `get_published_wedding_site` returns `site_theme = coalesce(theme_key, 'classic')` under the unchanged
+  publication gate; `getPublishedWeddingSite` returns `{ site, design }` side by side (`toWeddingSiteDesign`: missing,
+  null or unknown = Classic, so an older database works); `/boda/[slug]` renders `resolveSiteDesign(design.themeKey)`.
+- CP4 state: the five themes are stored and rendered; no organizer selector, preview or customization yet.
 
 ## Commands
 
@@ -727,5 +733,6 @@ Wedding site themes (ADR-019) CP0/CP1 adds the theme engine (types, registry, re
 Classic as the only theme, identical to the LB-10 page (no migration, persistence, selector or other themes yet).
 CP2 adds the shared presentation vocabulary and primitives and the Editorial and Minimal themes, in code only (the
 public page still always renders Classic; no migration, persistence, selector or preview). CP3 adds the Romantic and
-Tropical themes, completing the initial set of five, in code only.
+Tropical themes, completing the initial set of five, in code only. CP4 persists the theme (`wedding_site_designs`, member
+`save_wedding_site_design`) and returns it from the public read for `/boda/[slug]` (no selector, preview or customization).
 Don't implement ahead of the current prompt.

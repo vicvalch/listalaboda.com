@@ -1,9 +1,12 @@
 import { randomBytes } from "node:crypto";
 
 import { expect, test, type Browser, type Locator, type Page } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
 import pg from "pg";
 
+import type { Database } from "../src/lib/supabase/database.types";
 import { createAccount, createInvite, es, formAlert, logIn } from "./support/flows";
+import { E2E_PASSWORD } from "./support/identities";
 import { readLocalSupabase } from "./support/local-supabase";
 
 // LB-10: the wedding website. Private editor ("Sitio web"), explicit
@@ -584,7 +587,95 @@ test.describe("wedding website", () => {
       await context.close();
     }
   });
+
+  test("R: the public site renders the theme a member saved; no design row is Classic", async ({ page, browser }, testInfo) => {
+    // ADR-019 CP4. There is no theme selector yet: the theme is saved through
+    // the member RPC (save_wedding_site_design), as a collaborator would.
+    const owner = await createAccount("lb-site-theme-owner");
+    await logIn(page, owner);
+    const weddingId = await createFullWedding(page, "Boda de prueba con tema");
+    await openSite(page, weddingId);
+    await saveSection(page, "intro", { body: "Bienvenidos.\nNos alegra compartir este día.", visible: true });
+    await saveSection(page, "rsvp", { visible: true });
+    const slug = uniqueSlug("tema");
+    await saveSlug(page, slug);
+    await publishSite(page);
+
+    const collaborator = await createAccount("lb-site-theme-collab");
+    const db = new pg.Client({ connectionString: readLocalSupabase().dbUrl });
+    await db.connect();
+    try {
+      // Fixture: the collaborator's membership (the invite flow is covered elsewhere).
+      await db.query(
+        `insert into public.wedding_memberships (wedding_id, user_id, role)
+         select $1, id, 'collaborator' from auth.users where email = $2`,
+        [weddingId, collaborator],
+      );
+      expect((await db.query("select 1 from public.wedding_site_designs where wedding_id = $1", [weddingId])).rowCount).toBe(0);
+    } finally {
+      await db.end();
+    }
+    const member = await signedInClient(collaborator);
+
+    const context = await browser.newContext({ colorScheme: "light", viewport: { width: 390, height: 800 } });
+    const visitor = await context.newPage();
+    const expectTheme = async (palette: string | null, background: string) => {
+      await visitor.goto(`/boda/${slug}`);
+      await expect(visitor.getByRole("heading", { level: 1, name: "Boda de prueba con tema" })).toBeVisible();
+      await expect(visitor.locator('[data-testid="public-site-section"]')).toHaveCount(2);
+      const main = visitor.locator("main");
+      if (palette) await expect(main).toHaveAttribute("data-site-palette", palette);
+      else await expect(main).not.toHaveAttribute("data-site-palette", /.*/);
+      const painted = await visitor.evaluate(() => {
+        const main = getComputedStyle(document.querySelector("main") as Element).backgroundColor;
+        return main === "rgba(0, 0, 0, 0)" ? getComputedStyle(document.body).backgroundColor : main;
+      });
+      expect(painted, palette ?? "classic").toBe(background);
+      await expect(visitor.locator("form, input, a[href*='/rsvp']")).toHaveCount(0);
+      await expectNoHorizontalScroll(visitor);
+    };
+
+    // No design row: Classic, and reading wrote none.
+    await expectTheme(null, "rgb(253, 250, 247)");
+
+    const themes = [
+      ["editorial", "ivory", "rgb(251, 248, 242)"],
+      ["minimal", "mono", "rgb(255, 255, 255)"],
+      ["romantic", "rose", "rgb(250, 245, 241)"],
+      ["tropical", "sand", "rgb(245, 239, 227)"],
+    ] as const;
+    for (const [theme, palette, background] of themes) {
+      const { data, error } = await member.rpc("save_wedding_site_design", { target_wedding_id: weddingId, new_theme: theme });
+      expect(error, theme).toBeNull();
+      expect(data, theme).toBe(theme);
+      await expectTheme(palette, background);
+      await visitor.screenshot({ path: testInfo.outputPath(`theme-${theme}.png`), fullPage: true });
+    }
+
+    // Back to the original look by choosing Classic.
+    expect((await member.rpc("save_wedding_site_design", { target_wedding_id: weddingId, new_theme: "classic" })).error).toBeNull();
+    await expectTheme(null, "rgb(253, 250, 247)");
+
+    // Unpublishing still hides the site, whatever the theme.
+    await member.rpc("save_wedding_site_design", { target_wedding_id: weddingId, new_theme: "romantic" });
+    await openSite(page, weddingId);
+    await unpublishSite(page);
+    const gone = await visitor.goto(`/boda/${slug}`);
+    expect(gone?.status()).toBe(404);
+    await context.close();
+  });
 });
+
+/** A Supabase client signed in as a local fake account (for RPC-level setup without UI). */
+async function signedInClient(email: string) {
+  const { apiUrl, publishableKey } = readLocalSupabase();
+  const supabase = createClient<Database>(apiUrl, publishableKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { error } = await supabase.auth.signInWithPassword({ email, password: E2E_PASSWORD });
+  if (error) throw new Error(`Could not sign in the local E2E account: ${error.code}`);
+  return supabase;
+}
 
 async function saveSectionExpectingError(page: Page, kind: keyof typeof site.kinds, error: string) {
   const card = sectionCard(page, kind);

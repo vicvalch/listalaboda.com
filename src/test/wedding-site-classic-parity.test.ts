@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { DEFAULT_WEDDING_SITE_DESIGN } from "@/lib/wedding-site/design/resolve";
 import type { PublishedSiteResult } from "@/lib/wedding-site/public";
 import { toPublishedSite, type PublishedSiteRow } from "@/lib/wedding-site/sections";
 
@@ -41,7 +42,8 @@ function row(overrides: Partial<PublishedSiteRow>): PublishedSiteRow {
 function site(rows: PublishedSiteRow[]): PublishedSiteResult {
   const built = toPublishedSite("sofia-y-andres", rows);
   if (!built) throw new Error("fixture has no rows");
-  return { ok: true, site: built };
+  // A wedding without design state: the read returns Classic (CP4).
+  return { ok: true, site: built, design: DEFAULT_WEDDING_SITE_DESIGN };
 }
 
 const props = {

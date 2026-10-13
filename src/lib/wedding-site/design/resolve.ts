@@ -1,4 +1,29 @@
-import { getTheme, type ThemeDefinition, type WeddingSiteThemeKey } from "@/lib/wedding-site/design/themes";
+import {
+  DEFAULT_WEDDING_SITE_THEME,
+  getTheme,
+  isWeddingSiteThemeKey,
+  type ThemeDefinition,
+  type WeddingSiteThemeKey,
+} from "@/lib/wedding-site/design/themes";
+
+/**
+ * A wedding's stored design choice, as the public read returns it next to
+ * the content (CP4: the theme only). Never inside `PublishedWeddingSite`:
+ * content and presentation stay separate inputs.
+ */
+export type WeddingSiteDesign = Readonly<{ themeKey: WeddingSiteThemeKey }>;
+
+/** No design state: Classic. */
+export const DEFAULT_WEDDING_SITE_DESIGN: WeddingSiteDesign = { themeKey: DEFAULT_WEDDING_SITE_THEME };
+
+/**
+ * Reads a stored theme value (the public read's `site_theme`) into a design.
+ * Missing (a database without the column), null or unknown is Classic, so a
+ * bad, older or newer value can never break a public page.
+ */
+export function toWeddingSiteDesign(themeKey: unknown): WeddingSiteDesign {
+  return { themeKey: isWeddingSiteThemeKey(themeKey) ? themeKey : DEFAULT_WEDDING_SITE_THEME };
+}
 
 /**
  * What the public renderer draws with: a complete set of closed presentation

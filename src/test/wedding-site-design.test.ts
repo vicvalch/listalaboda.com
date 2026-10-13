@@ -3,7 +3,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { WeddingSite } from "@/components/wedding-site/WeddingSite";
-import { resolveSiteDesign } from "@/lib/wedding-site/design/resolve";
+import { Constants } from "@/lib/supabase/database.types";
+import {
+  DEFAULT_WEDDING_SITE_DESIGN,
+  resolveSiteDesign,
+  toWeddingSiteDesign,
+} from "@/lib/wedding-site/design/resolve";
 import {
   DEFAULT_WEDDING_SITE_THEME,
   getTheme,
@@ -31,6 +36,18 @@ describe("theme registry", () => {
     expect([...WEDDING_SITE_THEME_KEYS].sort()).toEqual(["classic", "editorial", "minimal", "romantic", "tropical"]);
     expect(Object.keys(THEME_REGISTRY).sort()).toEqual([...WEDDING_SITE_THEME_KEYS].sort());
     for (const key of WEDDING_SITE_THEME_KEYS) expect(THEME_REGISTRY[key].key).toBe(key);
+  });
+
+  it("the keys are exactly the database's theme enum, in the same order", () => {
+    expect([...WEDDING_SITE_THEME_KEYS]).toEqual([...Constants.public.Enums.wedding_site_theme]);
+  });
+
+  it("a stored theme value reads as that theme; missing, null or unknown is Classic", () => {
+    expect(DEFAULT_WEDDING_SITE_DESIGN).toEqual({ themeKey: "classic" });
+    for (const key of WEDDING_SITE_THEME_KEYS) expect(toWeddingSiteDesign(key)).toEqual({ themeKey: key });
+    for (const value of [undefined, null, "", "neon", "Classic", "__proto__", 1, {}, ["editorial"]]) {
+      expect(toWeddingSiteDesign(value)).toEqual({ themeKey: "classic" });
+    }
   });
 
   it("recognizes only its own keys", () => {

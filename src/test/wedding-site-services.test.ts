@@ -11,6 +11,7 @@ const {
   getWeddingSiteEditor,
   publishWeddingSite,
   saveContentSection,
+  saveWeddingSiteTheme,
   setWeddingSiteSlug,
   unpublishWeddingSite,
 } = await import("@/lib/wedding-site/service");
@@ -171,6 +172,55 @@ describe("saveContentSection", () => {
   });
 });
 
+// ------------------------------------------------------------------ design
+
+describe("saveWeddingSiteTheme", () => {
+  it("any member saves by authorized wedding; only the wedding id and theme are sent", async () => {
+    for (const role of ["owner", "collaborator"] as const) {
+      const { supabase, requests } = clientFor({
+        role,
+        replies: { "POST /rest/v1/rpc/save_wedding_site_design": { status: 200, body: "romantic" } },
+      });
+      expect(await saveWeddingSiteTheme(supabase, WEDDING_ID, "romantic")).toEqual({ ok: true, themeKey: "romantic" });
+      expect(rpcCalls(requests).map((r) => r.body)).toEqual([{ target_wedding_id: WEDDING_ID, new_theme: "romantic" }]);
+    }
+  });
+
+  it("non-members, malformed ids and missing sessions write nothing", async () => {
+    const outsider = clientFor({ role: null });
+    expect(await saveWeddingSiteTheme(outsider.supabase, WEDDING_ID, "minimal")).toEqual({ ok: false, reason: "not_found" });
+    expect(rpcCalls(outsider.requests)).toEqual([]);
+    const malformed = clientFor({ role: "owner" });
+    expect(await saveWeddingSiteTheme(malformed.supabase, "../other", "minimal")).toEqual({ ok: false, reason: "not_found" });
+    expect(rpcCalls(malformed.requests)).toEqual([]);
+    const signedOut = clientFor({ noSession: true });
+    expect(await saveWeddingSiteTheme(signedOut.supabase, WEDDING_ID, "minimal")).toEqual({
+      ok: false,
+      reason: "unauthenticated",
+    });
+  });
+
+  it("normalizes database failures", async () => {
+    const cases: [Reply | "down", string][] = [
+      [pgError("22P02", 'invalid input value for enum wedding_site_theme: "neon"'), "invalid"],
+      [pgError("22023", "wedding_site_theme_required"), "invalid"],
+      [pgError("P0002", "wedding_not_found"), "not_found"],
+      [pgError("42501", "new row violates row-level security policy"), "not_found"],
+      [pgError("XX000", "boom"), "error"],
+      ["down", "error"],
+    ];
+    for (const [reply, reason] of cases) {
+      const { supabase } = clientFor({
+        role: "collaborator",
+        ...(reply === "down"
+          ? { networkDown: "POST /rest/v1/rpc/save_wedding_site_design" }
+          : { replies: { "POST /rest/v1/rpc/save_wedding_site_design": reply } }),
+      });
+      expect(await saveWeddingSiteTheme(supabase, WEDDING_ID, "editorial")).toEqual({ ok: false, reason });
+    }
+  });
+});
+
 // ------------------------------------------------------------- publication
 
 describe("owner-only publication", () => {
@@ -290,7 +340,7 @@ describe("getPublishedWeddingSite", () => {
     expect(requests.filter((r) => r.url.pathname.startsWith("/rest/"))).toEqual([]);
   });
 
-  it("sends only the slug and shapes the safe DTO", async () => {
+  it("sends only the slug and shapes the safe DTO (a reply without a theme is Classic)", async () => {
     const { supabase, requests } = clientFor({
       replies: {
         "POST /rest/v1/rpc/get_published_wedding_site": {
@@ -317,8 +367,50 @@ describe("getPublishedWeddingSite", () => {
         city: "Ciudad",
         sections: [{ kind: "intro", title: "Bienvenidos", body: "Hola" }],
       },
+      // The reply above is the pre-theme row shape (no site_theme): what a
+      // database without the CP4 migration returns. It reads as Classic.
+      design: { themeKey: "classic" },
     });
     expect(rpcCalls(requests).map((r) => r.body)).toEqual([{ site_slug: "ana-y-luis" }]);
+  });
+
+  it("returns the chosen theme next to the content, never inside it; anything unknown is Classic", async () => {
+    const row = {
+      wedding_name: "Boda de prueba",
+      wedding_date: null,
+      wedding_city: null,
+      section_kind: "intro",
+      section_title: null,
+      section_body: "Hola",
+    };
+    const cases: [unknown, string][] = [
+      ["classic", "classic"],
+      ["editorial", "editorial"],
+      ["minimal", "minimal"],
+      ["romantic", "romantic"],
+      ["tropical", "tropical"],
+      [null, "classic"],
+      ["neon", "classic"],
+      ["Romantic", "classic"],
+      ["__proto__", "classic"],
+      [42, "classic"],
+    ];
+    for (const [siteTheme, themeKey] of cases) {
+      const { supabase } = clientFor({
+        replies: {
+          "POST /rest/v1/rpc/get_published_wedding_site": { status: 200, body: [{ ...row, site_theme: siteTheme }] },
+        },
+      });
+      const result = await getPublishedWeddingSite(supabase, "ana-y-luis");
+      expect(result.ok && result.design, String(siteTheme)).toEqual({ themeKey });
+      expect(result.ok && Object.keys(result.site).sort(), String(siteTheme)).toEqual([
+        "city",
+        "name",
+        "sections",
+        "slug",
+        "weddingDate",
+      ]);
+    }
   });
 
   it("no rows is unavailable; failures are errors", async () => {

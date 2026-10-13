@@ -8,6 +8,7 @@ import {
   type WeddingAccess,
 } from "@/lib/authz/wedding";
 import type { Database } from "@/lib/supabase/database.types";
+import type { WeddingSiteThemeKey } from "@/lib/wedding-site/design/themes";
 import {
   toEditorSections,
   type EditorSection,
@@ -161,6 +162,44 @@ export async function saveContentSection(
       return { ok: false, reason: "error" };
     }
     return { ok: true };
+  } catch {
+    return { ok: false, reason: "error" };
+  }
+}
+
+// ------------------------------------------------------------------ design
+
+export type SaveThemeResult =
+  | Readonly<{ ok: true; themeKey: WeddingSiteThemeKey }>
+  | Readonly<{ ok: false; reason: AccessDenial | "invalid" }>;
+
+/**
+ * Chooses the website's theme (ADR-019) for any member, like content. One
+ * row per wedding, inserted the first time and updated afterwards; choosing
+ * Classic is how a design is reset. It never publishes, unpublishes or
+ * touches content. If the site is published, the new look is public at once.
+ */
+export async function saveWeddingSiteTheme(
+  supabase: Client,
+  weddingId: string,
+  themeKey: WeddingSiteThemeKey,
+): Promise<SaveThemeResult> {
+  const access = await requireWeddingMembership(supabase, weddingId);
+  if (!access.ok) return { ok: false, reason: accessDenial(access.reason) };
+
+  try {
+    const { data, error } = await supabase.rpc("save_wedding_site_design", {
+      target_wedding_id: access.access.weddingId,
+      new_theme: themeKey,
+    });
+    if (error) {
+      // invalid_text_representation (not a theme) or the null check.
+      if (error.code === "22P02" || error.code === "22023") return { ok: false, reason: "invalid" };
+      // The membership changed since the check.
+      if (error.code === "P0002" || error.code === "42501") return { ok: false, reason: "not_found" };
+      return { ok: false, reason: "error" };
+    }
+    return { ok: true, themeKey: data };
   } catch {
     return { ok: false, reason: "error" };
   }

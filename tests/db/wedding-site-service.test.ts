@@ -217,6 +217,8 @@ describe("public site service", () => {
           },
         ],
       },
+      // No design row: Classic (ADR-019 CP4).
+      design: { themeKey: "classic" },
     });
     const payload = JSON.stringify(result);
     expect(payload).not.toContain(wedding);

@@ -1,6 +1,6 @@
 # ADR-019 — Wedding Site Design and Themes
 
-Status: Accepted (Wedding site themes, CP0–CP4) · Date: 2026-10-12
+Status: Accepted (Wedding site themes, CP0–CP5) · Date: 2026-10-12
 Related: [Product Constitution §8, §10.9](../product/PRODUCT-CONSTITUTION.md), [ADR-001](ADR-001-product-domain-and-tenancy.md),
 [ADR-002 §7](ADR-002-auth-and-security-boundaries.md), [ADR-003](ADR-003-donor-extraction-policy.md),
 [ADR-017](ADR-017-dual-couple-planner-use.md)
@@ -85,6 +85,11 @@ never breaks a page.
   member RLS on a SECURITY INVOKER write. Publishing and unpublishing stay owner-only and unchanged.
 - A saved design change on a published site applies immediately, like LB-10 content edits. A member-only preview is
   the safety step before saving. No drafts or versions yet; they arrive only with advanced custom mode.
+- The preview (CP5) is a member-only page (`/app/weddings/[id]/site/preview?theme=<key>`, `noindex`) that draws the
+  site with the public renderer from data the member already reads through RLS: the wedding's name, date and city and
+  its visible sections, shaped by the same `toPublishedSite` as the public read (`toPreviewSite`). It works before
+  publishing, never writes, and never uses or widens the public projection. An unknown `?theme=` shows the current
+  theme. The selector's thumbnails are the same renderer, scaled, `aria-hidden` and `inert`; no iframe.
 - No activity events (ADR-008's scope is unchanged).
 
 ### 6. Customization contract
@@ -129,7 +134,9 @@ section stays guidance only in every theme: no form, guest lookup, `/rsvp` link 
 - **CP3**: the Romantic and Tropical themes, completing the initial set of five, in code only. No migration.
 - **CP4**: `wedding_site_designs`, the member save RPC and the theme in the public read; `/boda/[slug]` renders the
   stored theme. No organizer UI.
-- **Later**: the organizer selector and preview, then customization. Each is reviewed separately.
+- **CP5**: "Estilo del sitio" in the site editor (one card per registry theme, real thumbnails, "Usar este estilo"
+  through the CP4 save) and the member-only preview. No migration.
+- **Later**: customization, reviewed separately.
 
 ## Rejected alternatives
 

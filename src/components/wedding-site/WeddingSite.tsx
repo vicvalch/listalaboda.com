@@ -18,14 +18,26 @@ import type { PublishedWeddingSite } from "@/lib/wedding-site/sections";
  * kept with CSS), never as HTML. The RSVP section only explains how to
  * answer, with the personal link each party received: no form, guest search,
  * guest data or link to an RSVP page.
+ *
+ * `element` is the page landmark: `main` on the public page; `div` where the
+ * site is drawn inside another page (the organizer's preview and theme
+ * thumbnails), which already has its own `main`.
  */
-export function WeddingSite({ site, design }: { site: PublishedWeddingSite; design: ResolvedSiteDesign }) {
+export function WeddingSite({
+  site,
+  design,
+  element: Root = "main",
+}: {
+  site: PublishedWeddingSite;
+  design: ResolvedSiteDesign;
+  element?: "main" | "div";
+}) {
   const { publicSite } = getMessages();
   // Classic draws with the app palette and sets no palette scope, which keeps
   // its markup identical to the original page.
   const palette = design.palette === "app" ? undefined : design.palette;
   return (
-    <main
+    <Root
       className={cx(
         "flex flex-1 flex-col items-center px-4",
         DENSITY[design.density].page,
@@ -41,6 +53,6 @@ export function WeddingSite({ site, design }: { site: PublishedWeddingSite; desi
         ))}
       </article>
       <SiteFooter design={design} text={publicSite.footer} />
-    </main>
+    </Root>
   );
 }

@@ -302,7 +302,7 @@ describe("owner-only publication", () => {
 describe("getWeddingSiteEditor", () => {
   const access = { weddingId: WEDDING_ID, userId: USER_ID, membershipId: MY_MEMBERSHIP, role: "collaborator" as const };
 
-  it("loads publication and sections in two bounded queries", async () => {
+  it("loads publication, sections and design in three bounded reads", async () => {
     const { supabase, requests } = clientFor({
       replies: {
         "GET /rest/v1/wedding_publications": { status: 200, body: { slug: "ana-y-luis", published_at: null } },
@@ -310,15 +310,50 @@ describe("getWeddingSiteEditor", () => {
           status: 200,
           body: [{ kind: "faq", title: null, body: "Preguntas", is_visible: true }],
         },
+        "GET /rest/v1/wedding_site_designs": { status: 200, body: { theme_key: "romantic" } },
       },
     });
     const editor = await getWeddingSiteEditor(supabase, access);
     expect(editor?.publication).toEqual({ slug: "ana-y-luis", publishedAt: null });
     expect(editor?.sections).toHaveLength(7);
     expect(editor?.sections[5]).toEqual({ kind: "faq", title: null, body: "Preguntas", isVisible: true });
+    expect(editor?.design).toEqual({ themeKey: "romantic" });
     const reads = requests.filter((r) => r.url.pathname.startsWith("/rest/v1/"));
-    expect(reads).toHaveLength(2);
-    for (const read of reads) expect(read.url.searchParams.get("wedding_id")).toBe(`eq.${WEDDING_ID}`);
+    expect(reads).toHaveLength(3);
+    for (const read of reads) {
+      expect(read.method).toBe("GET");
+      expect(read.url.searchParams.get("wedding_id")).toBe(`eq.${WEDDING_ID}`);
+    }
+    expect(reads.find((r) => r.url.pathname.endsWith("/wedding_site_designs"))?.url.searchParams.get("select")).toBe(
+      "theme_key",
+    );
+  });
+
+  it.each([
+    ["no design row", null],
+    ["an unknown stored value", { theme_key: "neon" }],
+  ])("%s is Classic, and reading writes nothing", async (_label, body) => {
+    const { supabase, requests } = clientFor({
+      replies: {
+        "GET /rest/v1/wedding_publications": { status: 200, body: null },
+        "GET /rest/v1/content_sections": { status: 200, body: [] },
+        "GET /rest/v1/wedding_site_designs": { status: 200, body },
+      },
+    });
+    const editor = await getWeddingSiteEditor(supabase, access);
+    expect(editor?.design).toEqual({ themeKey: "classic" });
+    expect(requests.filter((r) => r.method !== "GET")).toEqual([]);
+  });
+
+  it("a failed design read fails the editor (never a silent Classic)", async () => {
+    const { supabase } = clientFor({
+      replies: {
+        "GET /rest/v1/wedding_publications": { status: 200, body: null },
+        "GET /rest/v1/content_sections": { status: 200, body: [] },
+        "GET /rest/v1/wedding_site_designs": { status: 500, body: { message: "boom" } },
+      },
+    });
+    expect(await getWeddingSiteEditor(supabase, access)).toBeNull();
   });
 
   it("returns null on failure", async () => {

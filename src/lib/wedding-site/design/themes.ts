@@ -6,12 +6,12 @@
  * markup and classes. Nothing here is a CSS, class name, HTML or URL string.
  *
  * A key is never removed, so a stored choice always resolves. Classic is
- * today's public page, unchanged. Editorial, Minimal, Romantic and Tropical
- * exist in code only (CP2, CP3): nothing stores or selects a theme yet, so
- * every public site is still Classic.
+ * the original public page, unchanged, and every wedding without a stored
+ * choice. Members choose a theme in the site editor (CP5); the public read
+ * returns it (CP4).
  */
 
-/** Closed set of theme keys. Becomes the database enum once designs are stored (CP4). */
+/** Closed set of theme keys; mirrored by the `wedding_site_theme` database enum. */
 export const WEDDING_SITE_THEME_KEYS = ["classic", "editorial", "minimal", "romantic", "tropical"] as const;
 
 export type WeddingSiteThemeKey = (typeof WEDDING_SITE_THEME_KEYS)[number];

@@ -10,6 +10,7 @@ import { requireWeddingMembership } from "@/lib/authz/wedding";
 import { getRequestOrigin } from "@/lib/http/origin";
 import { getMessages } from "@/lib/i18n";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { toPreviewSite } from "@/lib/wedding-site/preview";
 import { getWeddingSiteEditor } from "@/lib/wedding-site/service";
 import { PUBLIC_SITE_BASE_PATH, publicSitePath, suggestSlug } from "@/lib/wedding-site/slug";
 import { formatWeddingDate } from "@/lib/weddings/format";
@@ -20,14 +21,15 @@ import { unpublishSiteAction } from "./actions";
 import { PublishForm } from "./PublishForm";
 import { SectionForm } from "./SectionForm";
 import { SlugForm } from "./SlugForm";
+import { ThemeSection } from "./ThemeSection";
 
 export const metadata: Metadata = { title: getMessages().site.title };
 
 /**
  * "Sitio web": the private editor of the wedding's public website, a
  * secondary area next to the checklist (which stays the wedding's home).
- * Any member edits the sections; only owners see the address and
- * publication controls, which the service and database also enforce.
+ * Any member edits the sections and chooses the theme ("Estilo del sitio",
+ * ADR-019); only owners see the address and publication controls, which the service and database also enforce.
  * Membership is checked server-side first; a non-member, a nonexistent
  * wedding and a malformed id all get the same 404. Opening this page never
  * writes anything.
@@ -152,6 +154,15 @@ export default async function WeddingSitePage({
             <Notice tone="info">{copy.status.collaboratorNote}</Notice>
           )}
         </section>
+      ) : null}
+
+      {editor ? (
+        <ThemeSection
+          weddingId={wedding.id}
+          site={toPreviewSite(wedding, editor.sections, publication?.slug ?? "")}
+          current={editor.design.themeKey}
+          isPublished={isPublished}
+        />
       ) : null}
 
       <section className="space-y-3" aria-labelledby="site-header-title">

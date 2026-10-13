@@ -5,20 +5,22 @@ import { notFound, redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth/session";
 import { formText, type FormState } from "@/lib/forms/result";
-import { getMessages } from "@/lib/i18n";
+import { getMessages, interpolate } from "@/lib/i18n";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { isWeddingSiteThemeKey } from "@/lib/wedding-site/design/themes";
 import { isSectionKind, parseSectionInput, type SectionField } from "@/lib/wedding-site/sections";
 import {
   publishWeddingSite,
   saveContentSection,
+  saveWeddingSiteTheme,
   setWeddingSiteSlug,
   unpublishWeddingSite,
 } from "@/lib/wedding-site/service";
 import { parseSlug } from "@/lib/wedding-site/slug";
 
 /**
- * Wedding website mutations. Section content is for any member (owner or
- * collaborator); the address, publishing and unpublishing are owner-only
+ * Wedding website mutations. Section content and the theme are for any
+ * member (owner or collaborator); the address, publishing and unpublishing are owner-only
  * (service + database). Forms carry only lookup keys (wedding id, section
  * kind) and the typed values; the caller, their membership and role are
  * derived on the server by the service, and the database re-checks every
@@ -81,6 +83,42 @@ export async function saveSectionAction(
 
   revalidatePath(sitePath(weddingId));
   return { ok: true, data: { message: copy.sections.saved, nonce: crypto.randomUUID() } };
+}
+
+// ------------------------------------------------------------------ theme
+
+export type ThemeFormState = FormState<never, { message: string; nonce: string }> | null;
+
+/**
+ * "Usar este estilo" (ADR-019, CP5), from the selector or the preview. The
+ * form carries the wedding id and the chosen key (a submit button's value);
+ * anything that isn't exactly a theme key is refused before the service.
+ * Saving writes only the theme: it never publishes, unpublishes or touches
+ * content, and a published site shows the new look at once (its page reads
+ * on every request).
+ */
+export async function saveThemeAction(_prev: ThemeFormState, formData: FormData): Promise<ThemeFormState> {
+  const weddingId = formText(formData, "weddingId");
+  await requireUser(sitePath(weddingId));
+  const copy = getMessages().site;
+
+  const theme = formText(formData, "theme");
+  if (!isWeddingSiteThemeKey(theme)) return { ok: false, formError: copy.design.invalid };
+
+  const result = await saveWeddingSiteTheme(await createSupabaseServerClient(), weddingId, theme);
+  if (!result.ok) {
+    if (result.reason === "invalid") return { ok: false, formError: copy.design.invalid };
+    return { ok: false, formError: await handleFailure(weddingId, result.reason) };
+  }
+
+  revalidatePath(sitePath(weddingId), "layout");
+  return {
+    ok: true,
+    data: {
+      message: interpolate(copy.design.saved, { name: copy.themes[result.themeKey].name }),
+      nonce: crypto.randomUUID(),
+    },
+  };
 }
 
 // ------------------------------------------------------------------- slug

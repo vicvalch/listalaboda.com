@@ -8,6 +8,7 @@ import {
   type WeddingAccess,
 } from "@/lib/authz/wedding";
 import type { Database } from "@/lib/supabase/database.types";
+import { toWeddingSiteDesign, type WeddingSiteDesign } from "@/lib/wedding-site/design/resolve";
 import type { WeddingSiteThemeKey } from "@/lib/wedding-site/design/themes";
 import {
   toEditorSections,
@@ -67,19 +68,21 @@ export type WeddingSiteEditor = Readonly<{
   publication: SitePublication | null;
   /** All seven sections, canonical order. */
   sections: readonly EditorSection[];
+  /** The chosen theme, next to the content (never inside it); no row = Classic. */
+  design: WeddingSiteDesign;
 }>;
 
 /**
- * The editor's data in two queries (publication + sections), after a
- * successful membership check. Members (owners and collaborators) read
- * both. Returns null on failure.
+ * The editor's data in three queries (publication, sections, design), after
+ * a successful membership check. Members (owners and collaborators) read
+ * all three. Reading never writes a design row. Returns null on failure.
  */
 export async function getWeddingSiteEditor(
   supabase: Client,
   access: WeddingAccess,
 ): Promise<WeddingSiteEditor | null> {
   try {
-    const [publication, sections] = await Promise.all([
+    const [publication, sections, design] = await Promise.all([
       supabase
         .from("wedding_publications")
         .select("slug, published_at")
@@ -89,13 +92,19 @@ export async function getWeddingSiteEditor(
         .from("content_sections")
         .select("kind, title, body, is_visible")
         .eq("wedding_id", access.weddingId),
+      supabase
+        .from("wedding_site_designs")
+        .select("theme_key")
+        .eq("wedding_id", access.weddingId)
+        .maybeSingle(),
     ]);
-    if (publication.error || sections.error || !sections.data) return null;
+    if (publication.error || sections.error || !sections.data || design.error) return null;
     return {
       publication: publication.data
         ? { slug: publication.data.slug, publishedAt: publication.data.published_at }
         : null,
       sections: toEditorSections(sections.data),
+      design: toWeddingSiteDesign(design.data?.theme_key),
     };
   } catch {
     return null;

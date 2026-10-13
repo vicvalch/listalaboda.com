@@ -664,7 +664,294 @@ test.describe("wedding website", () => {
     expect(gone?.status()).toBe(404);
     await context.close();
   });
+
+  // ADR-019 CP5: "Estilo del sitio" and the member-only preview.
+  test("S: members choose the theme in «Estilo del sitio»; the public page follows at once; nothing else changes", async ({
+    page,
+    browser,
+  }) => {
+    const ownerEmail = await createAccount("lb-site-style-owner");
+    await logIn(page, ownerEmail);
+    const weddingId = await createFullWedding(page, "Boda de prueba Estilo");
+    await openSite(page, weddingId);
+    await saveSection(page, "intro", { body: "Bienvenidos a nuestra boda.", visible: true });
+    await saveSection(page, "rsvp", { visible: true });
+    const slug = uniqueSlug("estilo");
+    await saveSlug(page, slug);
+
+    // No design row: Classic is the selected card; the order is the registry's.
+    const card = page.getByTestId("site-theme");
+    await expect(card.getByRole("heading", { level: 2, name: site.design.title })).toBeVisible();
+    await expect(card.getByText(site.design.contentNote)).toBeVisible();
+    await expect(card.getByText(site.design.unpublishedNote)).toBeVisible();
+    await expect(themeOptions(page)).toHaveCount(5);
+    expect(await themeOptions(page).evaluateAll((els) => els.map((el) => el.getAttribute("data-theme")))).toEqual([
+      "classic",
+      "editorial",
+      "minimal",
+      "romantic",
+      "tropical",
+    ]);
+    await expectSelectedTheme(page, "classic");
+    expect(await designOf(weddingId)).toBeNull();
+    const before = await siteState(weddingId);
+
+    // The owner chooses Editorial on the unpublished site: saved, still unpublished.
+    await chooseTheme(page, "editorial");
+    expect(await designOf(weddingId)).toBe("editorial");
+    expect(await publication(weddingId)).toEqual({ slug, published: false });
+    expect(await siteState(weddingId)).toEqual(before);
+    const visitor = await freshPage(browser);
+    await expectPublicNotFound(visitor.page, slug);
+
+    // Published, it shows the chosen theme.
+    await publishSite(page);
+    await expect(card.getByText(site.design.liveNote)).toBeVisible();
+    await visitor.page.goto(`/boda/${slug}`);
+    await expect(visitor.page.locator("main")).toHaveAttribute("data-site-palette", "ivory");
+
+    // A collaborator chooses too (but still can't publish), live at once.
+    const collaboratorEmail = await createAccount("lb-site-style-collab");
+    await addCollaborator(weddingId, collaboratorEmail);
+    const collab = await freshPage(browser);
+    await logIn(collab.page, collaboratorEmail);
+    await openSite(collab.page, weddingId);
+    await expectSelectedTheme(collab.page, "editorial");
+    await expect(collab.page.getByRole("button", { name: site.unpublish.open })).toHaveCount(0);
+    for (const [theme, palette] of [
+      ["minimal", "mono"],
+      ["romantic", "rose"],
+      ["tropical", "sand"],
+    ] as const) {
+      await chooseTheme(collab.page, theme);
+      await visitor.page.reload();
+      await expect(visitor.page.locator("main")).toHaveAttribute("data-site-palette", palette);
+      await expect(visitor.page.getByText("Bienvenidos a nuestra boda.")).toBeVisible();
+    }
+    // Back to Classic.
+    await chooseTheme(collab.page, "classic");
+    await visitor.page.reload();
+    await expect(visitor.page.locator("main")).not.toHaveAttribute("data-site-palette", /.*/);
+    expect(await designOf(weddingId)).toBe("classic");
+    expect(await publication(weddingId)).toEqual({ slug, published: true });
+    expect((await siteState(weddingId)).content).toEqual(before.content);
+
+    // The owner's own save request, replayed by an outsider and by a
+    // signed-out visitor: refused, and nothing changes.
+    const saveRequest = await captureAction(page, () =>
+      themeOption(page, "minimal").getByRole("button", { name: `${site.design.use}: ${site.themes.minimal.name}` }).click(),
+    );
+    const outsider = await freshPage(browser);
+    await logIn(outsider.page, await createAccount("lb-site-style-outsider"));
+    await replayAction(outsider.page, saveRequest);
+    const anonymous = await freshPage(browser);
+    await replayAction(anonymous.page, saveRequest);
+    expect(await designOf(weddingId)).toBe("classic");
+    // ...while the same request from a member works (it is a real save request).
+    await replayAction(collab.page, saveRequest);
+    expect(await designOf(weddingId)).toBe("minimal");
+
+    for (const ctx of [visitor, collab, outsider, anonymous]) await ctx.context.close();
+  });
+
+  test("T: the member-only preview draws any theme, published or not, and never writes", async ({ page, browser }, testInfo) => {
+    const ownerEmail = await createAccount("lb-site-preview-owner");
+    await logIn(page, ownerEmail);
+    const weddingId = await createFullWedding(page, "Boda de prueba Vista previa");
+    await openSite(page, weddingId);
+    await saveSection(page, "intro", { body: "Texto visible de la introducción.", visible: true });
+    await saveSection(page, "ceremony", { body: "Texto oculto de la ceremonia.", visible: false });
+    await saveSection(page, "rsvp", { visible: true });
+    const before = await siteState(weddingId);
+
+    // From the selector to the preview: unpublished, the member still sees it.
+    await themeOption(page, "romantic")
+      .getByRole("link", { name: `${site.design.preview}: ${site.themes.romantic.name}` })
+      .click();
+    await expect(page).toHaveURL(new RegExp(`/app/weddings/${weddingId}/site/preview\\?theme=romantic$`));
+    await expect(page.getByTestId("site-preview-title")).toHaveText(`Vista previa: ${site.themes.romantic.name}`);
+    await expect(page.getByText(site.preview.unpublished)).toBeVisible();
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, nofollow");
+    const canvas = page.getByTestId("site-preview");
+    await expect(canvas.locator("[data-site-palette]")).toHaveAttribute("data-site-palette", "rose");
+    await expect(canvas.getByRole("heading", { level: 1, name: "Boda de prueba Vista previa" })).toBeVisible();
+    await expect(canvas.getByText("Texto visible de la introducción.")).toBeVisible();
+    await expect(canvas.getByText(es.publicSite.rsvpDefault)).toBeVisible();
+    await expect(page.getByText("Texto oculto de la ceremonia.")).toHaveCount(0);
+    await expect(page.getByText("America/Costa_Rica")).toHaveCount(0);
+    await expect(canvas.locator("form, input, a[href*='/rsvp']")).toHaveCount(0);
+    await expect(page.locator("main")).toHaveCount(1);
+
+    // Switching themes changes only the drawing; nothing is saved.
+    for (const [theme, palette] of [
+      ["editorial", "ivory"],
+      ["minimal", "mono"],
+      ["tropical", "sand"],
+      ["classic", null],
+    ] as const) {
+      await page.getByRole("navigation", { name: site.preview.otherThemes }).getByRole("link", { name: site.themes[theme].name }).click();
+      await expect(page).toHaveURL(new RegExp(`theme=${theme}$`));
+      await expect(canvas).toHaveAttribute("data-theme", theme);
+      if (palette) await expect(canvas.locator("[data-site-palette]")).toHaveAttribute("data-site-palette", palette);
+      else await expect(canvas.locator("[data-site-palette]")).toHaveCount(0);
+      await expect(canvas.getByText("Texto visible de la introducción.")).toBeVisible();
+    }
+    // Classic is the current one (no design row): no save button there.
+    await expect(page.getByTestId("site-preview-current")).toHaveText(site.preview.current);
+    // An unknown theme previews the current one.
+    await page.goto(`/app/weddings/${weddingId}/site/preview?theme=neon`);
+    await expect(canvas).toHaveAttribute("data-theme", "classic");
+    expect(await designOf(weddingId)).toBeNull();
+    expect(await siteState(weddingId)).toEqual(before);
+
+    // Saving from the preview uses the same save; still unpublished.
+    await page.goto(`/app/weddings/${weddingId}/site/preview?theme=tropical`);
+    await page.getByRole("button", { name: `${site.design.use}: ${site.themes.tropical.name}` }).click();
+    await expect(page.getByTestId("site-theme-status")).toHaveText(`Guardamos el estilo «${site.themes.tropical.name}».`);
+    await expect(page.getByTestId("site-preview-current")).toBeVisible();
+    expect(await designOf(weddingId)).toBe("tropical");
+    expect(await siteState(weddingId)).toEqual(before);
+    await screenshotPreview(page, testInfo, "preview-tropical");
+
+    // A collaborator previews too.
+    const collaboratorEmail = await createAccount("lb-site-preview-collab");
+    await addCollaborator(weddingId, collaboratorEmail);
+    const collab = await freshPage(browser);
+    await logIn(collab.page, collaboratorEmail);
+    await collab.page.goto(`/app/weddings/${weddingId}/site/preview?theme=editorial`);
+    await expect(collab.page.getByTestId("site-preview").locator("[data-site-palette]")).toHaveAttribute(
+      "data-site-palette",
+      "ivory",
+    );
+
+    // An outsider gets a 404; a signed-out visitor is sent to log in.
+    const outsider = await freshPage(browser);
+    await logIn(outsider.page, await createAccount("lb-site-preview-outsider"));
+    const response = await outsider.page.goto(`/app/weddings/${weddingId}/site/preview?theme=minimal`);
+    expect(response?.status()).toBe(404);
+    await expect(outsider.page.getByText("Texto visible de la introducción.")).toHaveCount(0);
+    const anonymous = await freshPage(browser);
+    await anonymous.page.goto(`/app/weddings/${weddingId}/site/preview?theme=minimal`);
+    await expect(anonymous.page).toHaveURL(/\/login\?next=/);
+    await expect(anonymous.page.getByText("Texto visible de la introducción.")).toHaveCount(0);
+
+    expect(await designOf(weddingId)).toBe("tropical");
+    expect(await publication(weddingId)).toBeNull();
+    for (const ctx of [collab, outsider, anonymous]) await ctx.context.close();
+  });
+
+  test("U: the selector and the preview fit 360, 390, 768 and 1280 px, keyboard included", async ({ page }, testInfo) => {
+    await logIn(page, await createAccount("lb-site-style-widths"));
+    const weddingId = await createFullWedding(
+      page,
+      "Boda de prueba de María Fernanda de los Ángeles y Juan Sebastián Rodríguez",
+    );
+    await openSite(page, weddingId);
+    const longLine = "Recepción en el salón principal con cena, baile y brindis".repeat(4);
+    await saveSection(page, "intro", { body: `Bienvenidos.\n${longLine}`, visible: true });
+    for (const width of [360, 390, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await openSite(page, weddingId);
+      await page.getByTestId("site-theme").scrollIntoViewIfNeeded();
+      await expectNoHorizontalScroll(page);
+      await page.getByTestId("site-theme").screenshot({ path: testInfo.outputPath(`selector-${width}.png`) });
+      for (const theme of ["editorial", "romantic", "tropical", "minimal", "classic"] as const) {
+        await page.goto(`/app/weddings/${weddingId}/site/preview?theme=${theme}`);
+        await expect(page.getByTestId("site-preview")).toHaveAttribute("data-theme", theme);
+        await expectNoHorizontalScroll(page);
+      }
+      await screenshotPreview(page, testInfo, `preview-classic-${width}`);
+    }
+
+    // Keyboard: the preview link and the save button are reachable and
+    // focus is visible; saving announces the result.
+    await page.setViewportSize({ width: 390, height: 900 });
+    await openSite(page, weddingId);
+    const save = themeOption(page, "minimal").getByRole("button", { name: `${site.design.use}: ${site.themes.minimal.name}` });
+    await save.focus();
+    await expect(save).toBeFocused();
+    expect(await save.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe("solid");
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("site-theme-status")).toHaveText(`Guardamos el estilo «${site.themes.minimal.name}».`);
+    await expectSelectedTheme(page, "minimal");
+    // Thumbnails are decorative: nothing inside them is in the accessibility tree.
+    await expect(page.getByTestId("site-theme-thumbnail").first()).toHaveAttribute("aria-hidden", "true");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+  });
 });
+
+function themeOptions(page: Page): Locator {
+  return page.getByTestId("site-theme-option");
+}
+
+function themeOption(page: Page, theme: keyof typeof site.themes): Locator {
+  return page.locator(`[data-testid="site-theme-option"][data-theme="${theme}"]`);
+}
+
+async function chooseTheme(page: Page, theme: keyof typeof site.themes) {
+  const name = site.themes[theme].name;
+  await themeOption(page, theme).getByRole("button", { name: `${site.design.use}: ${name}` }).click();
+  await expect(page.getByTestId("site-theme-status")).toHaveText(`Guardamos el estilo «${name}».`);
+  await expectSelectedTheme(page, theme);
+}
+
+/** Exactly one card is current, marked in words, with no save button. */
+async function expectSelectedTheme(page: Page, theme: keyof typeof site.themes) {
+  await expect(page.locator('[data-testid="site-theme-option"][aria-current="true"]')).toHaveCount(1);
+  const current = themeOption(page, theme);
+  await expect(current).toHaveAttribute("aria-current", "true");
+  await expect(current.getByTestId("site-theme-selected")).toHaveText(`✓${site.design.selected}`);
+  await expect(current.getByRole("button", { name: new RegExp(site.design.use) })).toHaveCount(0);
+  await expect(page.getByTestId("site-theme-selected")).toHaveCount(1);
+}
+
+async function withDb<T>(run: (db: pg.Client) => Promise<T>): Promise<T> {
+  const db = new pg.Client({ connectionString: readLocalSupabase().dbUrl });
+  await db.connect();
+  try {
+    return await run(db);
+  } finally {
+    await db.end();
+  }
+}
+
+/** The stored theme, or null when the wedding has no design row. */
+async function designOf(weddingId: string): Promise<string | null> {
+  return withDb(async (db) => {
+    const { rows } = await db.query<{ theme_key: string }>(
+      "select theme_key from public.wedding_site_designs where wedding_id = $1",
+      [weddingId],
+    );
+    return rows[0]?.theme_key ?? null;
+  });
+}
+
+/** Hashes of the content and publication rows: what a theme save or a preview must leave alone. */
+async function siteState(weddingId: string) {
+  return withDb(async (db) => {
+    const { rows } = await db.query<{ content: string; publication: string }>(
+      `select (select md5(coalesce(string_agg(t::text, '|' order by t.kind), '')) from public.content_sections t where t.wedding_id = $1) as content,
+              (select md5(coalesce(string_agg(p::text, '|'), '')) from public.wedding_publications p where p.wedding_id = $1) as publication`,
+      [weddingId],
+    );
+    return rows[0];
+  });
+}
+
+/** Fixture: a collaborator membership (the invite flow is covered elsewhere). */
+async function addCollaborator(weddingId: string, email: string) {
+  await withDb((db) =>
+    db.query(
+      `insert into public.wedding_memberships (wedding_id, user_id, role)
+       select $1, id, 'collaborator' from auth.users where email = $2`,
+      [weddingId, email],
+    ),
+  );
+}
+
+async function screenshotPreview(page: Page, testInfo: { outputPath: (name: string) => string }, name: string) {
+  await page.screenshot({ path: testInfo.outputPath(`${name}.png`), fullPage: true });
+}
 
 /** A Supabase client signed in as a local fake account (for RPC-level setup without UI). */
 async function signedInClient(email: string) {

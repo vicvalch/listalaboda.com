@@ -659,7 +659,15 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - Public read: `get_published_wedding_site` returns `site_theme = coalesce(theme_key, 'classic')` under the unchanged
   publication gate; `getPublishedWeddingSite` returns `{ site, design }` side by side (`toWeddingSiteDesign`: missing,
   null or unknown = Classic, so an older database works); `/boda/[slug]` renders `resolveSiteDesign(design.themeKey)`.
-- CP4 state: the five themes are stored and rendered; no organizer selector, preview or customization yet.
+- Selector (CP5): "Estilo del sitio" on `/app/weddings/[weddingId]/site`, one card per `WEDDING_SITE_THEME_KEYS` entry
+  (names/descriptions in `es.site.themes`), the current one marked in words (`aria-current`), "Usar este estilo" =
+  `saveThemeAction` → `saveWeddingSiteTheme` (the only write; the form sends wedding id + key, anything else is refused
+  before the service). Thumbnails are the real `WeddingSite` (`element="div"`), scaled, `aria-hidden` + `inert`.
+- Preview (CP5): `/app/weddings/[weddingId]/site/preview?theme=<key>`, member-only (`requireUser` +
+  `requireWeddingMembership`, 404 otherwise), `noindex`, never writes. Content = `toPreviewSite` (`@/lib/wedding-site/preview`):
+  name, date, city and VISIBLE sections from the member editor reads, through the public `toPublishedSite` shaping; it
+  never calls or widens `get_published_wedding_site`. Unknown/repeated `?theme=` = the current theme. No iframe.
+- CP5 state: members see, preview and choose the five themes; no customization, drafts or reordering.
 
 ## Commands
 
@@ -735,4 +743,6 @@ CP2 adds the shared presentation vocabulary and primitives and the Editorial and
 public page still always renders Classic; no migration, persistence, selector or preview). CP3 adds the Romantic and
 Tropical themes, completing the initial set of five, in code only. CP4 persists the theme (`wedding_site_designs`, member
 `save_wedding_site_design`) and returns it from the public read for `/boda/[slug]` (no selector, preview or customization).
+CP5 adds "Estilo del sitio" (theme cards with real thumbnails, owner and collaborator save) and the member-only preview
+(no migration, customization or drafts).
 Don't implement ahead of the current prompt.

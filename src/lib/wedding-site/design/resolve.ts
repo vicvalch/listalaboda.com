@@ -1,10 +1,4 @@
-import {
-  getTheme,
-  type ContentWidth,
-  type HeroVariant,
-  type SectionStyle,
-  type WeddingSiteThemeKey,
-} from "@/lib/wedding-site/design/themes";
+import { getTheme, type ThemeDefinition, type WeddingSiteThemeKey } from "@/lib/wedding-site/design/themes";
 
 /**
  * What the public renderer draws with: a complete set of closed presentation
@@ -12,12 +6,7 @@ import {
  * (`PublishedWeddingSite`), never inside it, so a design never carries
  * wedding data and content never carries layout.
  */
-export type ResolvedSiteDesign = Readonly<{
-  themeKey: WeddingSiteThemeKey;
-  hero: HeroVariant;
-  width: ContentWidth;
-  sectionStyle: SectionStyle;
-}>;
+export type ResolvedSiteDesign = Readonly<{ themeKey: WeddingSiteThemeKey } & Omit<ThemeDefinition, "key">>;
 
 /**
  * Resolves a wedding's stored theme choice into its design. No choice (a
@@ -25,11 +14,6 @@ export type ResolvedSiteDesign = Readonly<{
  * future value can never break a public page.
  */
 export function resolveSiteDesign(themeKey: string | null | undefined): ResolvedSiteDesign {
-  const theme = getTheme(themeKey);
-  return {
-    themeKey: theme.key,
-    hero: theme.hero,
-    width: theme.width,
-    sectionStyle: theme.sectionStyle,
-  };
+  const { key, ...values } = getTheme(themeKey);
+  return { themeKey: key, ...values };
 }

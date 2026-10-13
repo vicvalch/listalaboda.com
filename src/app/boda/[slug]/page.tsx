@@ -54,6 +54,6 @@ export default async function PublicWeddingSitePage({ params }: PageProps<"/boda
     );
   }
 
-  // No design state is stored yet (ADR-019 CP1): every site is Classic.
+  // No design state is stored or selected yet (ADR-019 CP2): every site is Classic.
   return <WeddingSite site={result.site} design={resolveSiteDesign(null)} />;
 }

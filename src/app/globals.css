@@ -52,6 +52,51 @@
   }
 }
 
+/*
+ * Wedding site palettes (ADR-019). The public site's renderer sets
+ * data-site-palette on its <main> for themes with their own colors; inside it
+ * these override the app tokens, so the same token classes draw the theme.
+ * Classic uses the app palette and sets nothing. Each palette has a light and
+ * a dark variant that follows the visitor's preference.
+ */
+[data-site-palette="ivory"] {
+  --background: #fbf8f2;
+  --foreground: #1f1b16;
+  --muted: #675d52;
+  --border: #ddd3c3;
+  --accent: #7f6230;
+  --focus: #7f6230;
+}
+
+[data-site-palette="mono"] {
+  --background: #ffffff;
+  --foreground: #111111;
+  --muted: #5e5e5e;
+  --border: #e2e2e2;
+  --accent: #111111;
+  --focus: #111111;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-site-palette="ivory"] {
+    --background: #15130f;
+    --foreground: #ede6d9;
+    --muted: #aca291;
+    --border: #3b352b;
+    --accent: #c9a96b;
+    --focus: #c9a96b;
+  }
+
+  [data-site-palette="mono"] {
+    --background: #0f0f10;
+    --foreground: #f2f2f2;
+    --muted: #a3a3a3;
+    --border: #2c2c2e;
+    --accent: #f2f2f2;
+    --focus: #f2f2f2;
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

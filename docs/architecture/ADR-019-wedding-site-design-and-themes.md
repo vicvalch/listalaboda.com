@@ -1,6 +1,6 @@
 # ADR-019 — Wedding Site Design and Themes
 
-Status: Accepted (Wedding site themes, CP0/CP1) · Date: 2026-10-12
+Status: Accepted (Wedding site themes, CP0–CP2) · Date: 2026-10-12
 Related: [Product Constitution §8, §10.9](../product/PRODUCT-CONSTITUTION.md), [ADR-001](ADR-001-product-domain-and-tenancy.md),
 [ADR-002 §7](ADR-002-auth-and-security-boundaries.md), [ADR-003](ADR-003-donor-extraction-policy.md),
 [ADR-017](ADR-017-dual-couple-planner-use.md)
@@ -30,11 +30,17 @@ and a resolved design (`ResolvedSiteDesign`).
 
 ### 2. Themes are code, selected by a closed key
 
-A theme (`ThemeDefinition`, `@/lib/wedding-site/design/themes`) is a code-owned set of closed presentation values (hero
-variant, column width, section style; later colors, typography and spacing). The registry (`THEME_REGISTRY`) maps every
-`WeddingSiteThemeKey` to one definition. Themes hold no copy (Spanish labels live in `es.ts`), no user input and no
-CSS, class name, markup or URL strings: the renderer (`WeddingSite`) maps each value to its own markup and classes.
-Ornaments, when added, are static in-repo SVG.
+A theme (`ThemeDefinition`, `@/lib/wedding-site/design/themes`) is a code-owned set of closed presentation values:
+palette, typography pairing, heading scale, hero variant, width, density, alignment, section style and ornament. The
+registry (`THEME_REGISTRY`) maps every `WeddingSiteThemeKey` to one definition. Themes hold no copy (Spanish labels live
+in `es.ts`), no user input and no CSS, class name, markup or URL strings: the renderer (`WeddingSite` and its hero and
+section variants) maps each value to its own markup, and `styles.ts` is the only place values become class names.
+Ornaments are static inline SVG in the renderer.
+
+A palette is a set of CSS variables in `globals.css`, scoped by `data-site-palette` on the page's `<main>`, with a light
+and a dark variant that follows the visitor's preference. Inside the page it overrides the app color tokens, so the
+same token classes draw every theme. Fonts are system stacks; self-hosted web fonts would be a separate decision, and
+never a runtime third-party request.
 
 Keys are never removed (a retired theme still renders), so a stored choice always resolves. Theme refinements apply to
 every wedding using the theme; a breaking redesign ships as a new key. No theme version is stored until pinning is
@@ -99,6 +105,8 @@ section stays guidance only in every theme: no form, guest lookup, `/rsvp` link 
 - **CP0**: this ADR and the product rules.
 - **CP1**: the theme types, registry, resolver and renderer, with Classic as the only theme and pixel/markup parity with
   the LB-10 page. No migration.
+- **CP2**: the shared presentation vocabulary and primitives, and the Editorial and Minimal themes, in code only. The
+  public page still always renders Classic: nothing stores or selects a theme. No migration.
 - **Later**: further themes, the `wedding_site_designs` migration and projection change, the organizer selector and
   preview, then customization. Each is reviewed separately.
 

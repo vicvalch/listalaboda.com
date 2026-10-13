@@ -637,8 +637,11 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - Design never stores wedding data (names, dates, places, section text), guest data or RSVP capabilities, and changing
   it never copies or rewrites wedding data.
 - Themes are code (`@/lib/wedding-site/design/themes`): closed keys → `ThemeDefinition` of closed values; the renderer
-  (`@/components/wedding-site/WeddingSite`) maps each value to its own markup/classes. No copy in themes; no CSS, class
-  name, HTML, script, iframe or URL strings from themes or user input, ever. Keys are never removed.
+  (`@/components/wedding-site/WeddingSite`, hero/section variants) maps each value to its own markup, and
+  `components/wedding-site/styles.ts` is the only place values become classes. No copy in themes; no CSS, class name,
+  HTML, script, iframe or URL strings from themes or user input, ever. Keys are never removed.
+- Palettes are CSS variables in `globals.css` scoped by `data-site-palette` (light + dark), overriding the app tokens
+  inside the page; Classic sets no scope. System font stacks only; no runtime third-party requests, no client JS.
 - No design state or an unknown key = Classic (`resolveSiteDesign`): the original LB-10 page, kept pixel/markup-identical
   (golden tests in `src/test/__golden__/wedding-site-classic/`; never regenerate them to make a change pass).
 - Owners and collaborators may change the design; publishing stays owner-only. Saved changes apply live on a published
@@ -647,8 +650,9 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - Deferred, each needing an explicit decision: images/media (no uploads, storage, image URLs or media schema; own ADR),
   section reordering (amends the LB-10 fixed order), planner presets (copy into a wedding, never live-link), custom
   design (closed, versioned schema; never an arbitrary node tree).
-- CP1 state: only `classic` exists, nothing is persisted, no migration. `wedding_site_designs`, other themes, the
-  selector, preview and customization come in later checkpoints.
+- CP2 state: `classic`, `editorial` and `minimal` exist in code; the public page always resolves Classic (nothing is
+  persisted or selected; Editorial/Minimal are reachable only from test fixtures), no migration. `wedding_site_designs`,
+  other themes, the selector, preview and customization come in later checkpoints.
 
 ## Commands
 
@@ -720,4 +724,6 @@ URL-only wedding switcher inside weddings that keeps known sections (ADR-017 §1
 writes, notifications or active-wedding state).
 Wedding site themes (ADR-019) CP0/CP1 adds the theme engine (types, registry, resolver, `WeddingSite` renderer) with
 Classic as the only theme, identical to the LB-10 page (no migration, persistence, selector or other themes yet).
+CP2 adds the shared presentation vocabulary and primitives and the Editorial and Minimal themes, in code only (the
+public page still always renders Classic; no migration, persistence, selector or preview).
 Don't implement ahead of the current prompt.

@@ -43,10 +43,10 @@ describe("theme registry", () => {
   });
 
   it("a stored theme value reads as that theme; missing, null or unknown is Classic", () => {
-    expect(DEFAULT_WEDDING_SITE_DESIGN).toEqual({ themeKey: "classic" });
-    for (const key of WEDDING_SITE_THEME_KEYS) expect(toWeddingSiteDesign(key)).toEqual({ themeKey: key });
+    expect(DEFAULT_WEDDING_SITE_DESIGN).toEqual({ themeKey: "classic", customization: {} });
+    for (const key of WEDDING_SITE_THEME_KEYS) expect(toWeddingSiteDesign(key)).toEqual({ themeKey: key, customization: {} });
     for (const value of [undefined, null, "", "neon", "Classic", "__proto__", 1, {}, ["editorial"]]) {
-      expect(toWeddingSiteDesign(value)).toEqual({ themeKey: "classic" });
+      expect(toWeddingSiteDesign(value)).toEqual({ themeKey: "classic", customization: {} });
     }
   });
 
@@ -82,7 +82,11 @@ describe("theme registry", () => {
   it("resolves each known key to its own design", () => {
     for (const key of WEDDING_SITE_THEME_KEYS) {
       const { themeKey, ...values } = resolveSiteDesign(key);
-      const { key: definitionKey, ...definition } = THEME_REGISTRY[key];
+      const { key: definitionKey } = THEME_REGISTRY[key];
+      // The definition's values, without its key and option lists (CP6).
+      const definition = Object.fromEntries(
+        Object.entries(THEME_REGISTRY[key]).filter(([name]) => name !== "key" && name !== "options"),
+      );
       expect(themeKey).toBe(key);
       expect(themeKey).toBe(definitionKey);
       expect(values).toEqual(definition);
@@ -92,10 +96,12 @@ describe("theme registry", () => {
   });
 
   it("a theme holds closed presentation values only, no free text", () => {
-    // Every value is one short lowercase identifier: no CSS, class names,
-    // markup, URLs or wedding data can hide in a theme definition.
-    for (const theme of Object.values(THEME_REGISTRY)) {
+    // Every value (and every option, CP6) is one short lowercase identifier:
+    // no CSS, class names, markup, URLs or wedding data can hide in a theme
+    // definition.
+    for (const { options, ...theme } of Object.values(THEME_REGISTRY)) {
       for (const value of Object.values(theme)) expect(value).toMatch(/^[a-z]+$/);
+      for (const value of Object.values(options).flat()) expect(value).toMatch(/^[a-z]+$/);
     }
   });
 });

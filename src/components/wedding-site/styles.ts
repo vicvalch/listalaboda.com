@@ -27,10 +27,20 @@ export function cx(...parts: Array<string | false | null | undefined>): string {
  */
 export const PALETTE_SURFACE: Record<SitePalette, string> = {
   app: "",
+  warm: "bg-background text-foreground",
+  slate: "bg-background text-foreground",
   ivory: "bg-background text-foreground",
+  parchment: "bg-background text-foreground",
+  charcoal: "bg-background text-foreground",
   mono: "bg-background text-foreground",
+  stone: "bg-background text-foreground",
+  ink: "bg-background text-foreground",
   rose: "bg-background text-foreground",
+  wine: "bg-background text-foreground",
+  champagne: "bg-background text-foreground",
   sand: "bg-background text-foreground",
+  forest: "bg-background text-foreground",
+  sunset: "bg-background text-foreground",
 };
 
 /**

@@ -28,7 +28,7 @@ export const metadata: Metadata = { title: getMessages().site.title };
 /**
  * "Sitio web": the private editor of the wedding's public website, a
  * secondary area next to the checklist (which stays the wedding's home).
- * Any member edits the sections and chooses the theme ("Estilo del sitio",
+ * Any member edits the sections and chooses and customizes the theme ("Estilo del sitio",
  * ADR-019); only owners see the address and publication controls, which the service and database also enforce.
  * Membership is checked server-side first; a non-member, a nonexistent
  * wedding and a malformed id all get the same 404. Opening this page never
@@ -160,7 +160,7 @@ export default async function WeddingSitePage({
         <ThemeSection
           weddingId={wedding.id}
           site={toPreviewSite(wedding, editor.sections, publication?.slug ?? "")}
-          current={editor.design.themeKey}
+          design={editor.design}
           isPublished={isPublished}
         />
       ) : null}

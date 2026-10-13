@@ -10,7 +10,9 @@ vi.mock("server-only", () => ({}));
 const {
   getWeddingSiteEditor,
   publishWeddingSite,
+  resetWeddingSiteCustomization,
   saveContentSection,
+  saveWeddingSiteDesign,
   saveWeddingSiteTheme,
   setWeddingSiteSlug,
   unpublishWeddingSite,
@@ -174,16 +176,61 @@ describe("saveContentSection", () => {
 
 // ------------------------------------------------------------------ design
 
+const DESIGN_READ = "GET /rest/v1/wedding_site_designs";
+const DESIGN_SAVE = "POST /rest/v1/rpc/save_wedding_site_design";
+
 describe("saveWeddingSiteTheme", () => {
-  it("any member saves by authorized wedding; only the wedding id and theme are sent", async () => {
+  it("any member saves by authorized wedding: the wedding id, the theme and the carried-over customization", async () => {
     for (const role of ["owner", "collaborator"] as const) {
       const { supabase, requests } = clientFor({
         role,
-        replies: { "POST /rest/v1/rpc/save_wedding_site_design": { status: 200, body: "romantic" } },
+        replies: {
+          [DESIGN_READ]: { status: 200, body: null },
+          [DESIGN_SAVE]: { status: 200, body: "romantic" },
+        },
       });
-      expect(await saveWeddingSiteTheme(supabase, WEDDING_ID, "romantic")).toEqual({ ok: true, themeKey: "romantic" });
-      expect(rpcCalls(requests).map((r) => r.body)).toEqual([{ target_wedding_id: WEDDING_ID, new_theme: "romantic" }]);
+      expect(await saveWeddingSiteTheme(supabase, WEDDING_ID, "romantic")).toEqual({
+        ok: true,
+        themeKey: "romantic",
+        dropped: [],
+      });
+      expect(rpcCalls(requests).map((r) => r.body)).toEqual([
+        { target_wedding_id: WEDDING_ID, new_theme: "romantic", new_customization: {} },
+      ]);
     }
+  });
+
+  it("keeps the overrides the new theme offers and drops (and reports) the rest", async () => {
+    // Romantic with a framed hero is the default; this Romantic has an
+    // editorial hero, the wine palette, regular density and plain sections.
+    const stored = {
+      theme_key: "romantic",
+      customization: {
+        schemaVersion: 1,
+        palette: { kind: "preset", key: "wine" },
+        hero: { variant: "editorial" },
+        typography: { pairing: "serif" },
+        layout: { density: "regular", sectionStyle: "plain" },
+      },
+    };
+    const { supabase, requests } = clientFor({
+      role: "collaborator",
+      replies: { [DESIGN_READ]: { status: 200, body: stored }, [DESIGN_SAVE]: { status: 200, body: "minimal" } },
+    });
+    const result = await saveWeddingSiteTheme(supabase, WEDDING_ID, "minimal");
+    // Minimal offers neither the wine palette nor an editorial hero.
+    expect(result).toEqual({ ok: true, themeKey: "minimal", dropped: ["palette", "hero"] });
+    expect(rpcCalls(requests).map((r) => r.body)).toEqual([
+      {
+        target_wedding_id: WEDDING_ID,
+        new_theme: "minimal",
+        new_customization: {
+          schemaVersion: 1,
+          typography: { pairing: "serif" },
+          layout: { density: "regular", sectionStyle: "plain" },
+        },
+      },
+    ]);
   });
 
   it("non-members, malformed ids and missing sessions write nothing", async () => {
@@ -200,10 +247,21 @@ describe("saveWeddingSiteTheme", () => {
     });
   });
 
+  it("a failed read of the current design writes nothing", async () => {
+    const { supabase, requests } = clientFor({
+      role: "owner",
+      replies: { [DESIGN_READ]: { status: 500, body: { message: "boom" } } },
+    });
+    expect(await saveWeddingSiteTheme(supabase, WEDDING_ID, "minimal")).toEqual({ ok: false, reason: "error" });
+    expect(rpcCalls(requests)).toEqual([]);
+  });
+
   it("normalizes database failures", async () => {
     const cases: [Reply | "down", string][] = [
       [pgError("22P02", 'invalid input value for enum wedding_site_theme: "neon"'), "invalid"],
       [pgError("22023", "wedding_site_theme_required"), "invalid"],
+      [pgError("22023", "wedding_site_customization_invalid"), "invalid"],
+      [pgError("23514", "new row violates check constraint"), "invalid"],
       [pgError("P0002", "wedding_not_found"), "not_found"],
       [pgError("42501", "new row violates row-level security policy"), "not_found"],
       [pgError("XX000", "boom"), "error"],
@@ -213,11 +271,94 @@ describe("saveWeddingSiteTheme", () => {
       const { supabase } = clientFor({
         role: "collaborator",
         ...(reply === "down"
-          ? { networkDown: "POST /rest/v1/rpc/save_wedding_site_design" }
-          : { replies: { "POST /rest/v1/rpc/save_wedding_site_design": reply } }),
+          ? { networkDown: DESIGN_SAVE, replies: { [DESIGN_READ]: { status: 200, body: null } } }
+          : { replies: { [DESIGN_READ]: { status: 200, body: null }, [DESIGN_SAVE]: reply } }),
       });
       expect(await saveWeddingSiteTheme(supabase, WEDDING_ID, "editorial")).toEqual({ ok: false, reason });
     }
+  });
+});
+
+describe("saveWeddingSiteDesign", () => {
+  it("sends the theme and the normalized document (defaults dropped, overrides only)", async () => {
+    const { supabase, requests } = clientFor({
+      role: "collaborator",
+      replies: { [DESIGN_SAVE]: { status: 200, body: "editorial" } },
+    });
+    const document = {
+      schemaVersion: 1,
+      palette: { kind: "preset", key: "parchment" },
+      // Editorial's default density: not an override, so not stored.
+      layout: { density: "airy", width: "regular" },
+    };
+    expect(await saveWeddingSiteDesign(supabase, WEDDING_ID, "editorial", document)).toEqual({
+      ok: true,
+      design: { themeKey: "editorial", customization: { palette: "parchment", width: "regular" } },
+    });
+    expect(rpcCalls(requests).map((r) => r.body)).toEqual([
+      {
+        target_wedding_id: WEDDING_ID,
+        new_theme: "editorial",
+        new_customization: { schemaVersion: 1, palette: { kind: "preset", key: "parchment" }, layout: { width: "regular" } },
+      },
+    ]);
+  });
+
+  it.each([
+    ["a palette of another theme", { schemaVersion: 1, palette: { kind: "preset", key: "rose" } }],
+    ["a hero the theme doesn't offer", { schemaVersion: 1, hero: { variant: "banner" } }],
+    ["an unknown group", { schemaVersion: 1, colors: { background: "#ff0000" } }],
+    ["a wrong version", { schemaVersion: 2 }],
+    ["CSS in a value", { schemaVersion: 1, layout: { width: "url(https://x.test)" } }],
+  ])("%s never reaches the database", async (_label, document) => {
+    const { supabase, requests } = clientFor({ role: "owner", replies: { [DESIGN_SAVE]: { status: 200, body: "editorial" } } });
+    expect(await saveWeddingSiteDesign(supabase, WEDDING_ID, "editorial", document)).toEqual({ ok: false, reason: "invalid" });
+    expect(rpcCalls(requests)).toEqual([]);
+  });
+
+  it("non-members write nothing", async () => {
+    const { supabase, requests } = clientFor({ role: null });
+    expect(await saveWeddingSiteDesign(supabase, WEDDING_ID, "editorial", {})).toEqual({ ok: false, reason: "not_found" });
+    expect(rpcCalls(requests)).toEqual([]);
+  });
+});
+
+describe("resetWeddingSiteCustomization", () => {
+  const stored = {
+    theme_key: "tropical",
+    customization: {
+      schemaVersion: 1,
+      palette: { kind: "preset", key: "sunset" },
+      layout: { density: "airy" },
+    },
+  };
+
+  it("resets one group of the stored design and keeps its theme", async () => {
+    const { supabase, requests } = clientFor({
+      role: "collaborator",
+      replies: { [DESIGN_READ]: { status: 200, body: stored }, [DESIGN_SAVE]: { status: 200, body: "tropical" } },
+    });
+    expect(await resetWeddingSiteCustomization(supabase, WEDDING_ID, "palette")).toEqual({
+      ok: true,
+      design: { themeKey: "tropical", customization: { density: "airy" } },
+    });
+    expect(rpcCalls(requests).map((r) => r.body)).toEqual([
+      { target_wedding_id: WEDDING_ID, new_theme: "tropical", new_customization: { schemaVersion: 1, layout: { density: "airy" } } },
+    ]);
+  });
+
+  it("reset all keeps the theme (never Classic) and stores {}", async () => {
+    const { supabase, requests } = clientFor({
+      role: "owner",
+      replies: { [DESIGN_READ]: { status: 200, body: stored }, [DESIGN_SAVE]: { status: 200, body: "tropical" } },
+    });
+    expect(await resetWeddingSiteCustomization(supabase, WEDDING_ID, "all")).toEqual({
+      ok: true,
+      design: { themeKey: "tropical", customization: {} },
+    });
+    expect(rpcCalls(requests).map((r) => r.body)).toEqual([
+      { target_wedding_id: WEDDING_ID, new_theme: "tropical", new_customization: {} },
+    ]);
   });
 });
 
@@ -310,14 +451,17 @@ describe("getWeddingSiteEditor", () => {
           status: 200,
           body: [{ kind: "faq", title: null, body: "Preguntas", is_visible: true }],
         },
-        "GET /rest/v1/wedding_site_designs": { status: 200, body: { theme_key: "romantic" } },
+        "GET /rest/v1/wedding_site_designs": {
+          status: 200,
+          body: { theme_key: "romantic", customization: { schemaVersion: 1, palette: { kind: "preset", key: "wine" } } },
+        },
       },
     });
     const editor = await getWeddingSiteEditor(supabase, access);
     expect(editor?.publication).toEqual({ slug: "ana-y-luis", publishedAt: null });
     expect(editor?.sections).toHaveLength(7);
     expect(editor?.sections[5]).toEqual({ kind: "faq", title: null, body: "Preguntas", isVisible: true });
-    expect(editor?.design).toEqual({ themeKey: "romantic" });
+    expect(editor?.design).toEqual({ themeKey: "romantic", customization: { palette: "wine" } });
     const reads = requests.filter((r) => r.url.pathname.startsWith("/rest/v1/"));
     expect(reads).toHaveLength(3);
     for (const read of reads) {
@@ -325,14 +469,16 @@ describe("getWeddingSiteEditor", () => {
       expect(read.url.searchParams.get("wedding_id")).toBe(`eq.${WEDDING_ID}`);
     }
     expect(reads.find((r) => r.url.pathname.endsWith("/wedding_site_designs"))?.url.searchParams.get("select")).toBe(
-      "theme_key",
+      "theme_key,customization",
     );
   });
 
   it.each([
     ["no design row", null],
     ["an unknown stored value", { theme_key: "neon" }],
-  ])("%s is Classic, and reading writes nothing", async (_label, body) => {
+    ["an unknown theme with a customization", { theme_key: "neon", customization: { schemaVersion: 1, palette: { kind: "preset", key: "wine" } } }],
+    ["a malformed customization", { theme_key: "classic", customization: "<script>" }],
+  ])("%s is uncustomized Classic, and reading writes nothing", async (_label, body) => {
     const { supabase, requests } = clientFor({
       replies: {
         "GET /rest/v1/wedding_publications": { status: 200, body: null },
@@ -341,7 +487,7 @@ describe("getWeddingSiteEditor", () => {
       },
     });
     const editor = await getWeddingSiteEditor(supabase, access);
-    expect(editor?.design).toEqual({ themeKey: "classic" });
+    expect(editor?.design).toEqual({ themeKey: "classic", customization: {} });
     expect(requests.filter((r) => r.method !== "GET")).toEqual([]);
   });
 
@@ -404,7 +550,7 @@ describe("getPublishedWeddingSite", () => {
       },
       // The reply above is the pre-theme row shape (no site_theme): what a
       // database without the CP4 migration returns. It reads as Classic.
-      design: { themeKey: "classic" },
+      design: { themeKey: "classic", customization: {} },
     });
     expect(rpcCalls(requests).map((r) => r.body)).toEqual([{ site_slug: "ana-y-luis" }]);
   });
@@ -437,7 +583,7 @@ describe("getPublishedWeddingSite", () => {
         },
       });
       const result = await getPublishedWeddingSite(supabase, "ana-y-luis");
-      expect(result.ok && result.design, String(siteTheme)).toEqual({ themeKey });
+      expect(result.ok && result.design, String(siteTheme)).toEqual({ themeKey, customization: {} });
       expect(result.ok && Object.keys(result.site).sort(), String(siteTheme)).toEqual([
         "city",
         "name",
@@ -445,6 +591,40 @@ describe("getPublishedWeddingSite", () => {
         "slug",
         "weddingDate",
       ]);
+    }
+  });
+
+  it("returns the customization re-read against the theme: invalid fields fall back, junk is ignored", async () => {
+    const row = {
+      wedding_name: "Boda de prueba",
+      wedding_date: null,
+      wedding_city: null,
+      section_kind: "intro",
+      section_title: null,
+      section_body: "Hola",
+      site_theme: "editorial",
+    };
+    const cases: [unknown, object][] = [
+      [{ schemaVersion: 1, palette: { kind: "preset", key: "parchment" }, layout: { width: "regular" } }, { palette: "parchment", width: "regular" }],
+      // Field by field: the unknown values fall back, the valid one stays.
+      [{ schemaVersion: 1, palette: { kind: "preset", key: "rose" }, layout: { width: "regular", density: "url(x)" } }, { width: "regular" }],
+      [{ schemaVersion: 2, palette: { kind: "preset", key: "parchment" } }, {}],
+      ["{\"schemaVersion\":1}", {}],
+      [[{ schemaVersion: 1 }], {}],
+      [null, {}],
+      [undefined, {}],
+    ];
+    for (const [customization, expected] of cases) {
+      const { supabase } = clientFor({
+        replies: {
+          "POST /rest/v1/rpc/get_published_wedding_site": {
+            status: 200,
+            body: [{ ...row, ...(customization === undefined ? {} : { site_customization: customization }) }],
+          },
+        },
+      });
+      const result = await getPublishedWeddingSite(supabase, "ana-y-luis");
+      expect(result.ok && result.design, JSON.stringify(customization)).toEqual({ themeKey: "editorial", customization: expected });
     }
   });
 

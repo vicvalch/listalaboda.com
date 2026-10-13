@@ -1,4 +1,18 @@
-import { DEFAULT_WEDDING_SITE_THEME, isWeddingSiteThemeKey, type WeddingSiteThemeKey } from "@/lib/wedding-site/design/themes";
+import {
+  isAllowedValue,
+  normalizeOverrides,
+  overridesForTheme,
+  type SiteOverrides,
+} from "@/lib/wedding-site/design/customization";
+import type { WeddingSiteDesign } from "@/lib/wedding-site/design/resolve";
+import {
+  CUSTOMIZABLE_FIELDS,
+  DEFAULT_WEDDING_SITE_THEME,
+  getTheme,
+  isWeddingSiteThemeKey,
+  type CustomizableField,
+  type WeddingSiteThemeKey,
+} from "@/lib/wedding-site/design/themes";
 import {
   toPublishedSite,
   type EditorSection,
@@ -80,7 +94,60 @@ export function previewThemeKey(
   return isWeddingSiteThemeKey(raw) ? raw : current;
 }
 
+/**
+ * The design a theme would get if chosen now ("Usar este estilo"): the
+ * stored overrides that the theme also offers (the theme-change rule).
+ */
+export function designForTheme(current: WeddingSiteDesign, themeKey: WeddingSiteThemeKey): WeddingSiteDesign {
+  if (themeKey === current.themeKey) return current;
+  return { themeKey, customization: overridesForTheme(themeKey, current.customization).overrides };
+}
+
+/** Query values of a preview URL, as Next passes them. */
+export type PreviewQuery = Readonly<Record<string, string | string[] | undefined>>;
+
+/**
+ * The design a preview draws (CP5 + CP6), from its query:
+ *   * `theme`: exactly a theme key, else the current theme;
+ *   * without `customize=1`: what choosing that theme would give
+ *     (`designForTheme`, the current design for the current theme);
+ *   * with `customize=1`: unsaved choices, one parameter per field
+ *     (`palette`, `typography`, …), each kept only when it is exactly one of
+ *     the theme's options; anything else is that theme's default.
+ * Closed values only: no JSON, nothing echoed or stored. `custom` says
+ * whether the preview shows unsaved customization choices.
+ */
+export function previewDesign(
+  query: PreviewQuery,
+  current: WeddingSiteDesign,
+): Readonly<{ design: WeddingSiteDesign; custom: boolean }> {
+  const themeKey = previewThemeKey(query.theme, current.themeKey);
+  if (query.customize !== "1") return { design: designForTheme(current, themeKey), custom: false };
+  const theme = getTheme(themeKey);
+  const chosen: Partial<Record<CustomizableField, string>> = {};
+  for (const field of CUSTOMIZABLE_FIELDS) {
+    const value = query[field];
+    if (isAllowedValue(theme, field, value)) chosen[field] = value;
+  }
+  return { design: { themeKey, customization: normalizeOverrides(themeKey, chosen as SiteOverrides) }, custom: true };
+}
+
 /** The organizer preview path for a theme (lookup keys only). */
 export function sitePreviewPath(weddingId: string, themeKey: WeddingSiteThemeKey): string {
   return `/app/weddings/${encodeURIComponent(weddingId)}/site/preview?theme=${themeKey}`;
+}
+
+/**
+ * The preview path for unsaved customization choices: the theme, the
+ * `customize=1` marker and one parameter per override, every value a closed
+ * key already checked against the theme (`normalizeOverrides`).
+ */
+export function siteCustomPreviewPath(weddingId: string, design: WeddingSiteDesign): string {
+  const params = new URLSearchParams({ theme: design.themeKey, customize: "1" });
+  const overrides = normalizeOverrides(design.themeKey, design.customization);
+  for (const field of CUSTOMIZABLE_FIELDS) {
+    const value = overrides[field];
+    if (value !== undefined) params.set(field, value);
+  }
+  return `/app/weddings/${encodeURIComponent(weddingId)}/site/preview?${params.toString()}`;
 }

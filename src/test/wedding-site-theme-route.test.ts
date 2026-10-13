@@ -4,7 +4,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_WEDDING_SITE_DESIGN, toWeddingSiteDesign } from "@/lib/wedding-site/design/resolve";
+import { WeddingSite } from "@/components/wedding-site/WeddingSite";
+import { DEFAULT_WEDDING_SITE_DESIGN, resolveSiteDesign, toWeddingSiteDesign } from "@/lib/wedding-site/design/resolve";
 import { WEDDING_SITE_THEME_KEYS } from "@/lib/wedding-site/design/themes";
 import type { PublishedSiteResult } from "@/lib/wedding-site/public";
 
@@ -35,8 +36,8 @@ const props = {
   searchParams: Promise.resolve({}),
 } as PageProps<"/boda/[slug]">;
 
-async function renderWith(themeValue: unknown): Promise<string> {
-  read.result = { ok: true, site: THEME_FIXTURES.full, design: toWeddingSiteDesign(themeValue) };
+async function renderWith(themeValue: unknown, customization?: unknown): Promise<string> {
+  read.result = { ok: true, site: THEME_FIXTURES.full, design: toWeddingSiteDesign(themeValue, customization) };
   const element = await PublicWeddingSitePage(props);
   return renderToStaticMarkup(createElement(() => element));
 }
@@ -61,11 +62,45 @@ describe("the public route renders the stored theme", () => {
 
   it("the theme never changes the metadata", async () => {
     for (const theme of WEDDING_SITE_THEME_KEYS) {
-      read.result = { ok: true, site: THEME_FIXTURES.full, design: { themeKey: theme } };
+      read.result = { ok: true, site: THEME_FIXTURES.full, design: { themeKey: theme, customization: {} } };
       expect(await generateMetadata(props)).toEqual({
         title: "Sofía & Andrés",
         robots: { index: false, follow: false },
       });
     }
+  });
+});
+
+describe("the public route renders the stored customization (CP6)", () => {
+  it("draws the theme with the stored overrides", async () => {
+    const stored = {
+      schemaVersion: 1,
+      palette: { kind: "preset", key: "parchment" },
+      typography: { pairing: "mixed" },
+      layout: { density: "regular" },
+    };
+    const expected = renderToStaticMarkup(
+      createElement(WeddingSite, {
+        site: THEME_FIXTURES.full,
+        design: resolveSiteDesign("editorial", { palette: "parchment", typography: "mixed", density: "regular" }),
+      }),
+    );
+    const html = await renderWith("editorial", stored);
+    expect(html).toBe(expected);
+    expect(html).toContain('data-site-palette="parchment"');
+    expect(html).not.toBe(snapshot("editorial"));
+  });
+
+  it.each([
+    ["no customization", {}],
+    ["a wrong version", { schemaVersion: 2, palette: { kind: "preset", key: "parchment" } }],
+    ["a string", "url(https://evil.test/x.png)"],
+    ["an array", [{ schemaVersion: 1 }]],
+    ["another theme's palette", { schemaVersion: 1, palette: { kind: "preset", key: "rose" } }],
+    ["unsafe values", { schemaVersion: 1, palette: { kind: "preset", key: "#ff0000" }, layout: { width: "<script>alert(1)</script>" } }],
+  ])("%s draws the uncustomized theme, never anything unsafe", async (_label, stored) => {
+    const html = await renderWith("editorial", stored);
+    expect(html).toBe(snapshot("editorial"));
+    for (const unsafe of ["#ff0000", "url(", "<script", "evil.test", "rose"]) expect(html).not.toContain(unsafe);
   });
 });

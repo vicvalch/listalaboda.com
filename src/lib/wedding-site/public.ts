@@ -19,8 +19,9 @@ import { isValidSlug } from "@/lib/wedding-site/slug";
  * into the public DTO. Whatever session the client carries is irrelevant.
  *
  * Content and presentation come back separately: `site` (what the couple
- * published) and `design` (the chosen theme, ADR-019). No theme, or one this
- * code doesn't know, is Classic.
+ * published) and `design` (the chosen theme and its customization,
+ * ADR-019). No theme, or one this code doesn't know, is Classic; the stored
+ * customization is re-read here, field by field, and never trusted.
  *
  * A malformed, unknown or unpublished slug is the same `unavailable`, so a
  * site's existence can't be probed before it is published.
@@ -45,10 +46,11 @@ export async function getPublishedWeddingSite(
     const rows: readonly PublishedSiteRow[] = data;
     const site = toPublishedSite(slug, rows);
     if (!site) return { ok: false, reason: "unavailable" };
-    // Every row repeats the theme. Read as unknown: a database from before
-    // the theme column (deploy skew) has none, which is Classic.
-    const theme: unknown = (data[0] as { site_theme?: unknown } | undefined)?.site_theme;
-    return { ok: true, site, design: toWeddingSiteDesign(theme) };
+    // Every row repeats the design. Read as unknown: a database from before
+    // the theme or customization column (deploy skew) has none, which is
+    // Classic / no customization.
+    const first = data[0] as { site_theme?: unknown; site_customization?: unknown } | undefined;
+    return { ok: true, site, design: toWeddingSiteDesign(first?.site_theme, first?.site_customization) };
   } catch {
     return { ok: false, reason: "error" };
   }

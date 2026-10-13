@@ -16,7 +16,9 @@ const { requireWeddingMembership } = await import("@/lib/authz/wedding");
 const {
   getWeddingSiteEditor,
   publishWeddingSite,
+  resetWeddingSiteCustomization,
   saveContentSection,
+  saveWeddingSiteDesign,
   saveWeddingSiteTheme,
   setWeddingSiteSlug,
   unpublishWeddingSite,
@@ -211,8 +213,8 @@ describe("theme selector and preview data (ADR-019 CP5)", () => {
     sql<{ theme_key: string }>("select theme_key from public.wedding_site_designs where wedding_id = $1", [id]);
 
   it("no design row: both members' editors show Classic, and reading writes none", async () => {
-    expect((await editorOf("ownerA", wedding)).design).toEqual({ themeKey: "classic" });
-    expect((await editorOf("collabA", wedding)).design).toEqual({ themeKey: "classic" });
+    expect((await editorOf("ownerA", wedding)).design).toEqual({ themeKey: "classic", customization: {} });
+    expect((await editorOf("collabA", wedding)).design).toEqual({ themeKey: "classic", customization: {} });
     expect(await designRows(wedding)).toEqual([]);
   });
 
@@ -221,19 +223,75 @@ describe("theme selector and preview data (ADR-019 CP5)", () => {
     expect(await saveWeddingSiteTheme(await sessionClient("ownerA"), wedding, "editorial")).toEqual({
       ok: true,
       themeKey: "editorial",
+      dropped: [],
     });
-    expect((await editorOf("collabA", wedding)).design).toEqual({ themeKey: "editorial" });
+    expect((await editorOf("collabA", wedding)).design).toEqual({ themeKey: "editorial", customization: {} });
     expect(await saveWeddingSiteTheme(await sessionClient("collabA"), wedding, "romantic")).toEqual({
       ok: true,
       themeKey: "romantic",
+      dropped: [],
     });
-    expect((await editorOf("ownerA", wedding)).design).toEqual({ themeKey: "romantic" });
+    expect((await editorOf("ownerA", wedding)).design).toEqual({ themeKey: "romantic", customization: {} });
     expect(await designRows(wedding)).toEqual([{ theme_key: "romantic" }]);
     expect(await untouched(wedding)).toEqual(before);
     expect((await editorOf("ownerA", wedding)).publication).toBeNull();
     // Back to Classic.
     expect(await saveWeddingSiteTheme(await sessionClient("collabA"), wedding, "classic")).toMatchObject({ ok: true });
-    expect((await editorOf("ownerA", wedding)).design).toEqual({ themeKey: "classic" });
+    expect((await editorOf("ownerA", wedding)).design).toEqual({ themeKey: "classic", customization: {} });
+  });
+
+  it("customization (CP6): saved with the theme, carried over on a theme change minus what the new theme lacks, reset by group or all", async () => {
+    const before = await untouched(wedding);
+    const collab = await sessionClient("collabA");
+    const document = {
+      schemaVersion: 1,
+      palette: { kind: "preset", key: "wine" },
+      typography: { pairing: "serif" },
+      hero: { variant: "editorial" },
+      layout: { density: "regular", sectionStyle: "plain" },
+    };
+    expect(await saveWeddingSiteDesign(collab, wedding, "romantic", document)).toEqual({
+      ok: true,
+      design: {
+        themeKey: "romantic",
+        customization: { palette: "wine", typography: "serif", hero: "editorial", density: "regular", sectionStyle: "plain" },
+      },
+    });
+    expect((await editorOf("ownerA", wedding)).design.customization).toMatchObject({ palette: "wine", hero: "editorial" });
+
+    // Romantic → Minimal: no wine palette, no editorial hero there.
+    expect(await saveWeddingSiteTheme(await sessionClient("ownerA"), wedding, "minimal")).toEqual({
+      ok: true,
+      themeKey: "minimal",
+      dropped: ["palette", "hero"],
+    });
+    const stored = await sql<{ theme_key: string; customization: unknown }>(
+      "select theme_key, customization from public.wedding_site_designs where wedding_id = $1",
+      [wedding],
+    );
+    expect(stored).toEqual([
+      {
+        theme_key: "minimal",
+        customization: { schemaVersion: 1, typography: { pairing: "serif" }, layout: { density: "regular", sectionStyle: "plain" } },
+      },
+    ]);
+
+    expect(await resetWeddingSiteCustomization(collab, wedding, "typography")).toEqual({
+      ok: true,
+      design: { themeKey: "minimal", customization: { density: "regular", sectionStyle: "plain" } },
+    });
+    expect(await resetWeddingSiteCustomization(collab, wedding, "all")).toEqual({
+      ok: true,
+      design: { themeKey: "minimal", customization: {} },
+    });
+    expect(await designRows(wedding)).toEqual([{ theme_key: "minimal" }]);
+    expect(await untouched(wedding)).toEqual(before);
+
+    // An outsider can neither save nor reset.
+    const outsider = await sessionClient("outsider");
+    expect(await saveWeddingSiteDesign(outsider, wedding, "minimal", {})).toEqual({ ok: false, reason: "not_found" });
+    expect(await resetWeddingSiteCustomization(outsider, wedding, "all")).toEqual({ ok: false, reason: "not_found" });
+    await saveWeddingSiteTheme(collab, wedding, "classic");
   });
 
   it("outsiders, anon and forged keys are refused and write nothing", async () => {
@@ -309,8 +367,8 @@ describe("public site service", () => {
           },
         ],
       },
-      // No design row: Classic (ADR-019 CP4).
-      design: { themeKey: "classic" },
+      // No design row: Classic (ADR-019 CP4), uncustomized (CP6).
+      design: { themeKey: "classic", customization: {} },
     });
     const payload = JSON.stringify(result);
     expect(payload).not.toContain(wedding);

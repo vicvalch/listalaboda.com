@@ -6,7 +6,7 @@ import { Notice } from "@/components/ui/Notice";
 import { WeddingSite } from "@/components/wedding-site/WeddingSite";
 import { getMessages } from "@/lib/i18n";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { resolveSiteDesign } from "@/lib/wedding-site/design/resolve";
+import { resolveWeddingSiteDesign } from "@/lib/wedding-site/design/resolve";
 import { getPublishedWeddingSite } from "@/lib/wedding-site/public";
 
 // Publication changes (unpublish, hidden sections, a new address) must
@@ -35,9 +35,9 @@ export async function generateMetadata({ params }: PageProps<"/boda/[slug]">): P
  * city and its visible sections — nothing else. An unknown, unpublished or
  * malformed address is the same 404, so an unpublished wedding can't be
  * detected. The content is drawn by `WeddingSite` in the wedding's chosen
- * theme (ADR-019; returned by the same read, Classic when none): plain text
- * only, and an RSVP section that only explains how to answer with the
- * personal link each party received.
+ * theme and customization (ADR-019; returned by the same read, Classic when
+ * none): plain text only, and an RSVP section that only explains how to
+ * answer with the personal link each party received.
  */
 export default async function PublicWeddingSitePage({ params }: PageProps<"/boda/[slug]">) {
   const { slug } = await params;
@@ -55,5 +55,5 @@ export default async function PublicWeddingSitePage({ params }: PageProps<"/boda
     );
   }
 
-  return <WeddingSite site={result.site} design={resolveSiteDesign(result.design.themeKey)} />;
+  return <WeddingSite site={result.site} design={resolveWeddingSiteDesign(result.design)} />;
 }

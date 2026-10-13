@@ -18,6 +18,8 @@ vi.mock("@/lib/supabase/server", () => ({ createSupabaseServerClient: vi.fn(asyn
 
 const service = vi.hoisted(() => ({
   saveWeddingSiteTheme: vi.fn(),
+  saveWeddingSiteDesign: vi.fn(),
+  resetWeddingSiteCustomization: vi.fn(),
   saveContentSection: vi.fn(),
   setWeddingSiteSlug: vi.fn(),
   publishWeddingSite: vi.fn(),
@@ -50,7 +52,7 @@ describe("saveThemeAction", () => {
   });
 
   it("saves through the CP4 service with only the wedding id and the key", async () => {
-    service.saveWeddingSiteTheme.mockResolvedValue({ ok: true, themeKey: "romantic" });
+    service.saveWeddingSiteTheme.mockResolvedValue({ ok: true, themeKey: "romantic", dropped: [] });
     const state = await saveThemeAction(
       null,
       form({ weddingId: WEDDING_ID, theme: "romantic", role: "owner", published: "true", theme_key: "neon" }),
@@ -63,6 +65,15 @@ describe("saveThemeAction", () => {
     }
     expect(state).toMatchObject({ ok: true, data: { message: "Guardamos el estilo «Romántico»." } });
     expect(revalidatePath).toHaveBeenCalledWith(`/app/weddings/${WEDDING_ID}/site`, "layout");
+  });
+
+  it("says when the new theme dropped saved customization choices", async () => {
+    service.saveWeddingSiteTheme.mockResolvedValue({ ok: true, themeKey: "minimal", dropped: ["palette", "hero"] });
+    const state = await saveThemeAction(null, form({ weddingId: WEDDING_ID, theme: "minimal" }));
+    expect(state).toMatchObject({
+      ok: true,
+      data: { message: `Guardamos el estilo «Minimalista». ${copy.design.dropped}` },
+    });
   });
 
   it.each([["neon"], ["Editorial"], [""], ["classic "], ["__proto__"]])(

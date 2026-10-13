@@ -165,7 +165,8 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   unpublished and malformed slugs look identical (404). Never put a wedding UUID in a public URL.
 - anon never reads `weddings`, `content_sections`, `wedding_publications`, memberships or guest tables. The only
   public read is `get_published_wedding_site(slug)` via `@/lib/wedding-site/public`: name, date, city, visible
-  sections (kind, title, body) and, since ADR-019 CP4, the theme key (`site_theme`). No ids, time zone, timestamps,
+  sections (kind, title, body) and, since ADR-019 CP4/CP6, the theme key (`site_theme`) and its customization
+  (`site_customization`, closed presentation keys only). No ids, time zone, timestamps,
   members, checklist or guest data. Add a field there only as an explicit product decision.
 - Owners and collaborators edit ContentSections (`@/lib/wedding-site/service`, keyed by wedding + kind, never a
   browser-sent row id). Choosing/changing the slug, publishing and unpublishing are owner-only: service
@@ -652,13 +653,15 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   design (closed, versioned schema; never an arbitrary node tree).
 - Every theme's text meets WCAG AA (4.5:1) in light and dark; decorations are `aria-hidden` and carry no information.
 - Persistence (CP4): `public.wedding_site_designs` = `wedding_id` (PK, cascade) + `theme_key` (`wedding_site_theme`
-  enum, mirrors `WEDDING_SITE_THEME_KEYS`) + timestamps; nothing else. Member RLS select/insert/update, only
-  `theme_key` updatable, no delete (reset = choose Classic), anon nothing. Writes only through
-  `saveWeddingSiteTheme` (`@/lib/wedding-site/service`) → SECURITY INVOKER `save_wedding_site_design`; never touches
-  content, publication or activity. No row = Classic: never backfill or write a row on read.
+  enum, mirrors `WEDDING_SITE_THEME_KEYS`) + timestamps (+ `customization` since CP6, below); nothing else. Member RLS
+  select/insert/update, only `theme_key` (and `customization`) updatable, no delete (back to the original = choose
+  Classic), anon nothing. Writes only through the service (`@/lib/wedding-site/service`) → SECURITY INVOKER
+  `save_wedding_site_design`; never touches content, publication or activity. No row = Classic: never backfill or
+  write a row on read.
 - Public read: `get_published_wedding_site` returns `site_theme = coalesce(theme_key, 'classic')` under the unchanged
-  publication gate; `getPublishedWeddingSite` returns `{ site, design }` side by side (`toWeddingSiteDesign`: missing,
-  null or unknown = Classic, so an older database works); `/boda/[slug]` renders `resolveSiteDesign(design.themeKey)`.
+  publication gate (and `site_customization`, CP6); `getPublishedWeddingSite` returns `{ site, design }` side by side
+  (`toWeddingSiteDesign`: missing, null or unknown = Classic, so an older database works); `/boda/[slug]` renders
+  `resolveWeddingSiteDesign(design)`.
 - Selector (CP5): "Estilo del sitio" on `/app/weddings/[weddingId]/site`, one card per `WEDDING_SITE_THEME_KEYS` entry
   (names/descriptions in `es.site.themes`), the current one marked in words (`aria-current`), "Usar este estilo" =
   `saveThemeAction` → `saveWeddingSiteTheme` (the only write; the form sends wedding id + key, anything else is refused
@@ -667,7 +670,27 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   `requireWeddingMembership`, 404 otherwise), `noindex`, never writes. Content = `toPreviewSite` (`@/lib/wedding-site/preview`):
   name, date, city and VISIBLE sections from the member editor reads, through the public `toPublishedSite` shaping; it
   never calls or widens `get_published_wedding_site`. Unknown/repeated `?theme=` = the current theme. No iframe.
-- CP5 state: members see, preview and choose the five themes; no customization, drafts or reordering.
+- Customization (CP6): a wedding overrides, among ITS THEME's `options` (`ThemeDefinition.options`, default first; the
+  only list: UI, parser and preview read it, the database mirrors it, a test compares them), palette preset, type
+  pairing, heading scale, hero, width, density, alignment and section style. Closed keys only: never hex, CSS, class
+  names, fonts, URLs or text. Palette presets are CSS variables in `globals.css` (light + dark, WCAG AA), each owned by
+  one theme; the key is stored, never a color.
+- `wedding_site_designs.customization` (jsonb, default `{}`) stores OVERRIDES ONLY as a versioned document
+  (`schemaVersion: 1`, groups `palette`/`typography`/`hero`/`layout`, never empty; `{}` = none; defaults dropped);
+  never resolved values. Validated three times: `parseCustomization` on write (strict, whole document),
+  the CHECK `private.wedding_site_customization_is_valid(theme_key, customization)` (1024-byte cap; executable by
+  `authenticated` only because a CHECK runs with the writer's privileges, not exposed by the Data API), and
+  `readCustomization`/`resolveSiteDesign` before every render (lenient, field by field; unknown theme = uncustomized
+  Classic). `@/lib/wedding-site/design/customization` is the only parser.
+- One write path: `save_wedding_site_design(wedding, theme, customization)` via `saveWeddingSiteDesign` /
+  `saveWeddingSiteTheme` / `resetWeddingSiteCustomization` (`@/lib/wedding-site/service`). A theme change keeps only
+  the overrides the new theme offers and stores the normalized document (`overridesForTheme`); reset (one group or
+  all) acts on the STORED customization and never changes the theme.
+- The preview takes unsaved choices as `?theme=&customize=1&<field>=<key>`, each checked against the theme (else the
+  default, never echoed); never JSON in a URL, never a write. "Vista previa" in the form is a server action that
+  validates, then redirects there.
+- CP6 state: members see, preview, choose and customize the five themes; no hex colors, custom fonts, drafts,
+  reordering, presets or images.
 
 ## Commands
 
@@ -744,5 +767,8 @@ public page still always renders Classic; no migration, persistence, selector or
 Tropical themes, completing the initial set of five, in code only. CP4 persists the theme (`wedding_site_designs`, member
 `save_wedding_site_design`) and returns it from the public read for `/boda/[slug]` (no selector, preview or customization).
 CP5 adds "Estilo del sitio" (theme cards with real thumbnails, owner and collaborator save) and the member-only preview
-(no migration, customization or drafts).
+(no migration, customization or drafts). CP6 adds safe customization: closed per-theme options (ten palette presets,
+type pairing, heading scale, hero, width, density, alignment, section style) stored as a versioned overrides-only
+document with a CHECK validator, "Personalizar" with per-group/full reset, theme-change normalization and the preview of
+unsaved choices (no hex colors, fonts, drafts, reordering, presets or images).
 Don't implement ahead of the current prompt.

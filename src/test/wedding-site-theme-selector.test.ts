@@ -4,8 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { WeddingSite } from "@/components/wedding-site/WeddingSite";
 import { getMessages } from "@/lib/i18n";
+import type { SiteOverrides } from "@/lib/wedding-site/design/customization";
 import { resolveSiteDesign } from "@/lib/wedding-site/design/resolve";
-import { WEDDING_SITE_THEME_KEYS, type WeddingSiteThemeKey } from "@/lib/wedding-site/design/themes";
+import {
+  CUSTOMIZABLE_FIELDS,
+  THEME_REGISTRY,
+  WEDDING_SITE_THEME_KEYS,
+  type WeddingSiteThemeKey,
+} from "@/lib/wedding-site/design/themes";
 import { toPreviewSite } from "@/lib/wedding-site/preview";
 import { toEditorSections } from "@/lib/wedding-site/sections";
 
@@ -19,7 +25,7 @@ const navigation = vi.hoisted(() => ({
   }),
 }));
 vi.mock("next/navigation", () => navigation);
-vi.mock("@/app/app/weddings/[weddingId]/site/actions", () => ({ saveThemeAction: vi.fn() }));
+vi.mock("@/app/app/weddings/[weddingId]/site/actions", () => ({ saveThemeAction: vi.fn(), saveCustomizationAction: vi.fn() }));
 vi.mock("@/lib/auth/session", () => ({ requireUser: vi.fn(async () => ({ id: "user" })) }));
 
 // A client that fails any direct use: the page reads only through the
@@ -65,25 +71,43 @@ const SECTIONS = toEditorSections([
   { kind: "rsvp", title: null, body: null, is_visible: true },
 ]);
 
-function editor(themeKey: WeddingSiteThemeKey, publishedAt: string | null = null) {
-  return { publication: { slug: "boda-vista", publishedAt }, sections: SECTIONS, design: { themeKey } };
+function editor(themeKey: WeddingSiteThemeKey, publishedAt: string | null = null, customization: SiteOverrides = {}) {
+  return { publication: { slug: "boda-vista", publishedAt }, sections: SECTIONS, design: { themeKey, customization } };
 }
 
 const render = (element: ReactElement) => renderToStaticMarkup(createElement(() => element));
 
-async function preview(theme: string | string[] | undefined): Promise<string> {
+async function preview(
+  theme: string | string[] | undefined,
+  extra: Record<string, string | string[]> = {},
+): Promise<string> {
   const element = await PreviewPage({
     params: Promise.resolve({ weddingId: WEDDING_ID }),
-    searchParams: Promise.resolve(theme === undefined ? {} : { theme }),
+    searchParams: Promise.resolve({ ...(theme === undefined ? {} : { theme }), ...extra }),
   } as PageProps<"/app/weddings/[weddingId]/site/preview">);
   return render(element);
 }
 
-/** The markup the public page draws for this content in a theme. */
-function publicMarkup(theme: WeddingSiteThemeKey): string {
+/** The markup the public page draws for this content in a theme (and customization). */
+function publicMarkup(theme: WeddingSiteThemeKey, overrides: SiteOverrides = {}): string {
   const site = toPreviewSite(WEDDING, SECTIONS, "boda-vista");
-  return render(createElement(WeddingSite, { site, design: resolveSiteDesign(theme), element: "div" }));
+  return render(createElement(WeddingSite, { site, design: resolveSiteDesign(theme, overrides), element: "div" }));
 }
+
+/** The customization radios of a field, in markup order (React orders attributes its own way). */
+function radios(html: string, field: string): { value: string; checked: boolean }[] {
+  return [...html.matchAll(/<input type="radio"[^>]*>/g)]
+    .map((m) => m[0])
+    .filter((input) => input.includes(` name="${field}"`))
+    .map((input) => ({ value: input.match(/ value="(\w+)"/)?.[1] ?? "", checked: input.includes(' checked=""') }));
+}
+
+/** The customization controls' checked value for a field, from the markup. */
+function checked(html: string, field: string): string | undefined {
+  return radios(html, field).find((radio) => radio.checked)?.value;
+}
+
+const interpolateName = (template: string, name: string) => template.replace("{name}", name);
 
 const PRIVATE = ["Texto oculto", "Título oculto", "America/Costa_Rica", "collaborator"];
 
@@ -95,7 +119,14 @@ describe("ThemeSection", () => {
   const site = toPreviewSite(WEDDING, SECTIONS, "");
 
   it("one card per registry theme, in registry order, the current one marked in words", () => {
-    const html = render(createElement(ThemeSection, { weddingId: WEDDING_ID, site, current: "editorial", isPublished: false }));
+    const html = render(
+      createElement(ThemeSection, {
+        weddingId: WEDDING_ID,
+        site,
+        design: { themeKey: "editorial", customization: {} },
+        isPublished: false,
+      }),
+    );
     const keys = [...html.matchAll(/data-testid="site-theme-option" data-theme="(\w+)"/g)].map((m) => m[1]);
     expect(keys).toEqual([...WEDDING_SITE_THEME_KEYS]);
     expect(html.match(/aria-current="true"/g)).toHaveLength(1);
@@ -116,7 +147,9 @@ describe("ThemeSection", () => {
   });
 
   it("thumbnails are the real renderer, decorative and inert, with only public content", () => {
-    const html = render(createElement(ThemeSection, { weddingId: WEDDING_ID, site, current: "classic", isPublished: true }));
+    const html = render(
+      createElement(ThemeSection, { weddingId: WEDDING_ID, site, design: { themeKey: "classic", customization: {} }, isPublished: true }),
+    );
     expect(html).toContain(copy.design.liveNote);
     const thumbnails = html.match(/<div aria-hidden="true" inert="" data-testid="site-theme-thumbnail"/g);
     expect(thumbnails).toHaveLength(WEDDING_SITE_THEME_KEYS.length);
@@ -125,9 +158,70 @@ describe("ThemeSection", () => {
     expect(html).not.toContain("<main");
     expect(html).toContain("Texto visible de bienvenida");
     for (const secret of PRIVATE) expect(html).not.toContain(secret);
-    // The wedding id appears only as the form's lookup key and in the five
-    // preview links, never in a thumbnail.
-    expect(html.split(WEDDING_ID)).toHaveLength(1 + 1 + WEDDING_SITE_THEME_KEYS.length);
+    // The wedding id appears only as the two forms' lookup key and in the
+    // five preview links, never in a thumbnail.
+    expect(html.split(WEDDING_ID)).toHaveLength(1 + 2 + WEDDING_SITE_THEME_KEYS.length);
+  });
+});
+
+describe("Personalizar (CP6)", () => {
+  const site = toPreviewSite(WEDDING, SECTIONS, "");
+  const section = (themeKey: WeddingSiteThemeKey, customization: SiteOverrides = {}) =>
+    render(createElement(ThemeSection, { weddingId: WEDDING_ID, site, design: { themeKey, customization }, isPublished: true }));
+
+  it.each(WEDDING_SITE_THEME_KEYS)("%s: offers exactly the registry's options, named in Spanish, the default marked", (key) => {
+    const html = section(key);
+    const theme = THEME_REGISTRY[key];
+    expect(html).toContain(`data-testid="site-customize" data-theme="${key}"`);
+    for (const field of CUSTOMIZABLE_FIELDS) {
+      const options = theme.options[field] as readonly string[];
+      const offered = radios(html, field).map((radio) => radio.value);
+      if (options.length > 1) {
+        expect(offered, `${key} ${field}`).toEqual([...options]);
+        expect(checked(html, field), `${key} ${field}`).toBe(theme[field]);
+        expect(html).toContain(`<legend class="text-sm font-semibold">${copy.customize.fields[field]}</legend>`);
+      } else {
+        // Fixed by the theme: stated in words, not offered.
+        expect(offered, `${key} ${field}`).toEqual([]);
+        expect(html).toContain(`data-testid="site-customize-fixed" data-field="${field}"`);
+      }
+    }
+    // Spanish names, never keys, as the visible option text.
+    expect(html).toContain(copy.customize.values.palette[theme.palette]);
+    expect(html).toContain(`· ${copy.customize.themeDefault}`);
+    // Nothing customized: no reset buttons.
+    expect(html).not.toContain(`value="reset:`);
+    expect(html).toContain(copy.customize.none);
+  });
+
+  it("starts from the saved customization and offers resets for the customized groups only", () => {
+    const html = section("editorial", { palette: "parchment", density: "regular" });
+    expect(checked(html, "palette")).toBe("parchment");
+    expect(checked(html, "density")).toBe("regular");
+    expect(checked(html, "typography")).toBe("serif");
+    expect(html).toContain('value="reset:palette"');
+    expect(html).toContain('value="reset:layout"');
+    expect(html).not.toContain('value="reset:typography"');
+    expect(html).not.toContain('value="reset:hero"');
+    expect(html).toContain('value="reset:all"');
+    expect(html).toContain(`aria-label="${copy.customize.reset}: ${copy.customize.groups.palette}"`);
+    // The current theme's thumbnail shows the saved customization.
+    expect(html).toContain('data-site-palette="parchment"');
+  });
+
+  it("thumbnails of other themes keep only the choices that theme offers", () => {
+    // Regular density is offered by Romantic; the parchment palette is not.
+    const html = section("editorial", { palette: "parchment", density: "regular" });
+    expect(html.match(/data-site-palette="parchment"/g)).toHaveLength(2); // thumbnail + swatch
+    expect(html).toContain('data-site-palette="rose"');
+  });
+
+  it("palette options carry a text name; the swatch is decorative", () => {
+    const html = section("tropical");
+    for (const palette of THEME_REGISTRY.tropical.options.palette) {
+      expect(html).toContain(copy.customize.values.palette[palette]);
+      expect(html).toMatch(new RegExp(`<span aria-hidden="true" data-site-palette="${palette}"`));
+    }
   });
 });
 
@@ -164,7 +258,7 @@ describe("preview page", () => {
     expect(other).not.toContain(copy.preview.unpublished);
     const same = await preview("tropical");
     expect(same).toContain(copy.preview.current);
-    expect(same).not.toContain(`name="theme"`);
+    expect(hasSave(same, "tropical")).toBe(false);
   });
 
   it.each([[undefined], ["neon"], ["Romantic"], [["minimal", "editorial"]]])(
@@ -190,5 +284,49 @@ describe("preview page", () => {
     const html = await preview("minimal");
     expect(html).toContain(copy.loadFailed);
     expect(html).not.toContain("site-preview");
+  });
+
+  it("previews unsaved customization choices from closed query values, without saving", async () => {
+    data.editor = editor("editorial");
+    const html = await preview("editorial", { customize: "1", palette: "parchment", typography: "mixed", density: "regular" });
+    expect(html).toContain(publicMarkup("editorial", { palette: "parchment", typography: "mixed", density: "regular" }));
+    expect(html).toContain('data-testid="site-preview-unsaved"');
+    expect(html).toContain(interpolateName(copy.preview.customHeading, "Editorial"));
+    // The controls start from the previewed choices; saving is explicit.
+    expect(checked(html, "palette")).toBe("parchment");
+    expect(html).toContain(`value="save"`);
+    expect(hasSave(html, "editorial")).toBe(false);
+  });
+
+  it("invalid or foreign values fall back to the theme's defaults and are never echoed", async () => {
+    data.editor = editor("editorial");
+    const html = await preview("editorial", {
+      customize: "1",
+      palette: "rose",
+      hero: "banner",
+      width: "url(https://evil.test)",
+      density: ["regular", "airy"],
+      typography: "mixed",
+    });
+    expect(html).toContain(publicMarkup("editorial", { typography: "mixed" }));
+    for (const value of ["evil.test", "url("]) expect(html).not.toContain(value);
+    expect(html).not.toContain('data-site-palette="rose"');
+  });
+
+  it("without customize=1, previews what choosing the theme would keep of the saved customization", async () => {
+    data.editor = editor("romantic", null, { palette: "wine", hero: "editorial", density: "regular" });
+    const minimal = await preview("minimal", { palette: "stone" });
+    // Minimal keeps the regular density, not the wine palette or the editorial hero; query fields are ignored.
+    expect(minimal).toContain(publicMarkup("minimal", { density: "regular" }));
+    const same = await preview("romantic");
+    expect(same).toContain(publicMarkup("romantic", { palette: "wine", hero: "editorial", density: "regular" }));
+    expect(same).toContain(copy.preview.current);
+  });
+
+  it("says when the previewed customization is the saved design", async () => {
+    data.editor = editor("editorial", null, { palette: "parchment" });
+    const html = await preview("editorial", { customize: "1", palette: "parchment" });
+    expect(html).toContain(copy.preview.currentDesign);
+    expect(html).not.toContain('data-testid="site-preview-unsaved"');
   });
 });

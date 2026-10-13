@@ -645,7 +645,11 @@ test.describe("wedding website", () => {
       ["tropical", "sand", "rgb(245, 239, 227)"],
     ] as const;
     for (const [theme, palette, background] of themes) {
-      const { data, error } = await member.rpc("save_wedding_site_design", { target_wedding_id: weddingId, new_theme: theme });
+      const { data, error } = await member.rpc("save_wedding_site_design", {
+        target_wedding_id: weddingId,
+        new_theme: theme,
+        new_customization: {},
+      });
       expect(error, theme).toBeNull();
       expect(data, theme).toBe(theme);
       await expectTheme(palette, background);
@@ -653,11 +657,11 @@ test.describe("wedding website", () => {
     }
 
     // Back to the original look by choosing Classic.
-    expect((await member.rpc("save_wedding_site_design", { target_wedding_id: weddingId, new_theme: "classic" })).error).toBeNull();
+    expect((await member.rpc("save_wedding_site_design", { target_wedding_id: weddingId, new_theme: "classic", new_customization: {} })).error).toBeNull();
     await expectTheme(null, "rgb(253, 250, 247)");
 
     // Unpublishing still hides the site, whatever the theme.
-    await member.rpc("save_wedding_site_design", { target_wedding_id: weddingId, new_theme: "romantic" });
+    await member.rpc("save_wedding_site_design", { target_wedding_id: weddingId, new_theme: "romantic", new_customization: {} });
     await openSite(page, weddingId);
     await unpublishSite(page);
     const gone = await visitor.goto(`/boda/${slug}`);
@@ -878,6 +882,288 @@ test.describe("wedding website", () => {
     await expect(page.getByTestId("site-theme-thumbnail").first()).toHaveAttribute("aria-hidden", "true");
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
   });
+
+  test("V: members customize the chosen theme with closed options: preview first, save, reset, change theme", async ({
+    page,
+    browser,
+  }, testInfo) => {
+    const customize = site.customize;
+    const ownerEmail = await createAccount("lb-site-custom-owner");
+    await logIn(page, ownerEmail);
+    const weddingId = await createFullWedding(page, "Boda de prueba Personalizada");
+    await openSite(page, weddingId);
+    await saveSection(page, "intro", { body: "Bienvenidos a la boda personalizada.", visible: true });
+    await saveSection(page, "rsvp", { visible: true });
+    const slug = uniqueSlug("personal");
+    await saveSlug(page, slug);
+    await publishSite(page);
+    const before = await siteState(weddingId);
+
+    // 1. Start with Editorial.
+    await chooseTheme(page, "editorial");
+    const visitor = await freshPage(browser);
+    await visitor.page.goto(`/boda/${slug}`);
+    await expectPublicLook(visitor.page, { palette: "ivory", bodyFont: "serif" });
+
+    // The controls are the registry's: Editorial's own options, in Spanish.
+    const panel = page.getByTestId("site-customize");
+    await expect(panel.getByRole("heading", { name: `Personalizar «${site.themes.editorial.name}»` })).toBeVisible();
+    await expect(customizeField(page, "palette").getByRole("radio")).toHaveCount(3);
+    await expect(customizeField(page, "hero").getByRole("radio")).toHaveCount(3);
+    await expect(radio(page, "palette", customize.values.palette.ivory)).toBeChecked();
+    await expect(panel.getByText("ivory", { exact: true })).toHaveCount(0);
+
+    // 2–3. Palette + typography + density, previewed before saving.
+    await radio(page, "palette", customize.values.palette.parchment).check();
+    await radio(page, "typography", customize.values.typography.mixed).check();
+    await radio(page, "density", customize.values.density.regular).check();
+    await panel.getByRole("button", { name: customize.preview, exact: true }).click();
+    await expect(page).toHaveURL(
+      new RegExp(`/site/preview\\?theme=editorial&customize=1&palette=parchment&typography=mixed&density=regular$`),
+    );
+    const canvas = page.getByTestId("site-preview");
+    await expect(canvas.locator("[data-site-palette]")).toHaveAttribute("data-site-palette", "parchment");
+    await expect(page.getByTestId("site-preview-unsaved")).toHaveText(site.preview.customNote);
+    await expect(page.getByTestId("site-preview-title")).toHaveText(`Vista previa: ${site.themes.editorial.name} personalizado`);
+    await screenshotPreview(page, testInfo, "custom-preview");
+
+    // 4. Nothing saved yet: the public page is unchanged.
+    expect(await customizationOf(weddingId)).toEqual({ theme: "editorial", customization: {} });
+    await visitor.page.reload();
+    await expectPublicLook(visitor.page, { palette: "ivory", bodyFont: "serif" });
+
+    // 5–6. Saved from the preview: the public page changes at once.
+    const previewPanel = page.getByTestId("site-customize");
+    await previewPanel.getByRole("button", { name: customize.saveDesign }).click();
+    await expect(previewPanel.getByTestId("site-customize-status")).toHaveText(
+      `Guardamos la personalización de «${site.themes.editorial.name}».`,
+    );
+    await expect(page.getByTestId("site-preview-current")).toHaveText(site.preview.currentDesign);
+    expect(await customizationOf(weddingId)).toEqual({
+      theme: "editorial",
+      customization: {
+        schemaVersion: 1,
+        palette: { kind: "preset", key: "parchment" },
+        typography: { pairing: "mixed" },
+        layout: { density: "regular" },
+      },
+    });
+    await visitor.page.reload();
+    await expectPublicLook(visitor.page, { palette: "parchment", bodyFont: "sans" });
+    await expect(visitor.page.getByText("Bienvenidos a la boda personalizada.")).toBeVisible();
+
+    // 7. Reset one group (the palette); typography and spacing stay.
+    await openSite(page, weddingId);
+    await expect(radio(page, "palette", customize.values.palette.parchment)).toBeChecked();
+    await expect(panel.getByRole("button", { name: `${customize.reset}: ${customize.groups.hero}` })).toHaveCount(0);
+    await panel.getByRole("button", { name: `${customize.reset}: ${customize.groups.palette}` }).click();
+    await expect(panel.getByTestId("site-customize-status")).toHaveText(
+      `Restablecimos «${customize.groups.palette}» a como viene el estilo.`,
+    );
+    expect(await customizationOf(weddingId)).toEqual({
+      theme: "editorial",
+      customization: { schemaVersion: 1, typography: { pairing: "mixed" }, layout: { density: "regular" } },
+    });
+    await visitor.page.reload();
+    await expectPublicLook(visitor.page, { palette: "ivory", bodyFont: "sans" });
+
+    // 8. Reset all: the base theme stays Editorial (never back to Classic).
+    await panel.getByRole("button", { name: customize.resetAll }).click();
+    await expect(panel.getByTestId("site-customize-status")).toHaveText(
+      `Quitamos toda la personalización. El sitio usa «${site.themes.editorial.name}» tal como viene.`,
+    );
+    expect(await customizationOf(weddingId)).toEqual({ theme: "editorial", customization: {} });
+    await expectSelectedTheme(page, "editorial");
+    await visitor.page.reload();
+    await expectPublicLook(visitor.page, { palette: "ivory", bodyFont: "serif" });
+
+    // 9–10. A framed hero and regular spacing on Editorial, then Minimal:
+    // Minimal has no framed hero (its own grid applies); the spacing stays.
+    await radio(page, "hero", customize.values.hero.framed).check();
+    await radio(page, "density", customize.values.density.regular).check();
+    await radio(page, "palette", customize.values.palette.charcoal).check();
+    await panel.getByRole("button", { name: customize.save }).click();
+    await expect(panel.getByTestId("site-customize-status")).toHaveText(
+      `Guardamos la personalización de «${site.themes.editorial.name}».`,
+    );
+    await themeOption(page, "minimal").getByRole("button", { name: `${site.design.use}: ${site.themes.minimal.name}` }).click();
+    await expect(page.getByTestId("site-theme-status")).toHaveText(
+      `Guardamos el estilo «${site.themes.minimal.name}». ${site.design.dropped}`,
+    );
+    await expectSelectedTheme(page, "minimal");
+    expect(await customizationOf(weddingId)).toEqual({
+      theme: "minimal",
+      customization: { schemaVersion: 1, layout: { density: "regular" } },
+    });
+    await expect(panel.getByRole("heading", { name: `Personalizar «${site.themes.minimal.name}»` })).toBeVisible();
+    await expect(radio(page, "hero", customize.values.hero.grid)).toBeChecked();
+    await expect(customizeField(page, "hero").getByRole("radio", { name: customize.values.hero.framed })).toHaveCount(0);
+    await expect(radio(page, "density", customize.values.density.regular)).toBeChecked();
+    // Minimal fixes the alignment: stated, not offered.
+    await expect(page.locator('[data-testid="site-customize-fixed"][data-field="alignment"]')).toBeVisible();
+    await visitor.page.reload();
+    await expectPublicLook(visitor.page, { palette: "mono", bodyFont: "sans" });
+
+    // 11. A collaborator customizes too.
+    const collaboratorEmail = await createAccount("lb-site-custom-collab");
+    await addCollaborator(weddingId, collaboratorEmail);
+    const collab = await freshPage(browser);
+    await logIn(collab.page, collaboratorEmail);
+    await openSite(collab.page, weddingId);
+    const collabPanel = collab.page.getByTestId("site-customize");
+    await radio(collab.page, "palette", customize.values.palette.ink).check();
+    const saveRequest = await captureAction(collab.page, () =>
+      collabPanel.getByRole("button", { name: customize.save }).click(),
+    );
+    // The captured request was aborted, leaving that form pending: start again.
+    await openSite(collab.page, weddingId);
+    await radio(collab.page, "palette", customize.values.palette.ink).check();
+    await collabPanel.getByRole("button", { name: customize.save }).click();
+    await expect(collabPanel.getByTestId("site-customize-status")).toHaveText(
+      `Guardamos la personalización de «${site.themes.minimal.name}».`,
+    );
+    await visitor.page.reload();
+    await expectPublicLook(visitor.page, { palette: "ink", bodyFont: "sans" });
+    const saved = await customizationOf(weddingId);
+
+    // 12. The same save request from an outsider or a signed-out visitor: refused, nothing changes.
+    await withDb((db) => db.query("update public.wedding_site_designs set customization = '{}' where wedding_id = $1", [weddingId]));
+    const outsider = await freshPage(browser);
+    await logIn(outsider.page, await createAccount("lb-site-custom-outsider"));
+    await replayAction(outsider.page, saveRequest);
+    const anonymous = await freshPage(browser);
+    await replayAction(anonymous.page, saveRequest);
+    expect(await customizationOf(weddingId)).toEqual({ theme: "minimal", customization: {} });
+    const outsiderPage = await outsider.page.goto(`/app/weddings/${weddingId}/site`);
+    expect(outsiderPage?.status()).toBe(404);
+    // ...while the member's own request works (it is a real save request).
+    await replayAction(collab.page, saveRequest);
+    expect(await customizationOf(weddingId)).toEqual(saved);
+
+    // Nothing but the design ever changed.
+    expect(await siteState(weddingId)).toEqual(before);
+    expect(await publication(weddingId)).toEqual({ slug, published: true });
+    for (const ctx of [visitor, collab, outsider, anonymous]) await ctx.context.close();
+  });
+
+  test("W: an unpublished wedding is customized, previewed and saved, and stays 404 until the owner publishes", async ({
+    page,
+    browser,
+  }) => {
+    const customize = site.customize;
+    const ownerEmail = await createAccount("lb-site-custom-private");
+    await logIn(page, ownerEmail);
+    const weddingId = await createFullWedding(page, "Boda de prueba Personalizada privada");
+    await openSite(page, weddingId);
+    await saveSection(page, "intro", { body: "Texto de la boda privada.", visible: true });
+    const slug = uniqueSlug("privada");
+    await saveSlug(page, slug);
+    const visitor = await freshPage(browser);
+
+    // A collaborator customizes the unpublished site.
+    const collaboratorEmail = await createAccount("lb-site-custom-private-collab");
+    await addCollaborator(weddingId, collaboratorEmail);
+    const collab = await freshPage(browser);
+    await logIn(collab.page, collaboratorEmail);
+    await openSite(collab.page, weddingId);
+    await chooseTheme(collab.page, "tropical");
+    const panel = collab.page.getByTestId("site-customize");
+    await radio(collab.page, "palette", customize.values.palette.sunset).check();
+    await radio(collab.page, "hero", customize.values.hero.editorial).check();
+    await panel.getByRole("button", { name: customize.preview, exact: true }).click();
+    await expect(collab.page.getByText(site.preview.unpublished)).toBeVisible();
+    await expect(collab.page.getByTestId("site-preview").locator("[data-site-palette]")).toHaveAttribute(
+      "data-site-palette",
+      "sunset",
+    );
+    await expectPublicNotFound(visitor.page, slug);
+    expect(await customizationOf(weddingId)).toEqual({ theme: "tropical", customization: {} });
+
+    await collab.page.getByTestId("site-customize").getByRole("button", { name: customize.saveDesign }).click();
+    await expect(collab.page.getByTestId("site-customize-status")).toHaveText(
+      `Guardamos la personalización de «${site.themes.tropical.name}».`,
+    );
+    expect(await customizationOf(weddingId)).toEqual({
+      theme: "tropical",
+      customization: { schemaVersion: 1, palette: { kind: "preset", key: "sunset" }, hero: { variant: "editorial" } },
+    });
+    // Saved, still private: no publish, and the public page is a 404.
+    expect(await publication(weddingId)).toEqual({ slug, published: false });
+    await expectPublicNotFound(visitor.page, slug);
+
+    // An unknown or foreign value in the preview URL falls back to the theme's default.
+    await collab.page.goto(`/app/weddings/${weddingId}/site/preview?theme=tropical&customize=1&palette=rose&hero=url(x)`);
+    await expect(collab.page.getByTestId("site-preview").locator("[data-site-palette]")).toHaveAttribute("data-site-palette", "sand");
+    await expect(collab.page.getByText("url(x)")).toHaveCount(0);
+
+    // The owner publishes: the saved customization is what the public sees.
+    await openSite(page, weddingId);
+    await publishSite(page);
+    await visitor.page.goto(`/boda/${slug}`);
+    await expect(visitor.page.locator("main")).toHaveAttribute("data-site-palette", "sunset");
+    await expect(visitor.page.getByText("Texto de la boda privada.")).toBeVisible();
+    for (const ctx of [visitor, collab]) await ctx.context.close();
+  });
+
+  test("X: the customization controls and the preview fit 360, 390, 768 and 1280 px, keyboard included", async ({ page }, testInfo) => {
+    const customize = site.customize;
+    await logIn(page, await createAccount("lb-site-custom-widths"));
+    const weddingId = await createFullWedding(
+      page,
+      "Boda de prueba de María Fernanda de los Ángeles y Juan Sebastián Rodríguez",
+    );
+    await openSite(page, weddingId);
+    await saveSection(page, "intro", { body: "Bienvenidos.\nRecepción en el salón principal con cena y baile.", visible: true });
+    await chooseTheme(page, "tropical");
+    for (const width of [360, 390, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await openSite(page, weddingId);
+      await page.getByTestId("site-customize").scrollIntoViewIfNeeded();
+      await expectNoHorizontalScroll(page);
+      await page.getByTestId("site-customize").screenshot({ path: testInfo.outputPath(`customize-${width}.png`) });
+      await page.goto(
+        `/app/weddings/${weddingId}/site/preview?theme=tropical&customize=1&palette=forest&width=wide&density=airy&hero=simple&sectionStyle=editorial`,
+      );
+      await expect(page.getByTestId("site-preview")).toHaveAttribute("data-theme", "tropical");
+      await expect(page.getByTestId("site-preview-customize")).toHaveAttribute("open", "");
+      await expectNoHorizontalScroll(page);
+      await screenshotPreview(page, testInfo, `custom-preview-${width}`);
+    }
+
+    // Keyboard: radios move with the arrow keys, focus is visible, the
+    // selection is shown by the radio and bold text (not color alone), and
+    // the save is announced.
+    await page.setViewportSize({ width: 390, height: 900 });
+    await openSite(page, weddingId);
+    const first = radio(page, "palette", customize.values.palette.sand);
+    await first.focus();
+    await expect(first).toBeFocused();
+    expect(await first.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe("solid");
+    await page.keyboard.press("ArrowRight");
+    const forest = radio(page, "palette", customize.values.palette.forest);
+    await expect(forest).toBeFocused();
+    await expect(forest).toBeChecked();
+    expect(await forest.evaluate((el) => getComputedStyle(el.closest("label") as Element).fontWeight)).toBe("600");
+    const save = page.getByTestId("site-customize").getByRole("button", { name: customize.save });
+    await save.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("site-customize-status")).toHaveText(
+      `Guardamos la personalización de «${site.themes.tropical.name}».`,
+    );
+    expect(await customizationOf(weddingId)).toEqual({
+      theme: "tropical",
+      customization: { schemaVersion: 1, palette: { kind: "preset", key: "forest" } },
+    });
+    // Tropical offers a choice in every field: eight named groups of radios.
+    expect(
+      await page
+        .locator('[data-testid="site-customize"] [data-testid="site-customize-field"] legend')
+        .evaluateAll((legends) => legends.map((legend) => legend.textContent)),
+    ).toEqual(Object.values(customize.fields));
+    for (const field of Object.keys(customize.fields) as (keyof typeof customize.fields)[]) {
+      await expect(page.getByRole("group", { name: customize.fields[field] })).toBeVisible();
+    }
+  });
 });
 
 function themeOptions(page: Page): Locator {
@@ -978,4 +1264,35 @@ async function saveSectionExpectingError(page: Page, kind: keyof typeof site.kin
 async function reopen(page: Page, weddingId: string): Promise<Page> {
   await openSite(page, weddingId);
   return page;
+}
+
+/** One customization field (a fieldset of radios) in the page's «Personalizar». */
+function customizeField(page: Page, field: keyof typeof site.customize.fields): Locator {
+  return page.locator(`[data-testid="site-customize"] [data-testid="site-customize-field"][data-field="${field}"]`);
+}
+
+/** An option of a customization field, by its Spanish name. */
+function radio(page: Page, field: keyof typeof site.customize.fields, name: string): Locator {
+  return customizeField(page, field).getByRole("radio", { name: new RegExp(`^${name}( · ${site.customize.themeDefault})?$`) });
+}
+
+/** The stored theme and customization document. */
+async function customizationOf(weddingId: string): Promise<{ theme: string; customization: unknown } | null> {
+  return withDb(async (db) => {
+    const { rows } = await db.query<{ theme_key: string; customization: unknown }>(
+      "select theme_key, customization from public.wedding_site_designs where wedding_id = $1",
+      [weddingId],
+    );
+    return rows[0] ? { theme: rows[0].theme_key, customization: rows[0].customization } : null;
+  });
+}
+
+/** The public page's palette and the section text's font family. */
+async function expectPublicLook(page: Page, look: { palette: string; bodyFont: "serif" | "sans" }) {
+  await expect(page.locator("main")).toHaveAttribute("data-site-palette", look.palette);
+  const font = await page
+    .locator('[data-testid="public-site-section"] p')
+    .first()
+    .evaluate((el) => getComputedStyle(el).fontFamily);
+  expect(font.includes("Georgia"), font).toBe(look.bodyFont === "serif");
 }

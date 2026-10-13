@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { WEDDING_SITE_THEME_KEYS } from "@/lib/wedding-site/design/themes";
 import {
+  designForTheme,
+  previewDesign,
   previewThemeKey,
+  siteCustomPreviewPath,
   sitePreviewPath,
   THUMBNAIL_BODY_LENGTH,
   THUMBNAIL_SECTIONS,
@@ -102,6 +105,51 @@ describe("sitePreviewPath", () => {
   it("is the organizer preview route with the theme key", () => {
     expect(sitePreviewPath("8d0f6b8e-0000-4000-8000-000000000001", "romantic")).toBe(
       "/app/weddings/8d0f6b8e-0000-4000-8000-000000000001/site/preview?theme=romantic",
+    );
+  });
+});
+
+describe("customization preview (CP6)", () => {
+  const ID = "8d0f6b8e-0000-4000-8000-000000000001";
+  const saved = { themeKey: "romantic" as const, customization: { palette: "wine" as const, hero: "editorial" as const, density: "regular" as const } };
+
+  it("choosing another theme keeps only the choices it offers", () => {
+    expect(designForTheme(saved, "romantic")).toBe(saved);
+    expect(designForTheme(saved, "minimal")).toEqual({ themeKey: "minimal", customization: { density: "regular" } });
+  });
+
+  it("without customize=1, the query's fields are ignored", () => {
+    expect(previewDesign({ theme: "minimal", palette: "ink" }, saved)).toEqual({
+      design: { themeKey: "minimal", customization: { density: "regular" } },
+      custom: false,
+    });
+    expect(previewDesign({}, saved)).toEqual({ design: saved, custom: false });
+  });
+
+  it("with customize=1, reads one closed value per field, checked against the theme", () => {
+    expect(
+      previewDesign(
+        { theme: "editorial", customize: "1", palette: "parchment", typography: "mixed", density: "airy", hero: "banner", width: ["regular", "narrow"], extra: "x" },
+        saved,
+      ),
+    ).toEqual({ design: { themeKey: "editorial", customization: { palette: "parchment", typography: "mixed" } }, custom: true });
+    // Nothing chosen: the theme as it comes, not the saved customization.
+    expect(previewDesign({ theme: "romantic", customize: "1" }, saved)).toEqual({
+      design: { themeKey: "romantic", customization: {} },
+      custom: true,
+    });
+    expect(previewDesign({ theme: "romantic", customize: ["1", "1"] }, saved).custom).toBe(false);
+  });
+
+  it("builds the preview path from closed values only, defaults left out, and reads back the same design", () => {
+    const design = { themeKey: "tropical" as const, customization: { palette: "sunset" as const, density: "airy" as const } };
+    const path = siteCustomPreviewPath(ID, design);
+    expect(path).toBe(`/app/weddings/${ID}/site/preview?theme=tropical&customize=1&palette=sunset&density=airy`);
+    const query = Object.fromEntries(new URL(path, "http://x.test").searchParams);
+    expect(previewDesign(query, saved)).toEqual({ design, custom: true });
+    // Forged overrides never reach the URL.
+    expect(siteCustomPreviewPath(ID, { themeKey: "tropical", customization: { palette: "rose" } as never })).toBe(
+      `/app/weddings/${ID}/site/preview?theme=tropical&customize=1`,
     );
   });
 });

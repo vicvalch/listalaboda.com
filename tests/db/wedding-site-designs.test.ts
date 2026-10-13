@@ -2,15 +2,25 @@ import { randomBytes } from "node:crypto";
 
 import { afterAll, describe, expect, it } from "vitest";
 
+import type { Json } from "@/lib/supabase/database.types";
+import { FIELD_LOCATION } from "@/lib/wedding-site/design/customization";
+import {
+  CUSTOMIZABLE_FIELDS,
+  FIELD_VOCABULARY,
+  THEME_REGISTRY,
+  WEDDING_SITE_THEME_KEYS,
+  type CustomizableField,
+} from "@/lib/wedding-site/design/themes";
 import { toPublishedSite } from "@/lib/wedding-site/sections";
 
 import type { TestUserKey } from "./context";
 import { PERMISSION_DENIED, addMember, as, createWedding as createFixtureWedding, sql } from "./support";
 
-// ADR-019 CP4: the wedding website's design (theme) — wedding_site_designs,
-// save_wedding_site_design and the theme in get_published_wedding_site —
-// exercised as real anon and authenticated users through the Data API. The
-// superuser connection only arranges fixtures and reads ground truth.
+// ADR-019 CP4/CP6: the wedding website's design (theme and customization) —
+// wedding_site_designs, its CHECK, save_wedding_site_design and the design in
+// get_published_wedding_site — exercised as real anon and authenticated users
+// through the Data API. The superuser connection only arranges fixtures,
+// probes the private validator and reads ground truth.
 
 type Actor = keyof typeof as;
 type Theme = "classic" | "editorial" | "minimal" | "romantic" | "tropical";
@@ -20,6 +30,8 @@ const RLS_VIOLATION = PERMISSION_DENIED;
 const UNIQUE_VIOLATION = "23505";
 const INVALID_TEXT = "22P02";
 const NO_DATA_FOUND = "P0002";
+const INVALID_PARAMETER = "22023";
+const CHECK_VIOLATION = "23514";
 
 const createdWeddings: string[] = [];
 let slugCounter = 0;
@@ -42,10 +54,11 @@ async function twoWeddings() {
   return { a, b };
 }
 
-function saveDesign(actor: Actor, weddingId: string, theme: string) {
+function saveDesign(actor: Actor, weddingId: string, theme: string, customization: unknown = {}) {
   return as[actor].rpc("save_wedding_site_design", {
     target_wedding_id: weddingId,
     new_theme: theme as Theme,
+    new_customization: customization as Json,
   });
 }
 
@@ -54,11 +67,22 @@ function designs(actor: Actor) {
 }
 
 async function designRows(weddingId: string) {
-  return sql<{ theme_key: Theme; created_at: Date; updated_at: Date }>(
-    "select theme_key, created_at, updated_at from public.wedding_site_designs where wedding_id = $1",
+  return sql<{ theme_key: Theme; customization: unknown; created_at: Date; updated_at: Date }>(
+    "select theme_key, customization, created_at, updated_at from public.wedding_site_designs where wedding_id = $1",
     [weddingId],
   );
 }
+
+/** The private validator's verdict (superuser probe). */
+async function isValid(theme: Theme, document: unknown): Promise<boolean> {
+  const [row] = await sql<{ valid: boolean }>(
+    "select private.wedding_site_customization_is_valid($1::public.wedding_site_theme, $2::jsonb) as valid",
+    [theme, JSON.stringify(document)],
+  );
+  return row.valid;
+}
+
+const doc = (groups: Record<string, unknown>) => ({ schemaVersion: 1, ...groups });
 
 function uniqueSlug(label: string): string {
   return `${label}-${randomBytes(4).toString("hex")}-${++slugCounter}`;
@@ -106,14 +130,26 @@ async function contentAndPublicationHash(weddingId: string) {
 // ---------------------------------------------------------------- schema
 
 describe("wedding site design schema", () => {
-  it("holds only the wedding, the theme and timestamps", async () => {
+  it("holds only the wedding, the theme, the customization and timestamps", async () => {
     const rows = await sql<{ column_name: string; data_type: string; is_nullable: string; column_default: string | null }>(
       `select column_name, data_type, is_nullable, column_default from information_schema.columns
        where table_schema = 'public' and table_name = 'wedding_site_designs' order by ordinal_position`,
     );
-    expect(rows.map((r) => r.column_name)).toEqual(["wedding_id", "theme_key", "created_at", "updated_at"]);
+    expect(rows.map((r) => r.column_name)).toEqual(["wedding_id", "theme_key", "created_at", "updated_at", "customization"]);
     const theme = rows.find((r) => r.column_name === "theme_key");
     expect(theme).toMatchObject({ data_type: "USER-DEFINED", is_nullable: "NO", column_default: "'classic'::wedding_site_theme" });
+    const customization = rows.find((r) => r.column_name === "customization");
+    expect(customization).toMatchObject({ data_type: "jsonb", is_nullable: "NO", column_default: "'{}'::jsonb" });
+    const checks = await sql<{ name: string; definition: string }>(
+      `select conname as name, pg_get_constraintdef(oid) as definition from pg_constraint
+       where conrelid = 'public.wedding_site_designs'::regclass and contype = 'c'`,
+    );
+    expect(checks).toEqual([
+      {
+        name: "wedding_site_designs_customization_valid",
+        definition: "CHECK (private.wedding_site_customization_is_valid(theme_key, customization))",
+      },
+    ]);
   });
 
   it("themes are exactly the five curated keys, in order", async () => {
@@ -124,7 +160,7 @@ describe("wedding site design schema", () => {
     expect(rows.map((r) => r.label)).toEqual(THEMES);
   });
 
-  it("clients may write only the theme (and the wedding on insert), never delete", async () => {
+  it("clients may write only the theme and customization (and the wedding on insert), never delete", async () => {
     const rows = await sql<{ grantee: string; privilege_type: string; column_name: string }>(
       `select grantee, privilege_type, column_name from information_schema.column_privileges
        where table_schema = 'public' and table_name = 'wedding_site_designs'
@@ -133,9 +169,9 @@ describe("wedding site design schema", () => {
     const columns = (privilege: string) =>
       rows.filter((r) => r.grantee === "authenticated" && r.privilege_type === privilege).map((r) => r.column_name);
     expect(rows.filter((r) => r.grantee === "anon")).toEqual([]);
-    expect(columns("SELECT")).toEqual(["created_at", "theme_key", "updated_at", "wedding_id"]);
-    expect(columns("INSERT")).toEqual(["theme_key", "wedding_id"]);
-    expect(columns("UPDATE")).toEqual(["theme_key"]);
+    expect(columns("SELECT")).toEqual(["created_at", "customization", "theme_key", "updated_at", "wedding_id"]);
+    expect(columns("INSERT")).toEqual(["customization", "theme_key", "wedding_id"]);
+    expect(columns("UPDATE")).toEqual(["customization", "theme_key"]);
     const tableGrants = await sql(
       `select privilege_type from information_schema.role_table_grants
        where table_schema = 'public' and table_name = 'wedding_site_designs'
@@ -355,6 +391,7 @@ describe("theme in the public read", () => {
       "section_body",
       "section_kind",
       "section_title",
+      "site_customization",
       "site_theme",
       "wedding_city",
       "wedding_date",
@@ -398,5 +435,226 @@ describe("deploy skew", () => {
     }));
     expect(toPublishedSite(slug, after)).toEqual(toPublishedSite(slug, withoutTheme));
     expect(toPublishedSite(slug, after)).toEqual(toPublishedSite(slug, before));
+  });
+});
+
+// ----------------------------------------------------- customization (CP6)
+
+describe("customization validator", () => {
+  it.each([
+    ["empty {}", "editorial", {}],
+    ["schemaVersion 1 only", "editorial", { schemaVersion: 1 }],
+    ["one override", "editorial", doc({ palette: { kind: "preset", key: "parchment" } })],
+    [
+      "multiple overrides",
+      "tropical",
+      doc({
+        palette: { kind: "preset", key: "sunset" },
+        typography: { pairing: "serif", headingScale: "regular" },
+        hero: { variant: "simple" },
+        layout: { width: "wide", density: "airy", alignment: "center", sectionStyle: "plain" },
+      }),
+    ],
+    ["a default value written explicitly", "minimal", doc({ layout: { alignment: "start" } })],
+  ] as const)("accepts %s", async (_label, theme, document) => {
+    expect(await isValid(theme, document)).toBe(true);
+  });
+
+  it("mirrors the theme registry exactly: every value of every field, for every theme", async () => {
+    const probes: { theme: Theme; field: CustomizableField; value: string; document: string }[] = [];
+    for (const theme of WEDDING_SITE_THEME_KEYS) {
+      for (const field of CUSTOMIZABLE_FIELDS) {
+        const { group, key } = FIELD_LOCATION[field];
+        for (const value of FIELD_VOCABULARY[field]) {
+          const body = group === "palette" ? { kind: "preset", key: value } : { [key]: value };
+          probes.push({ theme, field, value, document: JSON.stringify(doc({ [group]: body })) });
+        }
+      }
+    }
+    const rows = await sql<{ ordinality: number; valid: boolean }>(
+      `select p.ordinality::int, private.wedding_site_customization_is_valid(p.theme, p.document) as valid
+       from unnest($1::public.wedding_site_theme[], $2::jsonb[]) with ordinality as p(theme, document, ordinality)
+       order by p.ordinality`,
+      [probes.map((p) => p.theme), probes.map((p) => p.document)],
+    );
+    expect(rows).toHaveLength(probes.length);
+    const mismatches = rows
+      .map((row, index) => ({ ...probes[index], valid: row.valid }))
+      .filter(({ theme, field, value, valid }) =>
+        valid !== (THEME_REGISTRY[theme].options[field] as readonly string[]).includes(value),
+      )
+      .map(({ theme, field, value, valid }) => `${theme} ${field}=${value} database=${valid}`);
+    expect(mismatches).toEqual([]);
+  });
+
+  it.each([
+    ["an unknown top-level key", "editorial", doc({ colors: { background: "red" } })],
+    ["a wrong schemaVersion", "editorial", { schemaVersion: 2 }],
+    ["schemaVersion as a string", "editorial", { schemaVersion: "1" }],
+    ["a missing schemaVersion on a non-empty document", "editorial", { palette: { kind: "preset", key: "parchment" } }],
+    ["an invalid palette key", "editorial", doc({ palette: { kind: "preset", key: "neon" } })],
+    ["another theme's palette", "editorial", doc({ palette: { kind: "preset", key: "rose" } })],
+    ["a palette without kind", "editorial", doc({ palette: { key: "parchment" } })],
+    ["a palette of another kind", "editorial", doc({ palette: { kind: "custom", key: "parchment" } })],
+    ["an invalid typography", "editorial", doc({ typography: { pairing: "comic" } })],
+    ["an invalid hero for the theme", "minimal", doc({ hero: { variant: "framed" } })],
+    ["an invalid layout value", "editorial", doc({ layout: { width: "full" } })],
+    ["an extra nested key", "editorial", doc({ layout: { width: "regular", gap: "2rem" } })],
+    ["an extra palette key", "editorial", doc({ palette: { kind: "preset", key: "parchment", hex: "#fff" } })],
+    ["an empty group", "editorial", doc({ hero: {} })],
+    ["an array instead of an object", "editorial", doc({ layout: ["regular"] })],
+    ["a string instead of an object", "editorial", doc({ hero: "simple" })],
+    ["null instead of an object", "editorial", doc({ hero: null })],
+    ["null instead of a value", "editorial", doc({ hero: { variant: null } })],
+    ["a number instead of a value", "editorial", doc({ layout: { width: 3 } })],
+    ["an array document", "editorial", [doc({})]],
+    ["a string document", "editorial", "{}"],
+    ["a JSON null document", "editorial", null],
+    ["oversized JSON", "editorial", doc({ layout: { width: "regular" }, pad: "x".repeat(1100) })],
+    ["oversized JSON of valid-looking keys", "editorial", doc({ layout: { width: "regular".padEnd(1100, " ") } })],
+    ["CSS-looking strings", "editorial", doc({ layout: { width: "max-width: 100vw; color: red" } })],
+    ["url(...)", "editorial", doc({ layout: { sectionStyle: "url(https://evil.test/x.png)" } })],
+    ["<script>", "editorial", doc({ hero: { variant: "<script>alert(1)</script>" } })],
+    ["an arbitrary hex", "editorial", doc({ palette: { kind: "preset", key: "#ff00aa" } })],
+  ] as const)("refuses %s", async (_label, theme, document) => {
+    expect(await isValid(theme, document)).toBe(false);
+  });
+
+  it("is not callable through the Data API", async () => {
+    for (const actor of ["anon", "ownerA"] as const) {
+      const { error } = await (as[actor] as unknown as {
+        rpc: (fn: string, args: object) => Promise<{ error: { code?: string } | null }>;
+      }).rpc("wedding_site_customization_is_valid", { theme: "editorial", doc: {} });
+      expect(error, actor).not.toBeNull();
+    }
+  });
+});
+
+describe("saving a customization", () => {
+  const EDITORIAL = doc({ palette: { kind: "preset", key: "parchment" }, typography: { pairing: "mixed" }, layout: { density: "regular" } });
+
+  it("owners and collaborators save theme + customization together", async () => {
+    const { a } = await twoWeddings();
+    expect(await saveDesign("ownerA", a, "editorial", EDITORIAL)).toMatchObject({ data: "editorial", error: null });
+    expect((await designRows(a)).map((r) => [r.theme_key, r.customization])).toEqual([["editorial", EDITORIAL]]);
+
+    const tropical = doc({ palette: { kind: "preset", key: "forest" } });
+    expect(await saveDesign("collabA", a, "tropical", tropical)).toMatchObject({ data: "tropical", error: null });
+    expect((await designRows(a)).map((r) => [r.theme_key, r.customization])).toEqual([["tropical", tropical]]);
+
+    // Reset all: the theme stays, the customization is {}.
+    expect(await saveDesign("collabA", a, "tropical", {})).toMatchObject({ data: "tropical", error: null });
+    expect((await designRows(a)).map((r) => [r.theme_key, r.customization])).toEqual([["tropical", {}]]);
+  });
+
+  it("outsiders and anon can't save", async () => {
+    const { a } = await twoWeddings();
+    expect((await saveDesign("outsider", a, "editorial", EDITORIAL)).error?.message).toBe("wedding_not_found");
+    expect((await saveDesign("ownerB", a, "editorial", EDITORIAL)).error?.message).toBe("wedding_not_found");
+    expect((await saveDesign("anon", a, "editorial", EDITORIAL)).error?.code).toBe(PERMISSION_DENIED);
+    const update = await designs("outsider").update({ customization: EDITORIAL as NonNullable<Json> }).eq("wedding_id", a).select("wedding_id");
+    expect(update.data).toEqual([]);
+    expect(await designRows(a)).toEqual([]);
+  });
+
+  it("an invalid customization is refused and writes nothing", async () => {
+    const { a } = await twoWeddings();
+    expect((await saveDesign("ownerA", a, "editorial", EDITORIAL)).error).toBeNull();
+    for (const bad of [
+      doc({ hero: { variant: "banner" } }),
+      doc({ palette: { kind: "preset", key: "#ff0000" } }),
+      { schemaVersion: 2 },
+      [],
+      "url(x)",
+      null,
+    ]) {
+      const { error } = await saveDesign("ownerA", a, "editorial", bad);
+      expect(error?.code, JSON.stringify(bad)).toBe(INVALID_PARAMETER);
+    }
+    // A theme that doesn't offer the stored choices is refused with them.
+    expect((await saveDesign("ownerA", a, "minimal", EDITORIAL)).error?.code).toBe(INVALID_PARAMETER);
+    expect((await designRows(a)).map((r) => [r.theme_key, r.customization])).toEqual([["editorial", EDITORIAL]]);
+  });
+
+  it("the CHECK holds for direct table writes too, including a theme change that leaves an invalid override", async () => {
+    const { a } = await twoWeddings();
+    const inserted = await designs("collabA").insert({
+      wedding_id: a,
+      theme_key: "editorial",
+      customization: doc({ hero: { variant: "banner" } }) as NonNullable<Json>,
+    });
+    expect(inserted.error?.code).toBe(CHECK_VIOLATION);
+    expect((await saveDesign("collabA", a, "editorial", doc({ hero: { variant: "framed" } }))).error).toBeNull();
+    // Minimal has no framed hero: changing only the theme is refused.
+    expect((await designs("ownerA").update({ theme_key: "minimal" }).eq("wedding_id", a)).error?.code).toBe(CHECK_VIOLATION);
+    expect((await designs("ownerA").update({ customization: "<script>" as NonNullable<Json> }).eq("wedding_id", a)).error?.code).toBe(
+      CHECK_VIOLATION,
+    );
+    expect((await designRows(a)).map((r) => [r.theme_key, r.customization])).toEqual([
+      ["editorial", doc({ hero: { variant: "framed" } })],
+    ]);
+    // Normalized together, the change is accepted.
+    expect((await designs("ownerA").update({ theme_key: "minimal", customization: {} }).eq("wedding_id", a)).error).toBeNull();
+  });
+
+  it("existing rows (CP4) are valid with no customization", async () => {
+    const { a } = await twoWeddings();
+    expect((await designs("ownerA").insert({ wedding_id: a, theme_key: "romantic" })).error).toBeNull();
+    expect((await designRows(a)).map((r) => r.customization)).toEqual([{}]);
+  });
+
+  it("saving never alters content, publication or activity, and never publishes", async () => {
+    const { weddingId, slug } = await siteWedding("Boda personalizada sin publicar", { publish: false });
+    await addMember(weddingId, "collabA", "collaborator");
+    const before = await contentAndPublicationHash(weddingId);
+    const counts = async () =>
+      (
+        await sql<{ activity: number; guests: number; parties: number; rsvps: number }>(
+          `select (select count(*)::int from public.wedding_activity where wedding_id = $1) as activity,
+                  (select count(*)::int from public.guests where wedding_id = $1) as guests,
+                  (select count(*)::int from public.guest_invitations where wedding_id = $1) as parties,
+                  (select count(*)::int from public.rsvps where wedding_id = $1) as rsvps`,
+          [weddingId],
+        )
+      )[0];
+    const countsBefore = await counts();
+
+    for (const [actor, theme, document] of [
+      ["collabA", "editorial", EDITORIAL],
+      ["ownerA", "romantic", doc({ palette: { kind: "preset", key: "wine" }, hero: { variant: "simple" } })],
+      ["collabA", "romantic", {}],
+    ] as const) {
+      expect((await saveDesign(actor, weddingId, theme, document)).error).toBeNull();
+    }
+
+    expect(await contentAndPublicationHash(weddingId)).toEqual(before);
+    expect(await counts()).toEqual(countsBefore);
+    expect((await publicSite("anon", slug)).data).toEqual([]);
+    expect(await sql("select published_at from public.wedding_publications where wedding_id = $1", [weddingId])).toEqual([
+      { published_at: null },
+    ]);
+  });
+});
+
+describe("customization in the public read", () => {
+  it("no design row is {}; the saved customization is returned under the publication gate", async () => {
+    const { weddingId, slug } = await siteWedding("Boda personalizada publicada");
+    expect((await publicSite("anon", slug)).data?.map((r) => r.site_customization)).toEqual([{}]);
+
+    const document = doc({ palette: { kind: "preset", key: "charcoal" }, layout: { width: "regular" } });
+    expect((await saveDesign("ownerA", weddingId, "editorial", document)).error).toBeNull();
+    const { data } = await publicSite("anon", slug);
+    expect(data?.map((r) => [r.site_theme, r.site_customization])).toEqual([["editorial", document]]);
+
+    await as.ownerA.rpc("unpublish_wedding_site", { target_wedding_id: weddingId });
+    expect((await publicSite("anon", slug)).data).toEqual([]);
+  });
+
+  it("an unpublished wedding returns nothing, whatever its customization", async () => {
+    const { weddingId, slug } = await siteWedding("Boda personalizada privada", { publish: false });
+    expect((await saveDesign("ownerA", weddingId, "tropical", doc({ palette: { kind: "preset", key: "sunset" } }))).error).toBeNull();
+    for (const actor of ["anon", "outsider", "ownerA"] as const) {
+      expect((await publicSite(actor, slug)).data, actor).toEqual([]);
+    }
   });
 });

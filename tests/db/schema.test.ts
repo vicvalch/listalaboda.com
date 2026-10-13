@@ -181,6 +181,7 @@ describe("schema guarantees", () => {
       "private.set_updated_at",
       "private.stamp_checklist_item_completion",
       "private.validate_wedding_time_zone",
+      "private.wedding_site_customization_is_valid",
       "public.accept_membership_invite",
       "public.begin_automatic_rsvp_reminder_send",
       "public.claim_automatic_rsvp_reminders",
@@ -223,6 +224,10 @@ describe("schema guarantees", () => {
     expect(callable).toEqual([
       "private.has_wedding_role",
       "private.is_wedding_member",
+      // ADR-019 CP6: a pure validator; executable only so the CHECK on
+      // wedding_site_designs runs for members' own writes. The private
+      // schema is not exposed by the Data API.
+      "private.wedding_site_customization_is_valid",
       "public.accept_membership_invite",
       "public.create_guest_invitation",
       "public.create_wedding",
@@ -366,7 +371,10 @@ describe("schema guarantees", () => {
         name: "rotate_guest_invitation_link",
         args: "target_wedding_id uuid, target_invitation_id uuid, invitation_token_hash text, invitation_token_ciphertext text",
       },
-      { name: "save_wedding_site_design", args: "target_wedding_id uuid, new_theme wedding_site_theme" },
+      {
+        name: "save_wedding_site_design",
+        args: "target_wedding_id uuid, new_theme wedding_site_theme, new_customization jsonb",
+      },
       {
         name: "save_wedding_site_section",
         args: "target_wedding_id uuid, section_kind content_section_kind, section_title text, section_body text, section_visible boolean",

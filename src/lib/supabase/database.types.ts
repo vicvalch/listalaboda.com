@@ -485,13 +485,13 @@ isOneToOne: true
                   ]
                 },"wedding_site_designs": {
                   Row: {
-                    "created_at": string,"theme_key": Database["public"]['Enums']["wedding_site_theme"],"updated_at": string,"wedding_id": string
+                    "created_at": string,"customization": NonNullable<Json>,"theme_key": Database["public"]['Enums']["wedding_site_theme"],"updated_at": string,"wedding_id": string
                   }
                   Insert: {
-                    "created_at"?: string,"theme_key"?: Database["public"]['Enums']["wedding_site_theme"],"updated_at"?: string,"wedding_id": string
+                    "created_at"?: string,"customization"?: NonNullable<Json>,"theme_key"?: Database["public"]['Enums']["wedding_site_theme"],"updated_at"?: string,"wedding_id": string
                   }
                   Update: {
-                    "created_at"?: string,"theme_key"?: Database["public"]['Enums']["wedding_site_theme"],"updated_at"?: string,"wedding_id"?: string
+                    "created_at"?: string,"customization"?: NonNullable<Json>,"theme_key"?: Database["public"]['Enums']["wedding_site_theme"],"updated_at"?: string,"wedding_id"?: string
                   }
                   Relationships: [
                     {
@@ -621,7 +621,7 @@ isOneToOne: false
                            },
 "get_published_wedding_site":
 { Args: { "site_slug": string }; Returns: {
-              "section_body": string,"section_kind": Database["public"]['Enums']["content_section_kind"],"section_title": string,"site_theme": Database["public"]['Enums']["wedding_site_theme"],"wedding_city": string,"wedding_date": string,"wedding_name": string
+              "section_body": string,"section_kind": Database["public"]['Enums']["content_section_kind"],"section_title": string,"site_customization": Json,"site_theme": Database["public"]['Enums']["wedding_site_theme"],"wedding_city": string,"wedding_date": string,"wedding_name": string
             }[]
                            },
 "get_rsvp_confirmation_email_context":
@@ -672,7 +672,7 @@ isOneToOne: false
 { Args: { "invitation_token_ciphertext": string,"invitation_token_hash": string,"target_invitation_id": string,"target_wedding_id": string }; Returns: boolean
                            },
 "save_wedding_site_design":
-{ Args: { "new_theme": Database["public"]['Enums']["wedding_site_theme"],"target_wedding_id": string }; Returns: Database["public"]['Enums']["wedding_site_theme"]
+{ Args: { "new_customization": Json,"new_theme": Database["public"]['Enums']["wedding_site_theme"],"target_wedding_id": string }; Returns: Database["public"]['Enums']["wedding_site_theme"]
                            },
 "save_wedding_site_section":
 { Args: { "section_body": string,"section_kind": Database["public"]['Enums']["content_section_kind"],"section_title": string,"section_visible": boolean,"target_wedding_id": string }; Returns: undefined

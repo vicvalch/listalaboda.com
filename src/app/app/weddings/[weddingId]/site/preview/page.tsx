@@ -10,12 +10,14 @@ import { requireUser } from "@/lib/auth/session";
 import { requireWeddingMembership } from "@/lib/authz/wedding";
 import { getMessages, interpolate } from "@/lib/i18n";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { resolveSiteDesign } from "@/lib/wedding-site/design/resolve";
+import { sameOverrides } from "@/lib/wedding-site/design/customization";
+import { resolveWeddingSiteDesign } from "@/lib/wedding-site/design/resolve";
 import { WEDDING_SITE_THEME_KEYS } from "@/lib/wedding-site/design/themes";
-import { previewThemeKey, sitePreviewPath, toPreviewSite } from "@/lib/wedding-site/preview";
+import { previewDesign, sitePreviewPath, toPreviewSite } from "@/lib/wedding-site/preview";
 import { getWeddingSiteEditor } from "@/lib/wedding-site/service";
 import { getWeddingDetail } from "@/lib/weddings/service";
 
+import { CustomizeSection } from "../CustomizeSection";
 import { ThemeForm, ThemeSubmitButton } from "../ThemeForm";
 
 export const metadata: Metadata = {
@@ -25,14 +27,17 @@ export const metadata: Metadata = {
 };
 
 /**
- * Member-only theme preview (ADR-019, CP5): the wedding's site drawn in the
- * `?theme=` theme, exactly as the public page would draw it (the same
- * `WeddingSite` renderer and the same shaping, `toPreviewSite`), published or
- * not. The data is what the member already reads through RLS — the wedding's
- * name, date and city and its visible sections — and nothing else reaches
- * the renderer. Opening it never writes: choosing the theme is an explicit
- * "Usar este estilo" (the same save as the selector). A non-member, a
- * nonexistent wedding and a malformed id all get the same 404.
+ * Member-only design preview (ADR-019, CP5/CP6): the wedding's site drawn in
+ * the `?theme=` theme — with the customization choosing it would keep, or
+ * with unsaved customization choices (`customize=1` plus one closed value
+ * per field, `previewDesign`) — exactly as the public page would draw it
+ * (the same `WeddingSite` renderer and the same shaping, `toPreviewSite`),
+ * published or not. The data is what the member already reads through RLS —
+ * the wedding's name, date and city and its visible sections — and nothing
+ * else reaches the renderer. Opening it never writes: saving is an explicit
+ * "Usar este estilo" or "Guardar este diseño" (the same saves as the site
+ * page). A non-member, a nonexistent wedding and a malformed id all get the
+ * same 404.
  */
 export default async function WeddingSitePreviewPage({
   params,
@@ -69,9 +74,12 @@ export default async function WeddingSitePreviewPage({
     );
   }
 
-  const current = editor.design.themeKey;
-  const themeKey = previewThemeKey((await searchParams).theme, current);
+  const saved = editor.design;
+  const current = saved.themeKey;
+  const { design, custom } = previewDesign(await searchParams, saved);
+  const themeKey = design.themeKey;
   const theme = copy.themes[themeKey];
+  const isCurrent = themeKey === current && sameOverrides(design.customization, saved.customization);
   const isPublished = Boolean(editor.publication?.publishedAt);
   const site = toPreviewSite(wedding, editor.sections, editor.publication?.slug ?? "");
 
@@ -80,7 +88,7 @@ export default async function WeddingSitePreviewPage({
       <header className="space-y-3">
         <p className="text-muted text-sm font-semibold break-words">{wedding.name}</p>
         <h1 className="text-3xl font-semibold tracking-tight" data-testid="site-preview-title">
-          {interpolate(copy.preview.heading, { name: theme.name })}
+          {interpolate(custom ? copy.preview.customHeading : copy.preview.heading, { name: theme.name })}
         </h1>
         <p className="text-muted">{copy.preview.note}</p>
         <p className="text-muted text-sm">{copy.preview.membersOnly}</p>
@@ -115,11 +123,16 @@ export default async function WeddingSitePreviewPage({
       </nav>
 
       {/* The form stays mounted after a save, so its result is still announced
-          once this theme has become the current one. */}
+          once this theme has become the current one. Unsaved customization
+          choices are saved by the customization form below instead. */}
       <ThemeForm weddingId={wedding.id}>
-        {themeKey === current ? (
+        {isCurrent ? (
           <p className="font-semibold" data-testid="site-preview-current">
-            {copy.preview.current}
+            {custom ? copy.preview.currentDesign : copy.preview.current}
+          </p>
+        ) : custom ? (
+          <p className="font-semibold" data-testid="site-preview-unsaved">
+            {copy.preview.customNote}
           </p>
         ) : (
           <ThemeSubmitButton
@@ -131,6 +144,14 @@ export default async function WeddingSitePreviewPage({
         )}
       </ThemeForm>
 
+      {/* Native disclosure (no script); open while trying unsaved choices. */}
+      <details open={custom} className="rounded-2xl border border-border bg-surface p-4 sm:p-5" data-testid="site-preview-customize">
+        <summary className="cursor-pointer font-semibold">{copy.preview.customize}</summary>
+        <div className="mt-4">
+          <CustomizeSection weddingId={wedding.id} design={design} saved={saved} mode="preview" headingLevel={2} />
+        </div>
+      </details>
+
       {/* The site itself, inside a frame: a page region, not a second page.
           Wider than the app column on large screens, like the seating
           planner (page-local negative margins, never 100vw). */}
@@ -140,7 +161,7 @@ export default async function WeddingSitePreviewPage({
         data-theme={themeKey}
         className="overflow-hidden rounded-2xl border border-border bg-background text-foreground shadow-sm lg:-mx-8 xl:-mx-24"
       >
-        <WeddingSite site={site} design={resolveSiteDesign(themeKey)} element="div" />
+        <WeddingSite site={site} design={resolveWeddingSiteDesign(design)} element="div" />
       </section>
     </div>
   );

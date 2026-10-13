@@ -3,34 +3,41 @@ import Link from "next/link";
 import { cardClass, secondaryButtonClass } from "@/components/ui/styles";
 import { WeddingSite } from "@/components/wedding-site/WeddingSite";
 import { getMessages } from "@/lib/i18n";
-import { resolveSiteDesign } from "@/lib/wedding-site/design/resolve";
-import { WEDDING_SITE_THEME_KEYS, type WeddingSiteThemeKey } from "@/lib/wedding-site/design/themes";
-import { sitePreviewPath, toThumbnailSite } from "@/lib/wedding-site/preview";
+import { resolveWeddingSiteDesign, type WeddingSiteDesign } from "@/lib/wedding-site/design/resolve";
+import { WEDDING_SITE_THEME_KEYS } from "@/lib/wedding-site/design/themes";
+import { designForTheme, sitePreviewPath, toThumbnailSite } from "@/lib/wedding-site/preview";
 import type { PublishedWeddingSite } from "@/lib/wedding-site/sections";
 
+import { CustomizeSection } from "./CustomizeSection";
 import { ThemeForm, ThemeSubmitButton } from "./ThemeForm";
 
 /**
  * "Estilo del sitio" (ADR-019, CP5): one card per theme of the registry,
  * each with a real thumbnail of this wedding's site drawn by the public
  * renderer, the current choice marked in words, a link to the member-only
- * preview and "Usar este estilo". Any member may choose; choosing never
+ * preview and "Usar este estilo". Below the cards, "Personalizar" offers the
+ * chosen theme's closed options (CP6). Any member may choose; choosing never
  * publishes and never changes the content.
+ *
+ * Each thumbnail shows what choosing that theme would give: the saved
+ * customization, minus what that theme doesn't offer (`designForTheme`).
  */
 export function ThemeSection({
   weddingId,
   site,
-  current,
+  design,
   isPublished,
 }: {
   weddingId: string;
   /** The site as it would be published (`toPreviewSite`). */
   site: PublishedWeddingSite;
-  current: WeddingSiteThemeKey;
+  /** The saved design. */
+  design: WeddingSiteDesign;
   isPublished: boolean;
 }) {
   const copy = getMessages().site;
   const thumbnail = toThumbnailSite(site);
+  const current = design.themeKey;
 
   return (
     <section className={`${cardClass} space-y-5`} aria-labelledby="site-theme-title" data-testid="site-theme">
@@ -59,7 +66,7 @@ export function ThemeSection({
                   selected ? "border-accent ring-2 ring-accent" : "border-border"
                 }`}
               >
-                <ThemeThumbnail site={thumbnail} themeKey={key} />
+                <ThemeThumbnail site={thumbnail} design={designForTheme(design, key)} />
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h3 id={nameId} className="text-lg font-semibold">
                     {theme.name}
@@ -97,17 +104,21 @@ export function ThemeSection({
           })}
         </ul>
       </ThemeForm>
+
+      <div className="border-t border-border pt-5">
+        <CustomizeSection weddingId={weddingId} design={design} saved={design} mode="site" headingLevel={3} />
+      </div>
     </section>
   );
 }
 
 /**
- * A theme thumbnail: the real renderer (`WeddingSite` + `resolveSiteDesign`)
+ * A theme thumbnail: the real renderer (`WeddingSite` + the resolved design)
  * drawn four times wider (and at least four times taller) than the box and
  * scaled to a quarter, clipped to the top of the page. Purely visual: hidden from assistive technology,
  * inert (nothing focusable or clickable) and no markup of its own.
  */
-export function ThemeThumbnail({ site, themeKey }: { site: PublishedWeddingSite; themeKey: WeddingSiteThemeKey }) {
+export function ThemeThumbnail({ site, design }: { site: PublishedWeddingSite; design: WeddingSiteDesign }) {
   return (
     <div
       aria-hidden="true"
@@ -118,7 +129,7 @@ export function ThemeThumbnail({ site, themeKey }: { site: PublishedWeddingSite;
       {/* At least as tall as the box (×4 before scaling), so a short site still
           fills it with its own background: the site's root grows (flex-1). */}
       <div className="pointer-events-none absolute top-0 left-0 flex min-h-[400%] w-[400%] origin-top-left scale-25 flex-col select-none">
-        <WeddingSite site={site} design={resolveSiteDesign(themeKey)} element="div" />
+        <WeddingSite site={site} design={resolveWeddingSiteDesign(design)} element="div" />
       </div>
     </div>
   );

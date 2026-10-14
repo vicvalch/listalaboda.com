@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { containerClass, cx } from "@/components/marketing/classes";
 import { CtaBand } from "@/components/marketing/CtaBand";
+import { LifestylePhoto } from "@/components/marketing/LifestylePhoto";
 import { ProductShot } from "@/components/marketing/ProductShot";
 import { ThemeShowcase } from "@/components/marketing/ThemeShowcase";
 import { primaryButtonClass, secondaryButtonClass, textLinkClass } from "@/components/ui/styles";
@@ -9,6 +10,12 @@ import { getMessages } from "@/lib/i18n";
 import { MARKETING_LINKS } from "@/lib/marketing/links";
 import { marketingMetadata } from "@/lib/marketing/metadata";
 
+import coupleSmallPhoto from "../../../public/marketing/lifestyle/couple-golden-hour-sm.webp";
+import couplePhoto from "../../../public/marketing/lifestyle/couple-golden-hour.webp";
+import floralSmallPhoto from "../../../public/marketing/lifestyle/floral-sunset-sm.webp";
+import floralPhoto from "../../../public/marketing/lifestyle/floral-sunset.webp";
+import tablescapeSmallPhoto from "../../../public/marketing/lifestyle/tablescape-candles-sm.webp";
+import tablescapePhoto from "../../../public/marketing/lifestyle/tablescape-candles.webp";
 import budgetMobileShot from "../../../public/marketing/budget-mobile.webp";
 import budgetShot from "../../../public/marketing/budget.webp";
 import guestsMobileShot from "../../../public/marketing/guests-mobile.webp";
@@ -35,6 +42,10 @@ const copy = marketing.home;
  * (guests → tables, money → the day), the couple's site as the bridge to
  * /parejas, the three steps and the call to action. The detail lives on
  * /planners and /parejas.
+ *
+ * MKT-5 adds the wedding itself, around the product and never instead of it:
+ * candlelight in the hero's wash, the couple beside their site, and flowers
+ * at sunset in the closing band. No photographs in the work sections.
  */
 export const metadata: Metadata = marketingMetadata(copy.metadata);
 
@@ -95,11 +106,22 @@ export default function HomePage() {
             </div>
           </div>
           <div className="relative lg:col-span-7 lg:-mr-40 xl:-mr-64">
-            {/* The wash runs past the page edge (the wrapper clips it): decoration only. */}
+            {/* The wash runs past the page edge (the wrapper clips it): decoration only.
+                Its foot is candlelight, under the list and beside the card (from small tablets up). */}
             <div
               aria-hidden="true"
-              className="bg-accent-soft absolute top-14 -right-4 -bottom-8 -left-3 rounded-l-[2rem] sm:-right-6 sm:-left-6 lg:top-16 lg:-right-96 lg:-bottom-12 lg:-left-8"
-            />
+              className="bg-accent-soft absolute top-14 -right-4 -bottom-8 -left-3 overflow-hidden rounded-l-[2rem] sm:-right-6 sm:-left-6 lg:top-16 lg:-right-96 lg:-bottom-40 lg:-left-8"
+            >
+              <LifestylePhoto
+                image={tablescapePhoto}
+                small={tablescapeSmallPhoto}
+                alt=""
+                sizes="100vw"
+                position="object-[center_42%]"
+                drift
+                className="absolute inset-x-0 bottom-0 hidden h-[34%] [mask-image:linear-gradient(to_bottom,transparent,#000_55%)] sm:block lg:h-[40%]"
+              />
+            </div>
             <ProductShot
               image={myWeddingsShot}
               mobile={myWeddingsMobileShot}
@@ -213,16 +235,15 @@ export default function HomePage() {
       </section>
 
       {/* 5. The couple's side: their site, the bridge to /parejas. */}
-      <section id="sitios-de-boda" aria-labelledby="sitios-de-boda-titulo" className="scroll-mt-20 border-t border-border">
+      <section id="sitios-de-boda" aria-labelledby="sitios-de-boda-titulo" className="scroll-mt-20 overflow-x-clip border-t border-border">
         <div className={cx(containerClass, spacingClass)}>
-          <div className="grid gap-5 lg:grid-cols-12 lg:items-end lg:gap-10">
+          {/* The couple enters from the right edge, beside the words about their site. */}
+          <div className="grid gap-10 lg:grid-cols-12 lg:items-center lg:gap-10">
             <div className="space-y-5 lg:col-span-6">
               <p className={eyebrowClass}>{copy.weddingSites.eyebrow}</p>
               <h2 id="sitios-de-boda-titulo" className={h2Class}>
                 {copy.weddingSites.title}
               </h2>
-            </div>
-            <div className="space-y-4 lg:col-span-6">
               <p className={bodyClass}>{copy.weddingSites.body}</p>
               <p>
                 <a href={MARKETING_LINKS.COUPLES} className={textLinkClass}>
@@ -230,6 +251,14 @@ export default function HomePage() {
                 </a>
               </p>
             </div>
+            <LifestylePhoto
+              image={couplePhoto}
+              small={coupleSmallPhoto}
+              alt={copy.weddingSites.photoAlt}
+              sizes="(min-width: 1024px) 62vw, 100vw"
+              position="object-[22%_center]"
+              className="mkt-reveal relative -mr-4 aspect-[16/10] rounded-l-[2.5rem] sm:-mr-6 lg:col-span-6 lg:-mr-40 lg:aspect-[4/3] lg:rounded-l-[5rem] xl:-mr-64"
+            />
           </div>
           <div className="mt-10 sm:mt-14">
             <ThemeShowcase label={copy.weddingSites.showcaseLabel} />
@@ -260,7 +289,22 @@ export default function HomePage() {
       </section>
 
       {/* 7. Closing call to action. */}
-      <CtaBand id="empezar" title={copy.closing.title} note={copy.closing.note}>
+      <CtaBand
+        id="empezar"
+        title={copy.closing.title}
+        note={copy.closing.note}
+        photo={
+          <LifestylePhoto
+            image={floralPhoto}
+            small={floralSmallPhoto}
+            alt=""
+            sizes="(min-width: 1024px) 46vw, 100vw"
+            position="object-[70%_center]"
+            drift
+            className="relative h-full w-full"
+          />
+        }
+      >
         <a href={MARKETING_LINKS.DEMO} className={primaryButtonClass}>
           {marketing.cta.demo}
         </a>

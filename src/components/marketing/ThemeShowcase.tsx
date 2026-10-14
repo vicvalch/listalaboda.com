@@ -32,7 +32,7 @@ export function ThemeShowcase({ label, staggered = false }: { label: string; sta
             data-testid="theme-showcase-item"
             data-theme={key}
           >
-            <SiteRender theme={key} className="aspect-[3/4] rounded-lg border border-border" />
+            <SiteRender theme={key} className="mkt-lift aspect-[3/4] rounded-lg border border-border" />
             <h3 className="mt-4 font-serif text-xl">{themes[key].name}</h3>
             <p className="text-muted mt-1 text-sm leading-6">{themes[key].description}</p>
           </li>

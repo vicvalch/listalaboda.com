@@ -57,7 +57,7 @@ test.describe("marketing homepage", () => {
     await expect(showcase.locator('[aria-hidden="true"][inert]')).toHaveCount(5);
 
     // Every product screenshot has Spanish alt text.
-    const alts = await page.locator("main img").evaluateAll((images) => images.map((img) => img.getAttribute("alt") ?? ""));
+    const alts = await page.locator("main img:not([data-lifestyle])").evaluateAll((images) => images.map((img) => img.getAttribute("alt") ?? ""));
     expect(alts.length).toBeGreaterThanOrEqual(6);
     for (const alt of alts) expect(alt.length).toBeGreaterThan(20);
   });
@@ -125,5 +125,62 @@ test.describe("marketing homepage", () => {
     await expect(page.getByRole("banner").getByRole("link", { name: copy.nav.login })).toBeVisible();
     await expect(page.getByTestId("theme-showcase-item")).toHaveCount(5);
     await context.close();
+  });
+});
+
+// MKT-5: wedding photography and restrained motion, CSS only.
+test.describe("marketing photography and motion", () => {
+  const PAGES = ["/", "/planners", "/parejas"] as const;
+
+  test("every photo used loads, and the invented-interface photo is never served", async ({ page, request }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    for (const path of PAGES) {
+      await page.goto(path);
+      await loadEveryImage(page);
+      const sources = await page
+        .locator("main img[data-lifestyle]")
+        .evaluateAll((images) => images.flatMap((img) => (img.getAttribute("srcset") ?? "").split(",").map((s) => s.trim().split(" ")[0])));
+      expect(sources.length, path).toBeGreaterThan(0);
+      for (const src of new Set(sources)) expect((await request.get(src)).status(), `${path} ${src}`).toBe(200);
+      expect(await page.content()).not.toContain("product-context");
+    }
+    expect((await request.get("/marketing/lifestyle/product-context.png")).status()).toBe(404);
+  });
+
+  test("decorative photos stay out of the accessibility tree", async ({ page }) => {
+    for (const path of PAGES) {
+      await page.goto(path);
+      const exposed = await page
+        .locator('main img[data-lifestyle][alt=""]')
+        .evaluateAll((images) => images.filter((img) => !img.closest('[aria-hidden="true"]')).length);
+      expect(exposed, path).toBe(0);
+    }
+  });
+
+  test("prefers-reduced-motion removes every drift, float, reveal and hover movement", async ({ browser }) => {
+    const motion = async (reducedMotion: "reduce" | "no-preference") => {
+      const context = await browser.newContext({ reducedMotion, viewport: { width: 1280, height: 900 } });
+      const page = await context.newPage();
+      await page.goto("/parejas");
+      const result = await page.evaluate(() => {
+        const style = (selector: string) => getComputedStyle(document.querySelector(selector)!);
+        return {
+          drift: style(".mkt-drift img").animationName,
+          float: style(".mkt-float").animationName,
+          zoom: style(".mkt-zoom img").transitionProperty,
+          button: style("main a.inline-flex").transitionProperty,
+        };
+      });
+      await context.close();
+      return result;
+    };
+    const moving = await motion("no-preference");
+    expect(moving.drift).toBe("mkt-drift");
+    expect(moving.float).toBe("mkt-float");
+    expect(moving.zoom).toContain("scale");
+    expect(moving.button).toContain("translate");
+
+    const still = await motion("reduce");
+    expect(still).toEqual({ drift: "none", float: "none", zoom: expect.not.stringContaining("scale"), button: expect.not.stringContaining("translate") });
   });
 });

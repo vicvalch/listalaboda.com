@@ -13,8 +13,10 @@ import { WEDDING_SITE_THEME_KEYS } from "@/lib/wedding-site/design/themes";
  * Each render is decorative (`aria-hidden`, `inert`); the theme's name and
  * description are the real text beside it. Phones scroll the row sideways
  * (snap points, a focusable labelled region); wider screens show a grid.
+ * `staggered` drops every other theme a little on wide screens, for a page
+ * that ends on the themes as a composition rather than a row.
  */
-export function ThemeShowcase({ label }: { label: string }) {
+export function ThemeShowcase({ label, staggered = false }: { label: string; staggered?: boolean }) {
   const themes = getMessages().site.themes;
   return (
     <div
@@ -26,7 +28,12 @@ export function ThemeShowcase({ label }: { label: string }) {
     >
       <ul className="flex snap-x snap-mandatory gap-4 sm:grid sm:grid-cols-3 sm:gap-6 lg:grid-cols-5">
         {WEDDING_SITE_THEME_KEYS.map((key) => (
-          <li key={key} className="w-[72%] shrink-0 snap-start sm:w-auto" data-testid="theme-showcase-item" data-theme={key}>
+          <li
+            key={key}
+            className={`w-[72%] shrink-0 snap-start sm:w-auto${staggered ? " lg:even:mt-16" : ""}`}
+            data-testid="theme-showcase-item"
+            data-theme={key}
+          >
             <div
               aria-hidden="true"
               inert

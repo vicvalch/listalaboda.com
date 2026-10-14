@@ -16,6 +16,7 @@ export const es = {
     nav: {
       label: "Navegación principal",
       menu: "Menú",
+      planners: "Para planners",
       howItWorks: "Cómo funciona",
       weddingSites: "Sitios de boda",
       login: "Iniciar sesión",
@@ -52,6 +53,7 @@ export const es = {
         eyebrow: "Todas tus bodas",
         title: "Lo que necesita tu atención, primero.",
         body: "Al entrar ves todas tus bodas y, arriba, lo que necesita acción: cuotas vencidas, pendientes atrasados o una mesa que hay que revisar. Cada aviso te lleva directo al lugar donde se resuelve.",
+        more: "Conoce listalaboda.com para planners",
         shotAlt:
           "Tarjeta de una boda de ejemplo en «Mis bodas», con su fecha, los días que faltan, dos avisos atrasados y el avance de pendientes, invitados y proveedores.",
       },
@@ -107,6 +109,119 @@ export const es = {
         title: "Prueba listalaboda.com con una boda real.",
         body: "Te mostramos cómo se vería una de tus bodas, de principio a fin.",
         note: "Programa piloto con cupos limitados.",
+      },
+    },
+    /** MKT-2: `/planners`, the deeper page for wedding planners. Short copy: the real screens carry the story. */
+    planners: {
+      metadata: {
+        title: "Software para wedding planners · listalaboda.com",
+        description:
+          "Gestiona varias bodas, invitados, RSVP, mesas, proveedores, presupuesto, pagos, cronograma y sitios web desde un solo lugar.",
+      },
+      hero: {
+        eyebrow: "Para wedding planners",
+        title: "Tu centro de control para cada boda que manejas.",
+        body: "Coordina invitados, proveedores, pagos, mesas, cronograma y el sitio de cada pareja desde un solo lugar.",
+        support: "Pensado para planners que llevan varias bodas a la vez.",
+        cardAlt:
+          "La tarjeta de una de esas bodas, «Laura y Martín»: su fecha, su ciudad, los días que faltan, sus dos temas atrasados y el avance de pendientes, invitados y proveedores.",
+        shotAlt:
+          "Pantalla «Mis bodas» de listalaboda.com con lo que necesita atención en varias bodas de ejemplo: cuotas vencidas, pendientes atrasados, cuotas próximas y personas sentadas que no asistirán.",
+      },
+      problem: {
+        eyebrow: "El día a día de hoy",
+        title: "Menos herramientas sueltas. Más claridad.",
+        toolsLabel: "Dónde suele vivir hoy la información de una boda",
+        tools: ["WhatsApp", "hojas de cálculo", "notas", "calendarios", "recordatorios", "memoria"],
+        body: "No falta esfuerzo: falta un lugar. listalaboda.com le da a cada boda uno solo.",
+      },
+      guestsSeating: {
+        eyebrow: "Invitados, RSVP y mesas",
+        title: "De la confirmación a la mesa.",
+        body: "Cada grupo confirma con su propio enlace, persona por persona. En el plano mueves a cada invitado, y si alguien con mesa avisa que no asistirá, queda señalado.",
+        note: "Sin formularios abiertos: solo quien tiene el enlace de su grupo puede confirmar. El plano visual se usa en computadora.",
+        guestsAlt:
+          "Un grupo de invitados de ejemplo, «Amigos de la U», con su enlace activo y la respuesta de cada persona: dos asistirán y una no ha respondido.",
+        seatingAlt:
+          "Plano visual de mesas de la misma boda de ejemplo: invitados por sentar a un lado, entre ellos quien no ha respondido, mesas redondas y rectangulares con sus invitados, y una persona sentada que no asistirá señalada en su mesa.",
+      },
+      money: {
+        eyebrow: "Proveedores, presupuesto y pagos",
+        title: "Proveedores, presupuesto y pagos conectados.",
+        body: "Lo contratado, sus cuotas y lo pagado, con lo vencido y lo próximo a la vista. Colones y dólares, siempre por separado.",
+        note: "listalaboda.com registra los pagos; no los procesa.",
+        budgetAlt:
+          "Presupuesto de una boda de ejemplo en colones: presupuesto total, contratado, pagado, pendiente, sin programar y disponible.",
+        paymentsAlt:
+          "Pagos de un proveedor de ejemplo, un servicio de catering: lo contratado, lo pagado y lo pendiente, y sus cuotas con su estado.",
+      },
+      timeline: {
+        eyebrow: "Cronograma",
+        title: "Un cronograma para saber qué pasa y cuándo.",
+        body: "Hora, lugar, responsable y proveedor de cada actividad del día. Listo para imprimir.",
+        label: "Cronograma impreso de una boda de ejemplo, en tres tramos del día",
+        shots: [
+          "De 12:00 a 15:45: preparación de la novia, montaje de la decoración y ceremonia.",
+          "De 15:45 a 19:00: fotos familiares, cóctel de bienvenida, entrada de los novios y cena.",
+          "De 19:30 a la 1:00: primer baile, fiesta y, después de medianoche, cierre y desmontaje.",
+        ],
+      },
+      collaboration: {
+        eyebrow: "Colaboración",
+        title: "Trabaja con la pareja y tu equipo en la misma boda.",
+        points: [
+          { title: "Cada persona con su cuenta", body: "Todos trabajan sobre la misma información." },
+          { title: "Cada boda, aparte", body: "Quien colabora en una boda solo ve esa boda." },
+          { title: "Publicar es de quien organiza", body: "El sitio web sale al público solo cuando esa persona lo publica." },
+        ],
+      },
+      sites: {
+        eyebrow: "Sitio web de la boda",
+        title: "Un sitio web para cada pareja.",
+        body: "Cinco estilos cuidados, vista previa antes de guardar y nada público hasta que se publica.",
+        showcaseLabel: "Los cinco estilos del sitio web de la boda",
+      },
+      pilot: {
+        eyebrow: "Programa piloto",
+        title: "Prueba listalaboda.com en una operación real.",
+        body: "Estamos abriendo un programa piloto con wedding planners para entender qué flujos de trabajo aportan más en el día a día.",
+        steps: ["Usas el producto actual con tus bodas.", "Conversamos sobre lo que te sirve y lo que no."],
+        note: "Programa piloto con cupos limitados.",
+      },
+      faq: {
+        title: "Preguntas frecuentes",
+        items: [
+          {
+            question: "¿Para quién está pensado listalaboda.com?",
+            answer:
+              "Principalmente para wedding planners que llevan varias bodas a la vez. Las parejas que organizan su propia boda también pueden usarlo.",
+          },
+          {
+            question: "¿Puedo manejar varias bodas?",
+            answer:
+              "Sí. «Mis bodas» reúne todas las bodas en las que participas, con lo que necesita atención arriba, y desde cualquier boda puedes pasar a otra.",
+          },
+          {
+            question: "¿La pareja puede colaborar conmigo?",
+            answer:
+              "Sí. La invitas a su boda y entra con su propia cuenta: trabaja en esa boda, sin ver las demás que manejas.",
+          },
+          {
+            question: "¿Qué incluye el pilot?",
+            answer:
+              "Acceso al producto tal como está hoy, para usarlo con tus bodas, y conversaciones con nosotros para entender qué te sirve y qué no.",
+          },
+          {
+            question: "¿Cómo se protegen los datos de cada boda?",
+            answer:
+              "Para entrar necesitas una cuenta, y cada boda solo la ven las personas que forman parte de ella. Los invitados no tienen cuenta: cada grupo confirma con su enlace, que abre solo su invitación. El sitio web de la boda muestra únicamente lo que se publica.",
+          },
+          {
+            question: "¿Cuánto cuesta?",
+            answer:
+              "El precio comercial todavía no está definido. Durante el pilot estamos validando qué flujos de trabajo generan suficiente valor para planners y parejas.",
+          },
+        ],
       },
     },
     footer: {

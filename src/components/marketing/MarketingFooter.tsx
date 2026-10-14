@@ -12,6 +12,7 @@ export function MarketingFooter() {
     {
       title: marketing.footer.product,
       links: [
+        { href: MARKETING_LINKS.PLANNERS, label: marketing.nav.planners },
         { href: MARKETING_LINKS.HOW_IT_WORKS, label: marketing.nav.howItWorks },
         { href: MARKETING_LINKS.WEDDING_SITES, label: marketing.nav.weddingSites },
       ],

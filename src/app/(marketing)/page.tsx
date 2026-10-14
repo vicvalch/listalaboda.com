@@ -98,6 +98,11 @@ export default function HomePage() {
             title={copy.attention.title}
             body={copy.attention.body}
             layout="text-first"
+            actions={
+              <a href={MARKETING_LINKS.PLANNERS} className={textLinkClass}>
+                {copy.attention.more} <span aria-hidden="true">→</span>
+              </a>
+            }
             visual={<ProductShot image={weddingCardShot} mobile={weddingCardMobileShot} alt={copy.attention.shotAlt} />}
           />
         </div>

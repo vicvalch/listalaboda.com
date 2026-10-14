@@ -23,4 +23,6 @@ export const MARKETING_LINKS = {
   /** In-page anchors of the homepage, valid from any marketing page. */
   HOW_IT_WORKS: "/#como-funciona",
   WEDDING_SITES: "/#sitios-de-boda",
+  /** MKT-2: the page for wedding planners. */
+  PLANNERS: "/planners",
 } as const;

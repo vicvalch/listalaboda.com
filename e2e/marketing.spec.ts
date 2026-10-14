@@ -1,47 +1,15 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 import { MARKETING_LINKS } from "../src/lib/marketing/links";
 import { WEDDING_SITE_THEME_KEYS } from "../src/lib/wedding-site/design/themes";
 import { es } from "./support/flows";
+import { loadEveryImage, measure } from "./support/marketing";
 
 // Marketing Landing V1 (MKT-1): the planner-first homepage. Static, public,
 // not indexed yet; every call to action comes from the central links module.
 
 const copy = es.marketing;
 const WIDTHS = [360, 390, 768, 1280] as const;
-
-/** Overflow and WCAG AA contrast of every element holding text, against its painted background. */
-async function measure(page: Page) {
-  return page.evaluate(() => {
-    const root = document.documentElement;
-    const rgb = (value: string) => (value.match(/[\d.]+/g) ?? []).map(Number);
-    const luminance = ([r, g, b]: number[]) =>
-      [r, g, b]
-        .map((v) => v / 255)
-        .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
-        .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
-    const backgroundOf = (element: Element | null): number[] => {
-      for (let node = element; node; node = node.parentElement) {
-        const color = rgb(getComputedStyle(node).backgroundColor);
-        if (color.length === 3 || (color.length === 4 && color[3] > 0)) return color;
-      }
-      return rgb(getComputedStyle(document.body).backgroundColor);
-    };
-    const visible = (element: Element) => {
-      const box = element.getBoundingClientRect();
-      return box.width > 0 && box.height > 0 && !element.closest('[aria-hidden="true"], .sr-only');
-    };
-    const lowContrast = [...document.querySelectorAll("body *")]
-      .filter((element) => visible(element) && [...element.childNodes].some((n) => n.nodeType === 3 && n.textContent?.trim()))
-      .map((element) => {
-        const [a, b] = [luminance(rgb(getComputedStyle(element).color)), luminance(backgroundOf(element))];
-        return { text: element.textContent?.trim().slice(0, 40), ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) };
-      })
-      .filter(({ ratio }) => ratio < 4.5)
-      .map(({ text, ratio }) => `${text} ${ratio.toFixed(2)}`);
-    return { scrolls: root.scrollWidth > root.clientWidth, lowContrast };
-  });
-}
 
 test.describe("marketing homepage", () => {
   test("one h1, landmarks, noindex, centralized calls to action, the five themes, no dead links", async ({ page }) => {
@@ -102,7 +70,7 @@ test.describe("marketing homepage", () => {
 
     await page.goto("/");
     await page.keyboard.press("Tab"); // skip link
-    for (const name of [copy.brand, copy.nav.howItWorks, copy.nav.weddingSites, copy.nav.login, copy.cta.demo]) {
+    for (const name of [copy.brand, copy.nav.planners, copy.nav.howItWorks, copy.nav.weddingSites, copy.nav.login, copy.cta.demo]) {
       await page.keyboard.press("Tab");
       const focused = page.getByRole("banner").getByRole("link", { name, exact: true });
       await expect(focused).toBeFocused();
@@ -134,18 +102,7 @@ test.describe("marketing homepage", () => {
       for (const width of WIDTHS) {
         await page.setViewportSize({ width, height: 900 });
         await page.goto("/");
-        // Scroll through, as a reader would, so lazy screenshots load; all of them must.
-        await page.evaluate(async () => {
-          for (let y = 0; y < document.documentElement.scrollHeight; y += 400) {
-            window.scrollTo(0, y);
-            await new Promise((done) => setTimeout(done, 40));
-          }
-          window.scrollTo(0, 0);
-        });
-        await page.waitForLoadState("networkidle");
-        await expect
-          .poll(() => page.locator("main img").evaluateAll((images) => images.every((img) => (img as HTMLImageElement).complete && (img as HTMLImageElement).naturalWidth > 0)))
-          .toBe(true);
+        await loadEveryImage(page);
         const result = await measure(page);
         expect(result.scrolls, `${colorScheme} ${width}px: no horizontal scroll`).toBe(false);
         expect(result.lowContrast, `${colorScheme} ${width}px: WCAG AA text`).toEqual([]);

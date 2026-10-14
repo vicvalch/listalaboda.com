@@ -62,7 +62,9 @@ type Crop =
   /** The whole visual seating planner: the rail, the board and the details panel. */
   | Readonly<{ kind: "planner" }>
   /** A close-up of some tables of the planner (by name), for phones. */
-  | Readonly<{ kind: "tables"; names: readonly string[] }>;
+  | Readonly<{ kind: "tables"; names: readonly string[] }>
+  /** A run of consecutive Cronograma entries, `from` (inclusive) to `to` (exclusive), with what lies between them. */
+  | Readonly<{ kind: "entries"; from: number; to: number }>;
 
 async function shoot(page: Page, crop: Crop): Promise<Buffer> {
   const box = async (selector: string) => {
@@ -78,6 +80,13 @@ async function shoot(page: Page, crop: Crop): Promise<Buffer> {
     const [main, start] = [await box("main"), await box(crop.selector)];
     const content = await page.evaluate(() => document.documentElement.scrollHeight);
     clip = { x: main.x, y: start.y - 8, width: main.width, height: Math.min(crop.height, content - start.y + 8) };
+  } else if (crop.kind === "entries") {
+    const entries = page.locator('[data-testid="timeline-entry"]');
+    const [first, last] = [await entries.nth(crop.from).boundingBox(), await entries.nth(crop.to - 1).boundingBox()];
+    if (!first || !last) throw new Error(`timeline entries ${crop.from}–${crop.to} not found`);
+    const margin = 12;
+    const main = await box("main");
+    clip = { x: main.x, y: first.y - margin, width: main.width, height: last.y + last.height - first.y + 2 * margin };
   } else if (crop.kind === "tables") {
     const tables = page.locator(crop.names.map((name) => `[data-testid="planner-table"][data-table-name="${name}"]`).join(", "));
     const boxes = await tables.evaluateAll((elements) =>
@@ -119,7 +128,17 @@ test("captures the marketing product screenshots from the fictional fixture", as
 
   // A party with a mix of answers (two attending, one pending).
   const party = '[id^="party-"]:has(h3:text-is("Amigos de la U"))';
-  const shots: ReadonlyArray<{ file: string; path: string; width: number; crop: Crop }> = [
+
+  // Twice the CSS pixels, so the shots stay sharp at their displayed size.
+  const context = await browser.newContext({ deviceScaleFactor: 2, colorScheme: "light" });
+  const page = await context.newPage();
+  await logIn(page, email);
+  // The booked caterer with a paid deposit and two upcoming installments (MKT-2).
+  await page.goto(`${wedding}/vendors`);
+  const caterer = await page.getByRole("link", { name: "Sabores del Valle" }).first().getAttribute("href");
+  if (!caterer) throw new Error("the fixture caterer is missing");
+
+  const shots: ReadonlyArray<{ file: string; path: string; width: number; crop: Crop; media?: "print" }> = [
     // The hero: the page title and what needs attention across weddings.
     { file: "mis-bodas.webp", path: "/app?all=1", width: 1280, crop: { kind: "element", selector: "main", maxHeight: 600 } },
     { file: "mis-bodas-mobile.webp", path: "/app?all=1", width: 390, crop: { kind: "element", selector: "main", maxHeight: 860 } },
@@ -134,13 +153,17 @@ test("captures the marketing product screenshots from the fictional fixture", as
     { file: "budget-mobile.webp", path: `${wedding}/budget`, width: 390, crop: { kind: "from", selector: '[data-testid="budget-currency-CRC"]', height: 820 } },
     { file: "timeline.webp", path: `${wedding}/timeline`, width: 1280, crop: { kind: "from", selector: '[data-testid="timeline-overview"]', height: 900 } },
     { file: "timeline-mobile.webp", path: `${wedding}/timeline`, width: 390, crop: { kind: "from", selector: '[data-testid="timeline-overview"]', height: 820 } },
+    // A vendor's payments: what was agreed, paid and still due, installment by installment.
+    { file: "vendor-payments.webp", path: caterer, width: 1280, crop: { kind: "element", selector: '[data-testid="vendor-payments"]', maxHeight: 1100 } },
+    { file: "vendor-payments-mobile.webp", path: caterer, width: 390, crop: { kind: "element", selector: '[data-testid="vendor-payments"]', maxHeight: 1300 } },
+    // The Cronograma as the product prints it (its own print styles: no edit buttons), in three runs of the day.
+    { file: "timeline-print-1.webp", path: `${wedding}/timeline`, width: 390, media: "print", crop: { kind: "entries", from: 0, to: 3 } },
+    { file: "timeline-print-2.webp", path: `${wedding}/timeline`, width: 390, media: "print", crop: { kind: "entries", from: 3, to: 6 } },
+    { file: "timeline-print-3.webp", path: `${wedding}/timeline`, width: 390, media: "print", crop: { kind: "entries", from: 6, to: 9 } },
   ];
 
-  // Twice the CSS pixels, so the shots stay sharp at their displayed size.
-  const context = await browser.newContext({ deviceScaleFactor: 2, colorScheme: "light" });
-  const page = await context.newPage();
-  await logIn(page, email);
   for (const shot of shots) {
+    await page.emulateMedia({ media: shot.media ?? "screen" });
     await page.setViewportSize({ width: shot.width, height: 900 });
     await page.goto(shot.path);
     await page.waitForLoadState("networkidle");

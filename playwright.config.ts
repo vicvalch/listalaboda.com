@@ -58,6 +58,8 @@ function webhookEnv() {
 
 export default defineConfig({
   testDir: "./e2e",
+  // Marketing screenshots are captured on demand (`npm run marketing:capture`).
+  testIgnore: ["**/marketing/capture.spec.ts"],
   globalSetup: "./e2e/global-setup.ts",
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

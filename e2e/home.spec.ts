@@ -1,12 +1,14 @@
 import { expect, test } from "@playwright/test";
 
-test("homepage renders the Spanish foundation shell", async ({ page }) => {
+import { es } from "./support/flows";
+
+test("homepage renders the planner-first marketing page in Spanish", async ({ page }) => {
   const response = await page.goto("/");
   expect(response?.status()).toBe(200);
 
   await expect(page.locator("html")).toHaveAttribute("lang", "es");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("listalaboda.com");
-  await expect(page.getByText("Organiza tu boda, un pendiente a la vez.")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(es.marketing.home.hero.title);
+  await expect(page.getByText(es.marketing.home.hero.body)).toBeVisible();
 });
 
 test("responses carry the baseline security headers", async ({ request }) => {

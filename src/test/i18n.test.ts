@@ -14,10 +14,11 @@ describe("i18n foundation", () => {
     expect(DEFAULT_LOCALE).toBe("es");
   });
 
-  it("serves the homepage copy from the Spanish catalog", () => {
-    const { home } = getMessages();
-    expect(home.brand).toBe("listalaboda.com");
-    expect(home.tagline).toBe("Organiza tu boda, un pendiente a la vez.");
+  it("serves the marketing homepage copy from the Spanish catalog", () => {
+    const { marketing } = getMessages();
+    expect(marketing.brand).toBe("listalaboda.com");
+    expect(marketing.home.hero.title).toBe("Una boda, todo bajo control.");
+    expect(marketing.home.metadata.title).toBe("listalaboda.com · Gestión de bodas para wedding planners");
   });
 
   it("contains only non-empty strings", () => {

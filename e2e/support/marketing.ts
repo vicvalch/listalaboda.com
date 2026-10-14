@@ -61,4 +61,3 @@ export async function measure(page: Page) {
     return { scrolls: root.scrollWidth > root.clientWidth, lowContrast };
   });
 }
-

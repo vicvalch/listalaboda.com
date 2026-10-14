@@ -33,7 +33,10 @@ test.describe("marketing homepage", () => {
     await expect(main.getByRole("link", { name: copy.cta.demo }).first()).toHaveAttribute("href", MARKETING_LINKS.DEMO);
     await expect(main.getByRole("link", { name: copy.cta.howItWorks })).toHaveAttribute("href", MARKETING_LINKS.HOW_IT_WORKS);
     // MKT-3: the couples' question leads to their own page.
-    await expect(main.getByRole("link", { name: copy.home.hero.couplesLink })).toHaveAttribute("href", MARKETING_LINKS.COUPLES);
+    await expect(main.getByRole("link", { name: copy.home.hero.couplesLink, exact: true })).toHaveAttribute("href", MARKETING_LINKS.COUPLES);
+    // MKT-4A: the couple's site is the bridge to their page; the money section leads planners to theirs.
+    await expect(main.getByRole("link", { name: copy.home.weddingSites.couplesLink })).toHaveAttribute("href", MARKETING_LINKS.COUPLES);
+    await expect(main.getByRole("link", { name: copy.home.moneyDay.more })).toHaveAttribute("href", MARKETING_LINKS.PLANNERS);
     await expect(main.getByRole("link", { name: copy.cta.pilot })).toHaveAttribute("href", MARKETING_LINKS.PILOT);
     await expect(page.getByRole("banner").getByRole("link", { name: copy.nav.login })).toHaveAttribute("href", MARKETING_LINKS.LOGIN);
 

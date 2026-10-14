@@ -704,7 +704,8 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 ## Marketing pages (Marketing Landing V1)
 
 - The marketing pages live in `src/app/(marketing)/` (shared layout: skip link, `MarketingHeader`, `<main id="contenido">`,
-  `MarketingFooter`); `/` is the planner-first homepage (MKT-1). They are static: no cookies, session, Supabase or
+  `MarketingFooter`): `/` is the planner-first homepage (MKT-1), `/planners` the B2B page (MKT-2), `/parejas` the
+  couples page (MKT-3). They are static: no cookies, session, Supabase or
   database reads, and no client components (the phone menu is a native `<details>`). `/app`, auth, `/rsvp`, `/boda` and
   `src/proxy.ts` are untouched by marketing work.
 - Copy is in `es.marketing` (tú, brand `listalaboda.com`, no claims, metrics, logos or testimonials). Every call to action
@@ -718,8 +719,10 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - The theme showcase draws the REAL `WeddingSite` with `resolveSiteDesign` from fictional content in
   `@/lib/marketing/showcase` (decorative, `aria-hidden` + `inert`, names as real text); never a real wedding or the
   public read.
-- Marketing pages are `noindex, nofollow` with no canonical until `listalaboda.com` is owned and connected; robots.txt
-  and the sitemap come with MKT-3.
+- Marketing pages are `noindex, nofollow` (`marketingMetadata`: text-only Open Graph, no canonical, `metadataBase`, OG
+  image or URL) until `listalaboda.com` is owned and connected. `robots.ts` (MKT-3) disallows `/app`, `/auth`, `/invite`,
+  `/rsvp`, `/api` and leaves the marketing pages and `/boda` crawlable so their `noindex` is read; no `Sitemap:`/`Host:`.
+  The sitemap and an OG image are deferred until the domain is connected.
 
 ## Commands
 
@@ -803,6 +806,6 @@ unsaved choices (no hex colors, fonts, drafts, reordering, presets or images). C
 AA-checked `#rrggbb` roles instead of a preset, light mode only, checked by the parser, the CHECK validator and at
 render, with live contrast feedback and preview (no fonts, drafts, reordering, presets or images).
 Marketing Landing V1 (separate from LB-24D): MKT-1 adds the shared marketing shell and the planner-first homepage at `/`
-(real fictional-fixture screenshots, the real theme renderer, mailto calls to action, noindex); MKT-2 `/planners` and
-MKT-3 `/parejas` with robots/sitemap follow.
+(real fictional-fixture screenshots, the real theme renderer, mailto calls to action, noindex); MKT-2 adds `/planners`
+and MKT-3 `/parejas` plus `robots.txt` (sitemap deferred until the domain is connected).
 Don't implement ahead of the current prompt.

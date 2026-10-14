@@ -20,7 +20,6 @@ vi.mock("next/headers", () => {
 const { FaqList } = await import("@/components/marketing/FaqList");
 const { MarketingFooter } = await import("@/components/marketing/MarketingFooter");
 const { MarketingHeader } = await import("@/components/marketing/MarketingHeader");
-const { Section } = await import("@/components/marketing/Section");
 const { ThemeShowcase } = await import("@/components/marketing/ThemeShowcase");
 const { getMessages } = await import("@/lib/i18n");
 const { MARKETING_CONTACT_EMAIL, MARKETING_LINKS } = await import("@/lib/marketing/links");
@@ -29,7 +28,7 @@ const { WEDDING_SITE_THEME_KEYS } = await import("@/lib/wedding-site/design/them
 // Importing the page itself proves its whole module graph stays clear of the mocks above.
 const { default: PlannersPage, metadata: plannersMetadata } = await import("@/app/(marketing)/planners/page");
 const { default: CouplesPage, metadata: couplesMetadata } = await import("@/app/(marketing)/parejas/page");
-const { metadata: homeMetadata } = await import("@/app/(marketing)/page");
+const { default: HomePage, metadata: homeMetadata } = await import("@/app/(marketing)/page");
 const { default: robots } = await import("@/app/robots");
 
 const render = (element: ReactElement) => renderToStaticMarkup(element);
@@ -101,32 +100,6 @@ describe("marketing shell", () => {
   });
 });
 
-describe("Section", () => {
-  it("renders its heading at the requested level, labelled by it, with actions after the text", () => {
-    const html = render(
-      createElement(Section, {
-        id: "demo",
-        eyebrow: "Eyebrow",
-        title: "Título",
-        headingLevel: 1,
-        body: ["Uno", "Dos"],
-        actions: createElement("a", { href: "#x" }, "Acción"),
-      }),
-    );
-    expect(html).toContain('<section id="demo" aria-labelledby="demo-titulo"');
-    expect(html).toMatch(/<h1 id="demo-titulo"[^>]*>Título<\/h1>/);
-    expect(html.indexOf("Dos")).toBeLessThan(html.indexOf("Acción"));
-  });
-
-  it("keeps the text first in reading order even when the visual leads on wide screens", () => {
-    const html = render(
-      createElement(Section, { title: "Texto", headingLevel: 3, layout: "visual-first", visual: createElement("span", null, "Visual") }),
-    );
-    expect(html.indexOf("Texto")).toBeLessThan(html.indexOf("Visual"));
-    expect(html).toContain("lg:order-first");
-  });
-});
-
 describe("ThemeShowcase", () => {
   const html = render(createElement(ThemeShowcase, { label: "Estilos" }));
 
@@ -175,6 +148,45 @@ describe("FaqList (MKT-2)", () => {
       expect(html).toContain(item.answer);
     }
     expect(html.match(/aria-hidden="true"/g)).toHaveLength(4);
+  });
+});
+
+describe("/ (MKT-1, recomposed in MKT-4A)", () => {
+  const page = copy.marketing.home;
+  const html = render(createElement(HomePage));
+  // Unit tests don't resolve static image imports; each screen is told apart by its alt text.
+  const imageAlts = [...html.matchAll(/<img [^>]*alt="([^"]+)"/g)].map((m) => m[1]);
+
+  it("has exactly one h1 of its own, the planner promise", () => {
+    // The other h1s are the five decorative theme renders' own (aria-hidden, inert).
+    expect(html.match(/data-testid="public-site"/g)).toHaveLength(5);
+    expect(html.match(/<h1/g)).toHaveLength(1 + 5);
+    expect(html).toMatch(new RegExp(`<h1[^>]*>${page.hero.title}</h1>`));
+  });
+
+  it("leads with the demo, then how it works, and links only to known destinations", () => {
+    const links = hrefs(html);
+    expect(links.slice(0, 3)).toEqual([MARKETING_LINKS.DEMO, MARKETING_LINKS.HOW_IT_WORKS, MARKETING_LINKS.COUPLES]);
+    const allowed = new Set<string>(Object.values(MARKETING_LINKS));
+    for (const href of links) expect(allowed.has(href), href).toBe(true);
+    expect(html).not.toContain("/signup");
+  });
+
+  it("is a short overview: seven sections, each real screen shown once", () => {
+    expect(html.match(/<section id="[^"]+" aria-labelledby="[^"]+-titulo"/g)).toHaveLength(7);
+    expect(imageAlts).toHaveLength(6);
+    expect(new Set(imageAlts).size).toBe(imageAlts.length);
+  });
+
+  it("tells how it works in three ordered steps, not cards", () => {
+    const steps = html.slice(html.indexOf('id="como-funciona"'));
+    expect(steps.match(/<li /g)?.length).toBeGreaterThanOrEqual(3);
+    expect(page.howItWorks.steps.map((step) => step.title)).toEqual([
+      "Crea la boda",
+      "Invita a quienes colaboran",
+      "Trabaja desde un solo lugar",
+    ]);
+    expect(html).toContain(page.closing.title);
   });
 });
 

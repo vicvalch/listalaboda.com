@@ -9,12 +9,112 @@ export const es = {
     title: "listalaboda.com",
     description: "Organiza tu boda, un pendiente a la vez.",
   },
-  home: {
+  /** Marketing pages (Marketing Landing V1): planner-first, tú, real product only, no claims. */
+  marketing: {
     brand: "listalaboda.com",
-    tagline: "Organiza tu boda, un pendiente a la vez.",
-    status: "Estamos preparando la base de la aplicación.",
-    login: "Entrar",
-    signup: "Crear cuenta",
+    skipToContent: "Saltar al contenido",
+    nav: {
+      label: "Navegación principal",
+      menu: "Menú",
+      howItWorks: "Cómo funciona",
+      weddingSites: "Sitios de boda",
+      login: "Iniciar sesión",
+    },
+    cta: {
+      demo: "Solicitar demo",
+      pilot: "Aplicar al pilot",
+      access: "Pedir acceso",
+      howItWorks: "Ver cómo funciona",
+    },
+    home: {
+      metadata: {
+        title: "listalaboda.com · Gestión de bodas para wedding planners",
+        description:
+          "Invitados, RSVP, mesas, proveedores, presupuesto, cronograma y sitio web de cada boda en un solo lugar.",
+      },
+      hero: {
+        eyebrow: "Para wedding planners",
+        title: "Una boda, todo bajo control.",
+        body: "Invitados, RSVP, mesas, proveedores, presupuesto, cronograma y sitio web, organizados en un solo lugar.",
+        couples: "¿Organizas tu propia boda?",
+        shotAlt:
+          "Pantalla «Mis bodas» de listalaboda.com con lo que necesita atención en tres bodas de ejemplo: cuotas vencidas, pendientes atrasados, cuotas próximas y personas sentadas que no asistirán.",
+      },
+      problem: {
+        eyebrow: "El día a día de hoy",
+        title: "Menos WhatsApp, hojas de cálculo y memoria.",
+        body: [
+          "Cada boda vive repartida entre chats, hojas de cálculo, notas y lo que alguien recuerda. Cuando manejas varias a la vez, lo importante se pierde entre mensajes.",
+          "listalaboda.com reúne cada boda en un solo lugar, para que sepas qué falta, quién confirmó y qué vence esta semana sin buscarlo.",
+        ],
+      },
+      attention: {
+        eyebrow: "Todas tus bodas",
+        title: "Lo que necesita tu atención, primero.",
+        body: "Al entrar ves todas tus bodas y, arriba, lo que necesita acción: cuotas vencidas, pendientes atrasados o una mesa que hay que revisar. Cada aviso te lleva directo al lugar donde se resuelve.",
+        shotAlt:
+          "Tarjeta de una boda de ejemplo en «Mis bodas», con su fecha, los días que faltan, dos avisos atrasados y el avance de pendientes, invitados y proveedores.",
+      },
+      workflows: {
+        eyebrow: "Cada parte de la boda",
+        title: "Todo lo que mueve una boda, en su lugar.",
+        rows: {
+          guests: {
+            title: "Invitados y confirmaciones, claros.",
+            body: "Cada grupo con su enlace personal de confirmación. Ves quién asistirá, quién no y quién falta por responder, sin perseguir a nadie por chat.",
+            shotAlt:
+              "Página «Invitados» de una boda de ejemplo con grupos, sus invitados y el estado de confirmación de cada persona.",
+          },
+          seating: {
+            title: "Mesas que puedes reorganizar sin perderte.",
+            body: "Arma el plano de mesas y mueve a cada invitado. La capacidad se respeta sola y quien no asistirá queda señalado.",
+            shotAlt: "Plano visual de mesas de una boda de ejemplo, con mesas redondas y rectangulares y sus invitados asignados.",
+          },
+          budget: {
+            title: "Proveedores, presupuesto y pagos conectados.",
+            body: "Lo contratado, lo pagado y lo que falta, por moneda y por proveedor, con las cuotas que vencen a la vista.",
+            shotAlt:
+              "Página «Presupuesto» de una boda de ejemplo con lo estimado, lo contratado, lo pagado y las próximas cuotas.",
+          },
+          timeline: {
+            title: "Un cronograma para saber qué pasa y cuándo.",
+            body: "El minuto a minuto del día de la boda, con su lugar, responsable y proveedor, listo para imprimir.",
+            shotAlt: "Cronograma del día de una boda de ejemplo, de la preparación al cierre, con horas, lugares y responsables.",
+          },
+        },
+      },
+      weddingSites: {
+        eyebrow: "Sitio web de la boda",
+        title: "Un sitio web para cada pareja, con estilo.",
+        body: "Cada boda tiene su sitio para los invitados, con cinco estilos cuidados. Se ajusta con opciones seguras, se revisa en vista previa y se publica solo cuando la pareja quiere.",
+        showcaseLabel: "Los cinco estilos del sitio web de la boda",
+      },
+      howItWorks: {
+        title: "Cómo funciona",
+        steps: [
+          { title: "Crea la boda", body: "Fecha, ciudad y zona horaria. La lista de pendientes arranca con una plantilla." },
+          {
+            title: "Invita a quienes colaboran",
+            body: "La pareja, tu equipo o tú: cada persona entra con su cuenta a la misma boda.",
+          },
+          {
+            title: "Trabaja desde un solo lugar",
+            body: "Invitados, mesas, proveedores, presupuesto, cronograma y sitio web, siempre al día.",
+          },
+        ],
+      },
+      closing: {
+        title: "Prueba listalaboda.com con una boda real.",
+        body: "Te mostramos cómo se vería una de tus bodas, de principio a fin.",
+        note: "Programa piloto con cupos limitados.",
+      },
+    },
+    footer: {
+      tagline: "Gestión de bodas para wedding planners.",
+      product: "Producto",
+      account: "Cuenta",
+      contact: "Contacto",
+    },
   },
   common: {
     brand: "listalaboda.com",

@@ -17,9 +17,9 @@ test.describe("authentication", () => {
   }) => {
     const email = uniqueEmail("new-owner");
 
-    await page.goto("/");
-    await page.getByRole("link", { name: es.home.signup }).click();
-    await expect(page).toHaveURL(/\/signup$/);
+    // The marketing homepage doesn't link to self-signup yet (LB-26); the
+    // signup page itself is unchanged.
+    await page.goto("/signup");
 
     await fillCredentials(page, email);
     await page.getByRole("button", { name: es.auth.signup.submit }).click();

@@ -701,6 +701,26 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - CP7 state: members customize the five themes with closed options or six AA-checked custom colors; no custom fonts,
   drafts, reordering, presets or images.
 
+## Marketing pages (Marketing Landing V1)
+
+- The marketing pages live in `src/app/(marketing)/` (shared layout: skip link, `MarketingHeader`, `<main id="contenido">`,
+  `MarketingFooter`); `/` is the planner-first homepage (MKT-1). They are static: no cookies, session, Supabase or
+  database reads, and no client components (the phone menu is a native `<details>`). `/app`, auth, `/rsvp`, `/boda` and
+  `src/proxy.ts` are untouched by marketing work.
+- Copy is in `es.marketing` (tú, brand `listalaboda.com`, no claims, metrics, logos or testimonials). Every call to action
+  comes from `@/lib/marketing/links` (`MARKETING_LINKS`); never a literal URL or address in a component. Demo, pilot and
+  access requests go to the contact address by `mailto:`; never link to `/signup` until LB-26 is resolved, and never
+  link a marketing route before it exists.
+- Product visuals are REAL screens captured from a fictional LOCAL fixture: `npm run marketing:capture`
+  (`e2e/marketing/`, outside the default E2E run) writes `public/marketing/*.webp` after a privacy guard (no email,
+  phone, guest link or token; only the page's main content, never the app header). Never capture production; review
+  regenerated images like golden files. `ProductShot` renders them as plain `<picture>`/`<img>` (no `next/image` runtime).
+- The theme showcase draws the REAL `WeddingSite` with `resolveSiteDesign` from fictional content in
+  `@/lib/marketing/showcase` (decorative, `aria-hidden` + `inert`, names as real text); never a real wedding or the
+  public read.
+- Marketing pages are `noindex, nofollow` with no canonical until `listalaboda.com` is owned and connected; robots.txt
+  and the sitemap come with MKT-3.
+
 ## Commands
 
 - `npm run verify`: lint, typecheck, unit tests, build (same as CI)
@@ -782,4 +802,7 @@ document with a CHECK validator, "Personalizar" with per-group/full reset, theme
 unsaved choices (no hex colors, fonts, drafts, reordering, presets or images). CP7 adds custom colors: six
 AA-checked `#rrggbb` roles instead of a preset, light mode only, checked by the parser, the CHECK validator and at
 render, with live contrast feedback and preview (no fonts, drafts, reordering, presets or images).
+Marketing Landing V1 (separate from LB-24D): MKT-1 adds the shared marketing shell and the planner-first homepage at `/`
+(real fictional-fixture screenshots, the real theme renderer, mailto calls to action, noindex); MKT-2 `/planners` and
+MKT-3 `/parejas` with robots/sitemap follow.
 Don't implement ahead of the current prompt.

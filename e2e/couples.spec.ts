@@ -60,9 +60,9 @@ test.describe("marketing /parejas", () => {
 
     // Every product screenshot has Spanish alt text, and none repeats.
     const images = await page
-      .locator("main img")
+      .locator("main img:not([data-lifestyle])")
       .evaluateAll((elements) => elements.map((img) => ({ alt: img.getAttribute("alt") ?? "", src: img.getAttribute("src") ?? "" })));
-    expect(images.length).toBe(6);
+    expect(images.length).toBe(5);
     for (const { alt } of images) expect(alt.length).toBeGreaterThan(20);
     expect(new Set(images.map(({ src }) => src)).size).toBe(images.length);
   });

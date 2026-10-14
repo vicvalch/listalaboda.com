@@ -76,6 +76,7 @@ export const es = {
         title: "Y para la pareja, un sitio propio.",
         body: "Tu trabajo termina en una experiencia que la pareja también siente suya: cinco estilos para el sitio de su boda, y nada es público hasta que se publica.",
         couplesLink: "Ver listalaboda.com para parejas",
+        photoAlt: "Pareja recién casada sonriendo al atardecer.",
         showcaseLabel: "Los cinco estilos del sitio web de la boda",
       },
       howItWorks: {
@@ -154,6 +155,7 @@ export const es = {
           { title: "Cada boda, aparte", body: "Quien colabora en una boda solo ve esa boda." },
           { title: "Publicar es de quien organiza", body: "El sitio web sale al público solo cuando esa persona lo publica." },
         ],
+        photoAlt: "Wedding planner revisando detalles de la boda con una pareja.",
       },
       sites: {
         eyebrow: "Sitio web de la boda",
@@ -217,8 +219,7 @@ export const es = {
         body: "Invitados, tareas, mesas, presupuesto, cronograma y el sitio de tu boda, organizados en un solo lugar.",
         plannerQuestion: "¿Eres wedding planner?",
         plannerLink: "Para planners",
-        dayAlt:
-          "El cronograma impreso de una boda de ejemplo, de 15:45 a 19:00: fotos familiares, cóctel de bienvenida y la entrada de los novios con la cena.",
+        photoAlt: "Pareja recién casada sonriendo al atardecer.",
       },
       checklist: {
         eyebrow: "Tu lista de pendientes",
@@ -262,6 +263,7 @@ export const es = {
           "Vista previa antes de guardar cada cambio.",
           "Nada es público hasta que lo publican.",
         ],
+        photoAlt: "Mesa de boda con flores, velas y cristalería.",
         showcaseLabel: "Los cinco estilos del sitio web de la boda",
       },
       together: {
@@ -270,6 +272,11 @@ export const es = {
         body: "Invita a quien quieras a tu boda: cada persona entra con su propia cuenta y todos trabajan sobre la misma información.",
         people: ["Tu pareja", "Tu wedding planner", "Quien te ayude"],
         note: "Solo quienes forman parte de la boda la ven.",
+      },
+      /** MKT-5: the photo before the questions; one line, no claim. */
+      payoff: {
+        line: "Planeas todo para llegar a esto.",
+        photoAlt: "Novios e invitados brindando durante la recepción.",
       },
       faq: {
         title: "Preguntas frecuentes",

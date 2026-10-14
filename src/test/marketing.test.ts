@@ -1,4 +1,5 @@
 import { createElement, type ReactElement } from "react";
+import { existsSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -155,7 +156,11 @@ describe("/ (MKT-1, recomposed in MKT-4A)", () => {
   const page = copy.marketing.home;
   const html = render(createElement(HomePage));
   // Unit tests don't resolve static image imports; each screen is told apart by its alt text.
-  const imageAlts = [...html.matchAll(/<img [^>]*alt="([^"]+)"/g)].map((m) => m[1]);
+  // Wedding photographs (MKT-5, `data-lifestyle`) are not screens.
+  const imageAlts = [...html.matchAll(/<img [^>]*>/g)]
+    .map((m) => m[0])
+    .filter((tag) => !tag.includes("data-lifestyle"))
+    .map((tag) => /alt="([^"]+)"/.exec(tag)?.[1]);
 
   it("has exactly one h1 of its own, the planner promise", () => {
     // The other h1s are the five decorative theme renders' own (aria-hidden, inert).
@@ -231,6 +236,50 @@ describe("/planners (MKT-2)", () => {
     const text = JSON.stringify(page);
     expect(text).not.toMatch(/procesa pagos|paga proveedores|cobra|transfiere/i);
     expect(page.money.note).toBe("listalaboda.com registra los pagos; no los procesa.");
+  });
+});
+
+describe("wedding photography (MKT-5)", () => {
+  const pages = { home: render(createElement(HomePage)), planners: render(createElement(PlannersPage)), couples: render(createElement(CouplesPage)) };
+  const photos = (html: string) => [...html.matchAll(/<img [^>]*data-lifestyle=""[^>]*>/g)].map((m) => m[0]);
+  const alt = (tag: string) => /alt="([^"]*)"/.exec(tag)?.[1];
+
+  it("stays restrained: three photos on the home page, one for planners, four for couples", () => {
+    expect(photos(pages.home)).toHaveLength(3);
+    expect(photos(pages.planners)).toHaveLength(1);
+    expect(photos(pages.couples)).toHaveLength(4);
+  });
+
+  it("describes meaningful photos in Spanish and hides decorative ones from assistive technology", () => {
+    for (const html of Object.values(pages)) {
+      for (const tag of photos(html)) {
+        const text = alt(tag);
+        expect(text).toBeDefined();
+        if (text) expect(text.length).toBeGreaterThan(20);
+      }
+      // Every decorative photo sits in an aria-hidden wrapper.
+      const decorative = [...html.matchAll(/<div aria-hidden="true" class="mkt-photo[^"]*"><picture><img [^>]*alt=""[^>]*data-lifestyle=""/g)];
+      expect(decorative.length).toBe(photos(html).filter((tag) => alt(tag) === "").length);
+    }
+    expect(photos(pages.planners).map(alt)).toEqual([copy.marketing.planners.collaboration.photoAlt]);
+  });
+
+  it("never ships the invented-interface photo, and keeps romance away from the money and the day", () => {
+    expect(existsSync("public/marketing/lifestyle/product-context.png")).toBe(false);
+    expect(existsSync("public/marketing/lifestyle/product-context.webp")).toBe(false);
+    for (const html of Object.values(pages)) expect(html).not.toContain("product-context");
+    for (const [html, ids] of [
+      [pages.home, ["invitados-y-mesas", "presupuesto-y-cronograma"]],
+      [pages.planners, ["invitados-y-mesas", "presupuesto", "cronograma"]],
+      [pages.couples, ["invitados", "presupuesto"]],
+    ] as const) {
+      for (const id of ids) {
+        const start = html.indexOf(`<section id="${id}"`);
+        const section = html.slice(start, html.indexOf("</section>", start));
+        expect(start, id).toBeGreaterThan(-1);
+        expect(section, id).not.toContain("data-lifestyle");
+      }
+    }
   });
 });
 

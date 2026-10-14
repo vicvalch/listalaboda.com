@@ -399,3 +399,114 @@ body {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
+
+/*
+ * Marketing photography and motion (MKT-5). Light: a warm champagne/rose glow
+ * for decorative washes. Photos dim slightly in dark mode, so they read as
+ * cinematic on the dark page instead of glaring. Every movement below is
+ * opt-in through `prefers-reduced-motion: no-preference`: with "reduce"
+ * nothing floats, drifts, zooms, shifts or reveals; states change at once.
+ */
+:root {
+  --mkt-glow: rgb(240 214 182 / 0.55);
+  --mkt-glow-rose: rgb(236 196 204 / 0.45);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --mkt-glow: rgb(224 170 120 / 0.1);
+    --mkt-glow-rose: rgb(224 138 156 / 0.12);
+  }
+
+  .mkt-photo img {
+    filter: brightness(0.8) saturate(0.92) contrast(1.04);
+  }
+}
+
+@keyframes mkt-drift {
+  from {
+    translate: -1.5% 0;
+  }
+  to {
+    translate: 1.5% -1%;
+  }
+}
+
+@keyframes mkt-float {
+  from {
+    translate: 0 0;
+  }
+  to {
+    translate: 0 -5px;
+  }
+}
+
+@keyframes mkt-reveal {
+  from {
+    opacity: 0;
+    translate: 0 1.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Photos: a barely-there zoom on hover (1.02). */
+  .mkt-zoom img {
+    transition: scale 900ms cubic-bezier(0.2, 0.65, 0.2, 1);
+  }
+
+  .mkt-zoom:hover img {
+    scale: 1.02;
+  }
+
+  /* A slow pan, on one or two decorative crops only (pre-scaled so no edge shows). */
+  .mkt-drift img {
+    scale: 1.06;
+    animation: mkt-drift 36s ease-in-out infinite alternate;
+  }
+
+  /* Decorative light: a few pixels of slow float. */
+  .mkt-float {
+    animation: mkt-float 11s ease-in-out infinite alternate;
+  }
+
+  /* Photos settle in as they enter the viewport: pure CSS, where scroll timelines exist. */
+  @supports (animation-timeline: view()) {
+    .mkt-reveal {
+      animation: mkt-reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 80%;
+    }
+  }
+
+  /* Buttons rise 2px; a link's arrow moves 3px. Marketing pages only. */
+  [data-marketing] a.inline-flex {
+    transition-property: color, background-color, border-color, translate;
+    transition-duration: 200ms;
+  }
+
+  [data-marketing] a.inline-flex:hover {
+    translate: 0 -2px;
+  }
+
+  [data-marketing] a > span[aria-hidden="true"] {
+    display: inline-block;
+    transition: translate 200ms ease-out;
+  }
+
+  [data-marketing] a:hover > span[aria-hidden="true"] {
+    translate: 3px 0;
+  }
+
+  /* Theme cards lift a little on hover. The render itself is inert (no
+     pointer events), so its showcase item, which isn't, carries the hover. */
+  .mkt-lift {
+    transition:
+      translate 300ms ease-out,
+      box-shadow 300ms ease-out;
+  }
+
+  [data-testid="theme-showcase-item"]:hover > .mkt-lift {
+    translate: 0 -4px;
+    box-shadow: 0 18px 36px -18px rgb(42 34 32 / 0.35);
+  }
+}

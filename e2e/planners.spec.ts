@@ -57,7 +57,7 @@ test.describe("marketing /planners", () => {
     await expect(showcase.locator('[aria-hidden="true"][inert]')).toHaveCount(5);
 
     // Every product screenshot has Spanish alt text.
-    const alts = await page.locator("main img").evaluateAll((images) => images.map((img) => img.getAttribute("alt") ?? ""));
+    const alts = await page.locator("main img:not([data-lifestyle])").evaluateAll((images) => images.map((img) => img.getAttribute("alt") ?? ""));
     expect(alts.length).toBe(9);
     for (const alt of alts) expect(alt.length).toBeGreaterThan(20);
   });

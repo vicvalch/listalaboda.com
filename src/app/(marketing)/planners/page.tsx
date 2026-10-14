@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { containerClass, cx } from "@/components/marketing/classes";
 import { FaqList } from "@/components/marketing/FaqList";
+import { LifestylePhoto } from "@/components/marketing/LifestylePhoto";
 import { ProductShot } from "@/components/marketing/ProductShot";
 import { ThemeShowcase } from "@/components/marketing/ThemeShowcase";
 import { primaryButtonClass, secondaryButtonClass } from "@/components/ui/styles";
@@ -9,6 +10,8 @@ import { getMessages } from "@/lib/i18n";
 import { MARKETING_LINKS } from "@/lib/marketing/links";
 import { marketingMetadata } from "@/lib/marketing/metadata";
 
+import plannerSmallPhoto from "../../../../public/marketing/lifestyle/planner-with-couple-sm.webp";
+import plannerPhoto from "../../../../public/marketing/lifestyle/planner-with-couple.webp";
 import budgetMobileShot from "../../../../public/marketing/budget-mobile.webp";
 import budgetShot from "../../../../public/marketing/budget.webp";
 import guestsMobileShot from "../../../../public/marketing/guests-mobile.webp";
@@ -37,6 +40,10 @@ const copy = marketing.planners;
  * the money, the printed day, then the couple's site and the pilot. Screens
  * whose own page background matches this page sit unframed in the
  * composition; a shadow remains only where one screen is laid over another.
+ *
+ * MKT-5: one photograph, in the collaboration section (the planner with the
+ * couple): the human side of the work, away from the guests, money and day
+ * screens. The pilot band gets warm light, not another photo.
  */
 export const metadata: Metadata = marketingMetadata(copy.metadata);
 
@@ -243,16 +250,25 @@ export default function PlannersPage() {
         </div>
       </section>
 
-      {/* 6. Collaboration: a typographic pause. */}
-      <section id="colaboracion" aria-labelledby="colaboracion-titulo" className="scroll-mt-20 border-t border-border">
-        <div className={cx(containerClass, spacingClass, "grid gap-10 lg:grid-cols-12 lg:gap-10")}>
-          <div className="space-y-5 lg:col-span-5">
+      {/* 6. Collaboration: the page's human moment. The planner with the
+          couple enters from the right edge, beside who works on the wedding. */}
+      <section id="colaboracion" aria-labelledby="colaboracion-titulo" className="scroll-mt-20 overflow-x-clip border-t border-border">
+        <div className={cx(containerClass, spacingClass, "grid gap-10 lg:grid-cols-12 lg:gap-x-10 lg:gap-y-8")}>
+          <div className="space-y-5 lg:col-span-5 lg:self-end">
             <p className={eyebrowClass}>{copy.collaboration.eyebrow}</p>
             <h2 id="colaboracion-titulo" className={h2Class}>
               {copy.collaboration.title}
             </h2>
           </div>
-          <ul className="divide-y divide-border border-y border-border lg:col-span-6 lg:col-start-7 lg:self-end">
+          <LifestylePhoto
+            image={plannerPhoto}
+            small={plannerSmallPhoto}
+            alt={copy.collaboration.photoAlt}
+            sizes="(min-width: 1024px) 70vw, 100vw"
+            position="object-[38%_center]"
+            className="mkt-reveal relative -mr-4 aspect-[16/10] rounded-l-[2.5rem] sm:-mr-6 lg:col-span-7 lg:row-span-2 lg:-mr-40 lg:aspect-[4/3] lg:rounded-l-[5rem] xl:-mr-64"
+          />
+          <ul className="divide-y divide-border border-y border-border lg:col-span-5 lg:row-start-2 lg:self-start">
             {copy.collaboration.points.map((point) => (
               <li key={point.title} className="py-5 sm:flex sm:items-baseline sm:gap-6">
                 <h3 className="font-serif text-2xl leading-snug sm:w-1/2 sm:shrink-0">{point.title}</h3>
@@ -294,8 +310,13 @@ export default function PlannersPage() {
       </section>
 
       {/* 9. The pilot: the page's one conversion band, and its last word. */}
-      <section id="pilot" aria-labelledby="pilot-titulo" className="scroll-mt-20 border-t border-border bg-accent-soft">
-        <div className={cx(containerClass, "grid gap-10 py-16 sm:py-24 lg:grid-cols-12 lg:gap-10")}>
+      <section id="pilot" aria-labelledby="pilot-titulo" className="relative scroll-mt-20 overflow-hidden border-t border-border bg-accent-soft">
+        {/* Warm light from the upper right: decoration only. */}
+        <div
+          aria-hidden="true"
+          className="mkt-float pointer-events-none absolute -top-40 -right-40 h-[32rem] w-[32rem] rounded-full bg-[radial-gradient(closest-side,var(--mkt-glow),transparent)] sm:h-[44rem] sm:w-[44rem]"
+        />
+        <div className={cx(containerClass, "relative grid gap-10 py-16 sm:py-24 lg:grid-cols-12 lg:gap-10")}>
           <div className="space-y-6 lg:col-span-7">
             <p className={eyebrowClass}>{copy.pilot.eyebrow}</p>
             <h2 id="pilot-titulo" className="font-serif text-4xl leading-tight tracking-tight text-balance sm:text-5xl lg:text-6xl">

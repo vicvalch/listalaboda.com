@@ -21,7 +21,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
         {marketing.skipToContent}
       </a>
       <MarketingHeader />
-      <main id="contenido" className="flex-1">
+      <main id="contenido" data-marketing="" className="flex-1">
         {children}
       </main>
       <MarketingFooter />

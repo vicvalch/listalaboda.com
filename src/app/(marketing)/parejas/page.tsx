@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { containerClass, cx } from "@/components/marketing/classes";
 import { CtaBand } from "@/components/marketing/CtaBand";
 import { FaqList } from "@/components/marketing/FaqList";
+import { LifestylePhoto } from "@/components/marketing/LifestylePhoto";
 import { ProductShot } from "@/components/marketing/ProductShot";
 import { SiteRender } from "@/components/marketing/SiteRender";
 import { ThemeShowcase } from "@/components/marketing/ThemeShowcase";
@@ -11,6 +12,14 @@ import { getMessages } from "@/lib/i18n";
 import { MARKETING_LINKS } from "@/lib/marketing/links";
 import { marketingMetadata } from "@/lib/marketing/metadata";
 
+import coupleSmallPhoto from "../../../../public/marketing/lifestyle/couple-golden-hour-sm.webp";
+import couplePhoto from "../../../../public/marketing/lifestyle/couple-golden-hour.webp";
+import floralSmallPhoto from "../../../../public/marketing/lifestyle/floral-sunset-sm.webp";
+import floralPhoto from "../../../../public/marketing/lifestyle/floral-sunset.webp";
+import tablescapeSmallPhoto from "../../../../public/marketing/lifestyle/tablescape-candles-sm.webp";
+import tablescapePhoto from "../../../../public/marketing/lifestyle/tablescape-candles.webp";
+import toastSmallPhoto from "../../../../public/marketing/lifestyle/wedding-toast-sm.webp";
+import toastPhoto from "../../../../public/marketing/lifestyle/wedding-toast.webp";
 import budgetMobileShot from "../../../../public/marketing/budget-mobile.webp";
 import budgetShot from "../../../../public/marketing/budget.webp";
 import checklistMobileShot from "../../../../public/marketing/checklist-mobile.webp";
@@ -19,7 +28,6 @@ import guestsMobileShot from "../../../../public/marketing/guests-mobile.webp";
 import guestsShot from "../../../../public/marketing/guests.webp";
 import seatingTablesShot from "../../../../public/marketing/seating-mobile.webp";
 import timelineMobileShot from "../../../../public/marketing/timeline-mobile.webp";
-import timelinePrint2 from "../../../../public/marketing/timeline-print-2.webp";
 
 const { marketing } = getMessages();
 const copy = marketing.couples;
@@ -35,6 +43,11 @@ const copy = marketing.couples;
  * site as the centerpiece, and ends on planning together. No "Mis bodas":
  * several weddings are a planner's concern. Every screen is a real capture of
  * the fictional fixture; each one appears once on the page.
+ *
+ * MKT-5: the page with the most photography, and still never in place of a
+ * screen: the couple behind their site (hero), candlelight under the
+ * centerpiece, the toast as the payoff before the questions, and flowers at
+ * sunset in the closing band. None next to money or the day's logistics.
  */
 export const metadata: Metadata = marketingMetadata(copy.metadata);
 
@@ -46,8 +59,8 @@ const noteClass = "border-accent border-l-2 pl-4 text-sm leading-6 font-semibold
 export default function CouplesPage() {
   return (
     <>
-      {/* 1. Hero: the promise, then their wedding site (the real Romantic
-          theme) with a sheet of their printed day laid across its corner. */}
+      {/* 1. Hero: the promise, then the couple entering from the right edge
+          with their wedding site (the real Romantic theme) laid across its corner. */}
       <div className="overflow-x-clip">
         <section
           id="inicio"
@@ -80,21 +93,24 @@ export default function CouplesPage() {
               </p>
             </div>
           </div>
-          <div className="relative lg:col-span-6 lg:pb-16">
-            {/* A soft wash behind the site, offset: decoration only. */}
-            <div aria-hidden="true" className="bg-accent-soft absolute inset-x-6 top-10 -bottom-5 rounded-[2rem] sm:inset-x-10 lg:top-16 lg:-right-24 lg:left-4" />
+          <div className="relative lg:col-span-6 lg:pb-10">
+            {/* Warm light behind the composition: decoration only. */}
+            <div
+              aria-hidden="true"
+              className="mkt-float pointer-events-none absolute -top-16 -left-10 h-80 w-80 rounded-full bg-[radial-gradient(closest-side,var(--mkt-glow),transparent)] lg:-top-24 lg:-left-24 lg:h-[30rem] lg:w-[30rem]"
+            />
+            <LifestylePhoto
+              image={couplePhoto}
+              small={coupleSmallPhoto}
+              alt={copy.hero.photoAlt}
+              sizes="(min-width: 1024px) 50vw, 100vw"
+              position="object-[24%_center]"
+              className="relative -mr-4 aspect-[16/11] rounded-l-[2.5rem] sm:-mr-6 lg:ml-[22%] lg:-mr-40 lg:aspect-[4/5] lg:rounded-l-[5rem] xl:-mr-64"
+            />
             <SiteRender
               theme="romantic"
               scale="half"
-              className="aspect-[4/5] max-h-[30rem] w-full rounded-2xl shadow-[0_2px_4px_rgb(42_34_32/0.08),0_28px_56px_-20px_rgb(42_34_32/0.4)] lg:max-h-none lg:ml-auto lg:w-[86%]"
-            />
-            {/* Paper stays white in both color schemes, like the printout. */}
-            <ProductShot
-              image={timelinePrint2}
-              alt={copy.hero.dayAlt}
-              frame="lifted"
-              frameClassName="bg-white border-t-4 border-accent py-1"
-              className="absolute bottom-0 -left-8 hidden w-[12.5rem] -rotate-3 lg:block xl:w-[13.5rem]"
+              className="relative z-10 -mt-24 aspect-[4/5] w-[64%] max-w-[20rem] rounded-2xl shadow-[0_2px_4px_rgb(42_34_32/0.08),0_28px_56px_-20px_rgb(42_34_32/0.45)] sm:-mt-40 sm:w-[46%] lg:absolute lg:bottom-0 lg:-left-6 lg:mt-0 lg:w-[56%] lg:max-w-none"
             />
           </div>
         </section>
@@ -192,11 +208,22 @@ export default function CouplesPage() {
         className="scroll-mt-20 overflow-x-clip border-t border-border bg-accent-soft"
       >
         <div className={cx(containerClass, "grid gap-10 pt-14 sm:pt-20 lg:grid-cols-12 lg:items-center lg:gap-12")}>
-          <SiteRender
-            theme="editorial"
-            scale="half"
-            className="aspect-[4/3] w-full rounded-2xl shadow-[0_2px_4px_rgb(42_34_32/0.08),0_28px_56px_-20px_rgb(42_34_32/0.4)] lg:col-span-7 lg:-ml-16 lg:aspect-[5/4]"
-          />
+          {/* Candlelight entering from the left edge, the real Editorial site laid over it. */}
+          <div className="relative lg:col-span-7 lg:pb-8">
+            <LifestylePhoto
+              image={tablescapePhoto}
+              small={tablescapeSmallPhoto}
+              alt={copy.sites.photoAlt}
+              sizes="(min-width: 1024px) 40vw, 100vw"
+              position="object-[center_45%]"
+              className="mkt-reveal relative -ml-4 aspect-[16/10] rounded-r-[2.5rem] sm:-ml-6 lg:-ml-40 lg:aspect-auto lg:h-[36rem] lg:w-[calc(58%+10rem)] lg:rounded-r-[5rem] xl:-ml-64 xl:w-[calc(58%+16rem)]"
+            />
+            <SiteRender
+              theme="editorial"
+              scale="half"
+              className="relative z-10 -mt-16 ml-auto aspect-[4/3] w-[88%] rounded-2xl shadow-[0_2px_4px_rgb(42_34_32/0.08),0_28px_56px_-20px_rgb(42_34_32/0.4)] lg:absolute lg:right-0 lg:bottom-0 lg:mt-0 lg:w-[72%] lg:aspect-[5/4]"
+            />
+          </div>
           <div className="space-y-6 lg:col-span-5">
             <p className={eyebrowClass}>{copy.sites.eyebrow}</p>
             <h2 id="sitio-de-tu-boda-titulo" className={h2Class}>
@@ -241,7 +268,24 @@ export default function CouplesPage() {
         </div>
       </section>
 
-      {/* 8. Questions. */}
+      {/* 8. The payoff: what all the planning is for. Mostly the photo; one line. */}
+      <div className="border-t border-border">
+        <figure className="mx-auto w-full max-w-[88rem] px-4 py-14 sm:px-6 sm:py-20">
+          <LifestylePhoto
+            image={toastPhoto}
+            small={toastSmallPhoto}
+            alt={copy.payoff.photoAlt}
+            sizes="(min-width: 1408px) 1360px, 100vw"
+            position="object-[center_30%]"
+            className="mkt-reveal relative aspect-[4/3] rounded-[2rem] sm:aspect-[16/9] lg:aspect-[21/9] lg:rounded-[3rem]"
+          />
+          <figcaption className="bg-background relative z-10 mx-auto -mt-8 w-fit max-w-[88%] rounded-2xl px-6 py-4 text-center font-serif text-2xl leading-snug text-balance sm:-mt-12 sm:px-10 sm:py-6 sm:text-4xl">
+            {copy.payoff.line}
+          </figcaption>
+        </figure>
+      </div>
+
+      {/* 9. Questions. */}
       <section id="preguntas" aria-labelledby="preguntas-titulo" className="scroll-mt-20 border-t border-border">
         <div className={cx(containerClass, "grid gap-8 py-14 sm:py-20 lg:grid-cols-12 lg:gap-10")}>
           <h2 id="preguntas-titulo" className="font-serif text-3xl leading-tight tracking-tight sm:text-4xl lg:col-span-4">
@@ -253,8 +297,24 @@ export default function CouplesPage() {
         </div>
       </section>
 
-      {/* 9. The last word: ask for access. */}
-      <CtaBand id="empezar" title={copy.closing.title} body={copy.closing.body} note={copy.closing.note}>
+      {/* 10. The last word: ask for access, flowers at sunset entering from the right. */}
+      <CtaBand
+        id="empezar"
+        title={copy.closing.title}
+        body={copy.closing.body}
+        note={copy.closing.note}
+        photo={
+          <LifestylePhoto
+            image={floralPhoto}
+            small={floralSmallPhoto}
+            alt=""
+            sizes="(min-width: 1024px) 46vw, 100vw"
+            position="object-[30%_center]"
+            drift
+            className="relative h-full w-full"
+          />
+        }
+      >
         <a href={MARKETING_LINKS.ACCESS} className={primaryButtonClass}>
           {marketing.cta.access}
         </a>

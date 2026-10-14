@@ -32,11 +32,12 @@ test.describe("marketing homepage", () => {
     const main = page.locator("main");
     await expect(main.getByRole("link", { name: copy.cta.demo }).first()).toHaveAttribute("href", MARKETING_LINKS.DEMO);
     await expect(main.getByRole("link", { name: copy.cta.howItWorks })).toHaveAttribute("href", MARKETING_LINKS.HOW_IT_WORKS);
-    await expect(main.getByRole("link", { name: copy.cta.access })).toHaveAttribute("href", MARKETING_LINKS.ACCESS);
+    // MKT-3: the couples' question leads to their own page.
+    await expect(main.getByRole("link", { name: copy.home.hero.couplesLink })).toHaveAttribute("href", MARKETING_LINKS.COUPLES);
     await expect(main.getByRole("link", { name: copy.cta.pilot })).toHaveAttribute("href", MARKETING_LINKS.PILOT);
     await expect(page.getByRole("banner").getByRole("link", { name: copy.nav.login })).toHaveAttribute("href", MARKETING_LINKS.LOGIN);
 
-    // Every link on the page is a known destination: no dead /planners, /parejas or self-signup.
+    // Every link on the page is a known destination: never self-signup.
     const hrefs = await page.locator("a[href]").evaluateAll((anchors) => anchors.map((a) => a.getAttribute("href") ?? ""));
     const known = new Set<string>(["/", "#contenido", ...Object.values(MARKETING_LINKS)]);
     expect(hrefs.filter((href) => !known.has(href))).toEqual([]);
@@ -70,7 +71,7 @@ test.describe("marketing homepage", () => {
 
     await page.goto("/");
     await page.keyboard.press("Tab"); // skip link
-    for (const name of [copy.brand, copy.nav.planners, copy.nav.howItWorks, copy.nav.weddingSites, copy.nav.login, copy.cta.demo]) {
+    for (const name of [copy.brand, copy.nav.planners, copy.nav.couples, copy.nav.howItWorks, copy.nav.login, copy.cta.demo]) {
       await page.keyboard.press("Tab");
       const focused = page.getByRole("banner").getByRole("link", { name, exact: true });
       await expect(focused).toBeFocused();

@@ -16,7 +16,9 @@ export const es = {
     nav: {
       label: "Navegación principal",
       menu: "Menú",
+      home: "Inicio",
       planners: "Para planners",
+      couples: "Para parejas",
       howItWorks: "Cómo funciona",
       weddingSites: "Sitios de boda",
       login: "Iniciar sesión",
@@ -38,6 +40,7 @@ export const es = {
         title: "Una boda, todo bajo control.",
         body: "Invitados, RSVP, mesas, proveedores, presupuesto, cronograma y sitio web, organizados en un solo lugar.",
         couples: "¿Organizas tu propia boda?",
+        couplesLink: "Para parejas",
         shotAlt:
           "Pantalla «Mis bodas» de listalaboda.com con lo que necesita atención en tres bodas de ejemplo: cuotas vencidas, pendientes atrasados, cuotas próximas y personas sentadas que no asistirán.",
       },
@@ -224,8 +227,122 @@ export const es = {
         ],
       },
     },
+    /** MKT-3: `/parejas`, the page for couples organizing their own wedding. Warmer and shorter than /planners. */
+    couples: {
+      metadata: {
+        title: "Organiza tu boda en un solo lugar · listalaboda.com",
+        description:
+          "Organiza invitados, RSVP, tareas, mesas, presupuesto, cronograma y el sitio de tu boda desde un solo lugar.",
+      },
+      hero: {
+        eyebrow: "Para parejas",
+        title: "Organizar tu boda debería sentirse emocionante, no caótico.",
+        body: "Invitados, tareas, mesas, presupuesto, cronograma y el sitio de tu boda, organizados en un solo lugar.",
+        plannerQuestion: "¿Eres wedding planner?",
+        plannerLink: "Para planners",
+        dayAlt:
+          "El cronograma impreso de una boda de ejemplo, de 15:45 a 19:00: fotos familiares, cóctel de bienvenida y la entrada de los novios con la cena.",
+      },
+      checklist: {
+        eyebrow: "Tu lista de pendientes",
+        title: "Siempre sabes qué sigue.",
+        body: "Puedes empezar con una lista sugerida para toda la boda. Ves cuánto llevas, qué toca primero y qué se atrasó, y cada pendiente puede tener a alguien a cargo.",
+        shotAlt:
+          "Inicio de una boda de ejemplo: 3 de 8 pendientes completados y «Lo próximo», con la prueba de menú, la música de la ceremonia y la prueba final del vestido por fecha.",
+      },
+      guests: {
+        eyebrow: "Invitados y confirmaciones",
+        title: "Invitados y confirmaciones, sin perderte en mensajes.",
+        body: "Agrupa a tus invitados por familia o como prefieras. Cada grupo confirma con su propio enlace, persona por persona, y ves quién viene, quién no y quién falta por responder.",
+        note: "Sin registro abierto: solo quien tiene el enlace de su grupo puede confirmar.",
+        shotAlt:
+          "Un grupo de invitados de ejemplo, «Amigos de la U», con la respuesta de cada persona: dos asistirán y una no ha respondido.",
+      },
+      seating: {
+        title: "De la confirmación a la mesa.",
+        body: "Arma tus mesas y mueve a cada invitado cuando cambien los planes. Cada mesa respeta su capacidad, y si alguien con mesa avisa que no vendrá, lo ves señalado.",
+        note: "Tú decides dónde se sienta cada quien. El plano visual se usa en computadora.",
+        shotAlt:
+          "Dos mesas redondas del plano de mesas de una boda de ejemplo, con sus invitados; en una, una persona que no asistirá aparece señalada.",
+      },
+      plan: {
+        eyebrow: "Presupuesto y cronograma",
+        title: "Los números y el día, bajo control.",
+        body: "Lo que planeas gastar, lo que contrataste y lo que ya pagaste, con las próximas cuotas a la vista. Y el día de la boda, hora por hora, listo para imprimir.",
+        note: "listalaboda.com registra los pagos; no los procesa.",
+        budgetAlt:
+          "Presupuesto de una boda de ejemplo en colones: presupuesto total, contratado, pagado, pendiente, sin programar y disponible.",
+        timelineAlt:
+          "Cronograma del día de una boda de ejemplo, con la hora, el lugar y el responsable de cada actividad, de la preparación a la ceremonia.",
+      },
+      sites: {
+        eyebrow: "El sitio de tu boda",
+        title: "Un sitio que se sienta como ustedes.",
+        body: "Tu historia, la ceremonia, la recepción y lo que tus invitados necesitan saber, con el estilo de su boda.",
+        points: [
+          "Cinco estilos cuidados para empezar.",
+          "Colores, tipografía y disposición, con opciones cuidadas.",
+          "Vista previa antes de guardar cada cambio.",
+          "Nada es público hasta que lo publican.",
+        ],
+        showcaseLabel: "Los cinco estilos del sitio web de la boda",
+      },
+      together: {
+        eyebrow: "En equipo",
+        title: "Organícenla juntos.",
+        body: "Invita a quien quieras a tu boda: cada persona entra con su propia cuenta y todos trabajan sobre la misma información.",
+        people: ["Tu pareja", "Tu wedding planner", "Quien te ayude"],
+        note: "Solo quienes forman parte de la boda la ven.",
+      },
+      faq: {
+        title: "Preguntas frecuentes",
+        items: [
+          {
+            question: "¿Necesito una wedding planner para usar listalaboda.com?",
+            answer:
+              "No. Puedes organizar tu boda directamente. Si trabajas con una wedding planner, también puedes invitarla a tu boda para que colabore contigo.",
+          },
+          {
+            question: "¿Puedo invitar a mi pareja?",
+            answer:
+              "Sí. Creas un enlace de invitación y se lo compartes: entra con su propia cuenta y trabajan juntos en la misma boda.",
+          },
+          {
+            question: "¿Cómo funcionan las confirmaciones?",
+            answer:
+              "Organizas a tus invitados por grupos, como una familia o una pareja. Cada grupo tiene su propio enlace, que tú compartes, y confirma persona por persona sin crear una cuenta. Si cambian de planes, actualizan su respuesta con el mismo enlace.",
+          },
+          {
+            question: "¿Puedo cambiar las mesas cuando cambie la lista de invitados?",
+            answer:
+              "Sí. Mueves a cada invitado de mesa cuando quieras y la capacidad de cada mesa se respeta. Quien avisó que no asistirá no se puede sentar; si alguien con mesa cambia su respuesta a «no», queda señalado para que decidas. Si quitas a alguien de la lista, su lugar queda libre.",
+          },
+          {
+            question: "¿Puedo personalizar el sitio de la boda?",
+            answer:
+              "Sí. Eliges uno de los cinco estilos y ajustas sus colores, tipografía y disposición con opciones cuidadas. Antes de guardar, lo revisas en vista previa.",
+          },
+          {
+            question: "¿Se publica automáticamente?",
+            answer:
+              "No. Nada es público hasta que quien organiza la boda lo publica, y puede dejar de publicarlo cuando quiera.",
+          },
+          {
+            question: "¿Cuánto cuesta?",
+            answer:
+              "El precio comercial todavía no está definido. Durante el pilot estamos validando qué flujos de trabajo generan suficiente valor para planners y parejas.",
+          },
+        ],
+      },
+      closing: {
+        title: "Tu boda, organizada en un solo lugar.",
+        body: "Escríbenos y te contamos cómo empezar con tu boda.",
+        note: "Estamos abriendo el acceso de forma gradual.",
+        planners: "Ver para planners",
+      },
+    },
     footer: {
-      tagline: "Gestión de bodas para wedding planners.",
+      tagline: "Gestión de bodas para wedding planners y parejas.",
       product: "Producto",
       account: "Cuenta",
       contact: "Contacto",

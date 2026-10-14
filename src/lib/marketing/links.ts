@@ -15,6 +15,11 @@ function mailto(subject: string): string {
 }
 
 export const MARKETING_LINKS = {
+  HOME: "/",
+  /** MKT-2: the page for wedding planners. */
+  PLANNERS: "/planners",
+  /** MKT-3: the page for couples organizing their own wedding. */
+  COUPLES: "/parejas",
   LOGIN: "/login",
   DEMO: mailto("Solicitud de demo - listalaboda.com"),
   PILOT: mailto("Aplicación al pilot - listalaboda.com"),
@@ -23,6 +28,4 @@ export const MARKETING_LINKS = {
   /** In-page anchors of the homepage, valid from any marketing page. */
   HOW_IT_WORKS: "/#como-funciona",
   WEDDING_SITES: "/#sitios-de-boda",
-  /** MKT-2: the page for wedding planners. */
-  PLANNERS: "/planners",
 } as const;

@@ -12,7 +12,9 @@ export function MarketingFooter() {
     {
       title: marketing.footer.product,
       links: [
+        { href: MARKETING_LINKS.HOME, label: marketing.nav.home },
         { href: MARKETING_LINKS.PLANNERS, label: marketing.nav.planners },
+        { href: MARKETING_LINKS.COUPLES, label: marketing.nav.couples },
         { href: MARKETING_LINKS.HOW_IT_WORKS, label: marketing.nav.howItWorks },
         { href: MARKETING_LINKS.WEDDING_SITES, label: marketing.nav.weddingSites },
       ],
@@ -42,6 +44,18 @@ export function MarketingFooter() {
         ))}
         <div className="min-w-0 space-y-3">
           <h2 className="text-sm font-semibold">{marketing.footer.contact}</h2>
+          <ul className="space-y-2">
+            {[
+              { href: MARKETING_LINKS.DEMO, label: marketing.cta.demo },
+              { href: MARKETING_LINKS.ACCESS, label: marketing.cta.access },
+            ].map((link) => (
+              <li key={link.href}>
+                <a href={link.href} className="text-muted text-sm hover:text-foreground hover:underline">
+                  {link.label}
+                </a>
+              </li>
+            ))}
+          </ul>
           <p className="text-sm break-words">
             <a href={MARKETING_LINKS.CONTACT} className={textLinkClass}>
               {MARKETING_CONTACT_EMAIL}

@@ -7,6 +7,7 @@ import { ThemeShowcase } from "@/components/marketing/ThemeShowcase";
 import { primaryButtonClass, secondaryButtonClass } from "@/components/ui/styles";
 import { getMessages } from "@/lib/i18n";
 import { MARKETING_LINKS } from "@/lib/marketing/links";
+import { marketingMetadata } from "@/lib/marketing/metadata";
 
 import budgetMobileShot from "../../../../public/marketing/budget-mobile.webp";
 import budgetShot from "../../../../public/marketing/budget.webp";
@@ -37,11 +38,7 @@ const copy = marketing.planners;
  * whose own page background matches this page sit unframed in the
  * composition; a shadow remains only where one screen is laid over another.
  */
-export const metadata: Metadata = {
-  title: copy.metadata.title,
-  description: copy.metadata.description,
-  robots: { index: false, follow: false },
-};
+export const metadata: Metadata = marketingMetadata(copy.metadata);
 
 const TIMELINE_SHOTS = [timelinePrint1, timelinePrint2, timelinePrint3] as const;
 

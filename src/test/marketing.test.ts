@@ -28,6 +28,9 @@ const { SHOWCASE_SITE } = await import("@/lib/marketing/showcase");
 const { WEDDING_SITE_THEME_KEYS } = await import("@/lib/wedding-site/design/themes");
 // Importing the page itself proves its whole module graph stays clear of the mocks above.
 const { default: PlannersPage, metadata: plannersMetadata } = await import("@/app/(marketing)/planners/page");
+const { default: CouplesPage, metadata: couplesMetadata } = await import("@/app/(marketing)/parejas/page");
+const { metadata: homeMetadata } = await import("@/app/(marketing)/page");
+const { default: robots } = await import("@/app/robots");
 
 const render = (element: ReactElement) => renderToStaticMarkup(element);
 const hrefs = (html: string) => [...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1].replaceAll("&amp;", "&"));
@@ -36,6 +39,9 @@ const copy = getMessages();
 describe("marketing links (MKT-1)", () => {
   it("are the approved destinations, in one place", () => {
     expect(MARKETING_LINKS).toEqual({
+      HOME: "/",
+      PLANNERS: "/planners",
+      COUPLES: "/parejas",
       LOGIN: "/login",
       DEMO: "mailto:vicvalch@onchainfest.xyz?subject=Solicitud%20de%20demo%20-%20listalaboda.com",
       PILOT: "mailto:vicvalch@onchainfest.xyz?subject=Aplicaci%C3%B3n%20al%20pilot%20-%20listalaboda.com",
@@ -43,7 +49,6 @@ describe("marketing links (MKT-1)", () => {
       CONTACT: "mailto:vicvalch@onchainfest.xyz",
       HOW_IT_WORKS: "/#como-funciona",
       WEDDING_SITES: "/#sitios-de-boda",
-      PLANNERS: "/planners",
     });
     expect(MARKETING_CONTACT_EMAIL).toBe("vicvalch@onchainfest.xyz");
   });
@@ -54,7 +59,7 @@ describe("marketing links (MKT-1)", () => {
 });
 
 describe("marketing shell", () => {
-  const allowed = new Set<string>(["/", ...Object.values(MARKETING_LINKS)]);
+  const allowed = new Set<string>(Object.values(MARKETING_LINKS));
 
   it("the header links only to existing destinations, with a labelled nav and a native phone menu", () => {
     const html = render(createElement(MarketingHeader));
@@ -65,9 +70,16 @@ describe("marketing shell", () => {
     for (const href of hrefs(html)) expect(allowed.has(href), href).toBe(true);
     expect(hrefs(html)).toContain(MARKETING_LINKS.DEMO);
     expect(hrefs(html)).toContain(MARKETING_LINKS.LOGIN);
-    expect(hrefs(html)).toContain(MARKETING_LINKS.PLANNERS);
-    // The couples page doesn't exist yet (MKT-3): never a dead link.
-    expect(html).not.toMatch(/\/parejas|\/signup/);
+    // MKT-3: the brand goes home, both audience pages and how it works, in this order.
+    const links = hrefs(html);
+    expect(links[0]).toBe(MARKETING_LINKS.HOME);
+    expect(links.slice(1, 5)).toEqual([
+      MARKETING_LINKS.PLANNERS,
+      MARKETING_LINKS.COUPLES,
+      MARKETING_LINKS.HOW_IT_WORKS,
+      MARKETING_LINKS.LOGIN,
+    ]);
+    expect(html).not.toContain("/signup");
   });
 
   it("the footer links only to existing destinations and shows the contact address", () => {
@@ -75,8 +87,17 @@ describe("marketing shell", () => {
     expect(html).toMatch(/^<footer/);
     for (const href of hrefs(html)) expect(allowed.has(href), href).toBe(true);
     expect(html).toContain(`>${MARKETING_CONTACT_EMAIL}<`);
-    expect(hrefs(html)).toContain(MARKETING_LINKS.PLANNERS);
-    expect(html).not.toMatch(/\/parejas|\/signup/);
+    for (const href of [
+      MARKETING_LINKS.HOME,
+      MARKETING_LINKS.PLANNERS,
+      MARKETING_LINKS.COUPLES,
+      MARKETING_LINKS.LOGIN,
+      MARKETING_LINKS.DEMO,
+      MARKETING_LINKS.ACCESS,
+    ]) {
+      expect(hrefs(html)).toContain(href);
+    }
+    expect(html).not.toContain("/signup");
   });
 });
 
@@ -167,6 +188,10 @@ describe("/planners (MKT-2)", () => {
     expect(plannersMetadata.alternates).toBeUndefined();
   });
 
+  it("stays about planners: no link to the couples page in its own content (the shell has it)", () => {
+    expect(html).not.toContain(MARKETING_LINKS.COUPLES);
+  });
+
   it("has exactly one h1 of its own, the planner promise", () => {
     // The other h1s are the five decorative theme renders' own (aria-hidden, inert; E2E checks the accessible tree).
     expect(html.match(/data-testid="public-site"/g)).toHaveLength(5);
@@ -181,7 +206,7 @@ describe("/planners (MKT-2)", () => {
     expect(links[1]).toBe(MARKETING_LINKS.DEMO);
     const allowed = new Set<string>(Object.values(MARKETING_LINKS));
     for (const href of links) expect(allowed.has(href), href).toBe(true);
-    expect(html).not.toMatch(/\/parejas|\/signup/);
+    expect(html).not.toContain("/signup");
   });
 
   it("asks the six questions and shows the five themes", () => {
@@ -194,5 +219,97 @@ describe("/planners (MKT-2)", () => {
     const text = JSON.stringify(page);
     expect(text).not.toMatch(/procesa pagos|paga proveedores|cobra|transfiere/i);
     expect(page.money.note).toBe("listalaboda.com registra los pagos; no los procesa.");
+  });
+});
+
+describe("marketing metadata and robots (MKT-3)", () => {
+  const pages = [
+    { metadata: homeMetadata, title: "listalaboda.com · Gestión de bodas para wedding planners" },
+    { metadata: plannersMetadata, title: "Software para wedding planners · listalaboda.com" },
+    { metadata: couplesMetadata, title: "Organiza tu boda en un solo lugar · listalaboda.com" },
+  ];
+
+  it("keeps every marketing page out of search, with no canonical, base URL or image", () => {
+    for (const { metadata, title } of pages) {
+      expect(metadata.title).toBe(title);
+      expect(metadata.robots).toEqual({ index: false, follow: false });
+      expect(metadata.alternates).toBeUndefined();
+      expect(metadata.metadataBase).toBeUndefined();
+      // Open Graph is text only: an image or URL would need an absolute (and so a canonical) address.
+      expect(metadata.openGraph).toEqual({
+        title,
+        description: metadata.description,
+        siteName: "listalaboda.com",
+        locale: "es",
+        type: "website",
+      });
+    }
+    expect(JSON.stringify(pages)).not.toMatch(/vercel\.app|https?:/);
+  });
+
+  it("robots.txt keeps crawlers out of private surfaces, without a sitemap or host", () => {
+    const result = robots();
+    expect(result).toEqual({
+      rules: { userAgent: "*", allow: "/", disallow: ["/app", "/auth", "/invite", "/rsvp", "/api"] },
+    });
+    expect(result.sitemap).toBeUndefined();
+    expect(result.host).toBeUndefined();
+    // Published wedding sites keep their own noindex: crawlable, so it can be read.
+    expect(JSON.stringify(result)).not.toContain("/boda");
+  });
+});
+
+describe("/parejas (MKT-3)", () => {
+  const page = copy.marketing.couples;
+  const html = render(createElement(CouplesPage));
+
+  it("is not indexed yet and names the page for couples", () => {
+    expect(couplesMetadata.robots).toEqual({ index: false, follow: false });
+    expect(couplesMetadata.description).toBe(
+      "Organiza invitados, RSVP, tareas, mesas, presupuesto, cronograma y el sitio de tu boda desde un solo lugar.",
+    );
+  });
+
+  it("has exactly one h1 of its own, the couples promise", () => {
+    // Every other h1 belongs to a decorative site render (aria-hidden, inert): the
+    // hero's, the centerpiece's and the five in the showcase.
+    expect(html.match(/data-testid="public-site"/g)).toHaveLength(2 + 5);
+    expect(html.match(/<h1/g)).toHaveLength(1 + 2 + 5);
+    expect(html.indexOf("<h1")).toBeLessThan(html.indexOf('data-testid="public-site"'));
+    expect(html).toMatch(new RegExp(`<h1[^>]*>${page.hero.title}</h1>`));
+  });
+
+  it("leads with access, then how it works, offers the planner page, and links only to known destinations", () => {
+    const links = hrefs(html);
+    expect(links.slice(0, 3)).toEqual([MARKETING_LINKS.ACCESS, "#como-funciona", MARKETING_LINKS.PLANNERS]);
+    expect(html).toContain('id="como-funciona"');
+    const allowed = new Set<string>([...Object.values(MARKETING_LINKS), "#como-funciona"]);
+    for (const href of links) expect(allowed.has(href), href).toBe(true);
+    // The closing band: access again, and the planner page.
+    expect(links.slice(-2)).toEqual([MARKETING_LINKS.ACCESS, MARKETING_LINKS.PLANNERS]);
+    expect(html).not.toContain("/signup");
+  });
+
+  it("shows the five themes, every render decorative and inert", () => {
+    expect(html.match(/data-testid="theme-showcase-item"/g)).toHaveLength(5);
+    expect(html.match(/<div aria-hidden="true" inert=""/g)).toHaveLength(2 + 5);
+  });
+
+  it("asks the seven questions, with the approved price answer", () => {
+    expect(html.match(/<details/g)).toHaveLength(7);
+    expect(page.faq.items.at(-1)?.answer).toBe(copy.marketing.planners.faq.items.at(-1)?.answer);
+  });
+
+  it("never shows a screen twice, and never the planners' multi-wedding screens", () => {
+    const images = [...html.matchAll(/<img src="([^"]+)"/g)].map((m) => m[1]);
+    expect(new Set(images).size).toBe(images.length);
+    expect(html).not.toMatch(/mis-bodas|wedding-card/);
+  });
+
+  it("stays truthful: payments recorded, not processed; no open RSVP, automatic seating or pricing", () => {
+    const text = JSON.stringify(page);
+    expect(page.plan.note).toBe("listalaboda.com registra los pagos; no los procesa.");
+    expect(text).not.toMatch(/procesa pagos|paga proveedores|cobra|transfiere|gratis|SMS|Mis bodas|registro abierto para|acomod\w* automátic|recordatorios? automátic/i);
+    expect(text).not.toMatch(/[$₡]\s?\d|\d+\s?(USD|CRC)/);
   });
 });

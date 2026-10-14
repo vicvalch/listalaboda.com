@@ -128,6 +128,8 @@ test("captures the marketing product screenshots from the fictional fixture", as
 
   // A party with a mix of answers (two attending, one pending).
   const party = '[id^="party-"]:has(h3:text-is("Amigos de la U"))';
+  // The wedding home's checklist progress, followed by "Lo próximo".
+  const checklist = '[data-testid="checklist-progress"]';
 
   // Twice the CSS pixels, so the shots stay sharp at their displayed size.
   const context = await browser.newContext({ deviceScaleFactor: 2, colorScheme: "light" });
@@ -138,7 +140,7 @@ test("captures the marketing product screenshots from the fictional fixture", as
   const caterer = await page.getByRole("link", { name: "Sabores del Valle" }).first().getAttribute("href");
   if (!caterer) throw new Error("the fixture caterer is missing");
 
-  const shots: ReadonlyArray<{ file: string; path: string; width: number; crop: Crop; media?: "print" }> = [
+  const allShots: ReadonlyArray<{ file: string; path: string; width: number; crop: Crop; media?: "print" }> = [
     // The hero: the page title and what needs attention across weddings.
     { file: "mis-bodas.webp", path: "/app?all=1", width: 1280, crop: { kind: "element", selector: "main", maxHeight: 600 } },
     { file: "mis-bodas-mobile.webp", path: "/app?all=1", width: 390, crop: { kind: "element", selector: "main", maxHeight: 860 } },
@@ -160,7 +162,16 @@ test("captures the marketing product screenshots from the fictional fixture", as
     { file: "timeline-print-1.webp", path: `${wedding}/timeline`, width: 390, media: "print", crop: { kind: "entries", from: 0, to: 3 } },
     { file: "timeline-print-2.webp", path: `${wedding}/timeline`, width: 390, media: "print", crop: { kind: "entries", from: 3, to: 6 } },
     { file: "timeline-print-3.webp", path: `${wedding}/timeline`, width: 390, media: "print", crop: { kind: "entries", from: 6, to: 9 } },
+    // The wedding's home (MKT-3): the checklist's progress and "Lo próximo".
+    { file: "checklist.webp", path: wedding, width: 1280, crop: { kind: "from", selector: checklist, height: 410 } },
+    { file: "checklist-mobile.webp", path: wedding, width: 390, crop: { kind: "from", selector: checklist, height: 482 } },
   ];
+  // `MARKETING_CAPTURE_ONLY=checklist,guests` re-captures only the files whose
+  // names start with those words: a WebP re-encode never matches the approved
+  // bytes, so untouched shots are left alone.
+  const only = (process.env.MARKETING_CAPTURE_ONLY ?? "").split(",").map((word) => word.trim()).filter(Boolean);
+  const shots = only.length ? allShots.filter((shot) => only.some((word) => shot.file.startsWith(word))) : allShots;
+  if (shots.length === 0) throw new Error(`MARKETING_CAPTURE_ONLY matches no shot: ${only.join(", ")}`);
 
   for (const shot of shots) {
     await page.emulateMedia({ media: shot.media ?? "screen" });

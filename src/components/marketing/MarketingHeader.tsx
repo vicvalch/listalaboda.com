@@ -8,24 +8,23 @@ import { MARKETING_LINKS } from "@/lib/marketing/links";
 const navLinkClass = "rounded-md px-1 py-2 text-sm font-semibold hover:text-accent";
 
 /**
- * The marketing header (Marketing Landing V1): the brand, the page's
- * sections, login and the primary call to action. Phones get a native
- * `<details>` menu (no client JavaScript), and so does any screen narrower
- * than `lg`, where five entries no longer fit in a row. Only destinations
- * that exist are linked: the couples page arrives with its own checkpoint.
+ * The marketing header (Marketing Landing V1): the brand (home), the two
+ * audience pages, how it works, login and the primary call to action. Phones
+ * get a native `<details>` menu (no client JavaScript), and so does any
+ * screen narrower than `lg`, where five entries no longer fit in a row.
  */
 export function MarketingHeader() {
   const { marketing } = getMessages();
   const links = [
     { href: MARKETING_LINKS.PLANNERS, label: marketing.nav.planners },
+    { href: MARKETING_LINKS.COUPLES, label: marketing.nav.couples },
     { href: MARKETING_LINKS.HOW_IT_WORKS, label: marketing.nav.howItWorks },
-    { href: MARKETING_LINKS.WEDDING_SITES, label: marketing.nav.weddingSites },
     { href: MARKETING_LINKS.LOGIN, label: marketing.nav.login },
   ];
   return (
     <header className="relative border-b border-border/70">
       <div className={`${containerClass} flex min-h-16 items-center justify-between gap-6`}>
-        <Link href="/" className="py-2 text-lg font-semibold tracking-tight">
+        <Link href={MARKETING_LINKS.HOME} className="py-2 text-lg font-semibold tracking-tight">
           {marketing.brand}
         </Link>
         <nav aria-label={marketing.nav.label}>

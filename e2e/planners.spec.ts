@@ -36,15 +36,17 @@ test.describe("marketing /planners", () => {
       await expect(link).toHaveAttribute("href", MARKETING_LINKS.PILOT);
     }
 
-    // Header and footer point at /planners.
-    await expect(page.getByRole("banner").getByRole("link", { name: copy.nav.planners })).toHaveAttribute("href", "/planners");
-    await expect(page.getByRole("contentinfo").getByRole("link", { name: copy.nav.planners })).toHaveAttribute("href", "/planners");
+    // Header and footer point at both audience pages; the couples page only from there (MKT-3).
+    for (const region of [page.getByRole("banner"), page.getByRole("contentinfo")]) {
+      await expect(region.getByRole("link", { name: copy.nav.planners })).toHaveAttribute("href", MARKETING_LINKS.PLANNERS);
+      await expect(region.getByRole("link", { name: copy.nav.couples })).toHaveAttribute("href", MARKETING_LINKS.COUPLES);
+    }
+    await expect(page.locator(`main a[href="${MARKETING_LINKS.COUPLES}"]`)).toHaveCount(0);
 
-    // Every link is a known destination: no /parejas (MKT-3) or self-signup yet.
+    // Every link is a known destination: never self-signup.
     const hrefs = await page.locator("a[href]").evaluateAll((anchors) => anchors.map((a) => a.getAttribute("href") ?? ""));
     const known = new Set<string>(["/", "#contenido", ...Object.values(MARKETING_LINKS)]);
     expect(hrefs.filter((href) => !known.has(href))).toEqual([]);
-    expect(hrefs.some((href) => href.includes("/parejas"))).toBe(false);
 
     // The five themes, named in text; renders hidden from assistive technology.
     const showcase = page.getByTestId("theme-showcase");

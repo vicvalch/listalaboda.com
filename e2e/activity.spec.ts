@@ -114,7 +114,7 @@ test.describe("wedding activity history", () => {
     page,
     browser,
   }) => {
-    await logIn(page, await createAccount("lb15-owner"));
+    await logIn(page, await createAccount("lb15-owner", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Actividad", "2090-06-01");
 
     // Reachable from the wedding's home; empty until something happens.
@@ -205,7 +205,7 @@ test.describe("wedding activity history", () => {
     page,
     browser,
   }) => {
-    await logIn(page, await createAccount("lb15-tenant-owner"));
+    await logIn(page, await createAccount("lb15-tenant-owner", "couple"));
     const weddingA = await createWedding(page, "Boda de prueba Actividad A");
     await openGuests(page, weddingA);
     await createParty(page, "Familia Privada", ["Nora Privada"], address("privada"));
@@ -214,7 +214,7 @@ test.describe("wedding activity history", () => {
     await page.goto(`/app/weddings/${weddingA}`);
     const invite = await createInvite(page, "collaborator");
     const collab = await freshPage(browser);
-    await logIn(collab.page, await createAccount("lb15-tenant-collab"));
+    await logIn(collab.page, await createAccount("lb15-tenant-collab", "planner"));
     await collab.page.goto(invite);
     await collab.page.getByRole("button", { name: es.inviteAccept.submit }).click();
     await expect(collab.page).toHaveURL(new RegExp(`/app/weddings/${weddingA}\\?joined=new$`));
@@ -225,7 +225,7 @@ test.describe("wedding activity history", () => {
 
     // Another wedding's owner: the same 404 as a missing wedding, nothing shown.
     const other = await freshPage(browser);
-    await logIn(other.page, await createAccount("lb15-tenant-other"));
+    await logIn(other.page, await createAccount("lb15-tenant-other", "couple"));
     await createWedding(other.page, "Boda de prueba Actividad B");
     const denied = await other.page.goto(`/app/weddings/${weddingA}/activity`);
     expect(denied?.status()).toBe(404);

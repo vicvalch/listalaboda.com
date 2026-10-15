@@ -112,7 +112,7 @@ test.describe("guest list and RSVP", () => {
     browser,
   }) => {
     // A: the organizer creates "Familia Pérez" with two guests.
-    await logIn(page, await createAccount("lb9-owner"));
+    await logIn(page, await createAccount("lb9-owner", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Invitados", "2090-06-01");
     await page.getByRole("link", { name: guests.navLink }).click();
     await expect(page).toHaveURL(new RegExp(`/app/weddings/${weddingId}/guests$`));
@@ -238,7 +238,7 @@ test.describe("guest list and RSVP", () => {
   });
 
   test("F–G: revoke, then a new link; guests and answers survive both", async ({ page, browser }) => {
-    await logIn(page, await createAccount("lb9-links"));
+    await logIn(page, await createAccount("lb9-links", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Enlaces", "2090-06-01");
     await openGuests(page, weddingId);
     const link = await createParty(page, "Ana y Carlos", ["Ana", "Carlos"]);
@@ -291,7 +291,7 @@ test.describe("guest list and RSVP", () => {
   });
 
   test("party management: add, rename, remove (with answer warning), delete", async ({ page, browser }) => {
-    await logIn(page, await createAccount("lb9-manage"));
+    await logIn(page, await createAccount("lb9-manage", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Grupos", "2090-06-01");
     await openGuests(page, weddingId);
 
@@ -362,7 +362,7 @@ test.describe("guest list and RSVP", () => {
     browser,
   }) => {
     const ownerB = await freshPage(browser);
-    await logIn(ownerB.page, await createAccount("lb9-wedding-b"));
+    await logIn(ownerB.page, await createAccount("lb9-wedding-b", "couple"));
     const weddingB = await createWedding(ownerB.page, "Boda de prueba B", "2090-06-01");
     await openGuests(ownerB.page, weddingB);
     const linkB = await createParty(ownerB.page, "Grupo B", ["Beto"]);
@@ -372,7 +372,7 @@ test.describe("guest list and RSVP", () => {
       .inputValue();
 
     const ownerA = await freshPage(browser);
-    await logIn(ownerA.page, await createAccount("lb9-wedding-a"));
+    await logIn(ownerA.page, await createAccount("lb9-wedding-a", "couple"));
     const weddingA = await createWedding(ownerA.page, "Boda de prueba A", "2090-06-01");
 
     // Not a member of B: its guest list is the same 404 as a missing wedding.
@@ -408,12 +408,12 @@ test.describe("guest list and RSVP", () => {
     browser,
   }) => {
     const owner = await freshPage(browser);
-    await logIn(owner.page, await createAccount("lb9-collab-owner"));
+    await logIn(owner.page, await createAccount("lb9-collab-owner", "planner"));
     const weddingId = await createWedding(owner.page, "Boda de prueba Colabora", "2090-06-01");
     const inviteUrl = await createInvite(owner.page, "collaborator");
 
     const collab = await freshPage(browser);
-    await logIn(collab.page, await createAccount("lb9-collab"));
+    await logIn(collab.page, await createAccount("lb9-collab", "planner"));
     await collab.page.goto(inviteUrl);
     await collab.page.getByRole("button", { name: es.inviteAccept.submit }).click();
     await expect(collab.page).toHaveURL(new RegExp(`/app/weddings/${weddingId}\\?joined=new$`));
@@ -467,7 +467,7 @@ test.describe("guest list and RSVP", () => {
   });
 
   test("J: guest list and RSVP page fit a phone screen (360 and 390 px)", async ({ page, browser }) => {
-    await logIn(page, await createAccount("lb9-phone"));
+    await logIn(page, await createAccount("lb9-phone", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Teléfono", "2090-06-01");
     await openGuests(page, weddingId);
     const names = [

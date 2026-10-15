@@ -248,7 +248,7 @@ async function seedMainWedding(ownerId: string): Promise<string> {
 
 /** Creates the fictional planner, the main wedding and two more for "Mis bodas". */
 export async function seedMarketingFixture(): Promise<MarketingFixture> {
-  const { email, id: ownerId } = await createAccountWithId("marketing-planner");
+  const { email, id: ownerId } = await createAccountWithId("marketing-planner", "planner");
   const mainWeddingId = await seedMainWedding(ownerId);
   await seedWedding({
     name: "Laura y Martín",

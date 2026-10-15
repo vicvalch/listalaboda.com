@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { containerClass, cx } from "@/components/marketing/classes";
 import { CtaBand } from "@/components/marketing/CtaBand";
 import { FaqList } from "@/components/marketing/FaqList";
+import { HowItWorks } from "@/components/marketing/HowItWorks";
 import { LifestylePhoto } from "@/components/marketing/LifestylePhoto";
 import { ProductShot } from "@/components/marketing/ProductShot";
 import { SiteRender } from "@/components/marketing/SiteRender";
@@ -81,7 +82,7 @@ export default function CouplesPage() {
                 <a href={MARKETING_LINKS.ACCESS} className={primaryButtonClass}>
                   {marketing.cta.access}
                 </a>
-                <a href="#como-funciona" className={secondaryButtonClass}>
+                <a href={MARKETING_LINKS.HOW_IT_WORKS} className={secondaryButtonClass}>
                   {marketing.cta.howItWorks}
                 </a>
               </div>
@@ -116,12 +117,15 @@ export default function CouplesPage() {
         </section>
       </div>
 
+      {/* How it works (ACCOUNT-01): both account paths, the couple's first. */}
+      <HowItWorks first="couple" />
+
       {/* 2. What's next: the wedding's home, calm and centered on a tinted band. */}
-      <section id="como-funciona" aria-labelledby="como-funciona-titulo" className="scroll-mt-20 border-t border-border bg-surface">
+      <section id="lo-proximo" aria-labelledby="lo-proximo-titulo" className="scroll-mt-20 border-t border-border bg-surface">
         <div className={cx(containerClass, "py-14 sm:py-20")}>
           <div className="mx-auto max-w-3xl space-y-5 text-center">
             <p className={eyebrowClass}>{copy.checklist.eyebrow}</p>
-            <h2 id="como-funciona-titulo" className={h2Class}>
+            <h2 id="lo-proximo-titulo" className={h2Class}>
               {copy.checklist.title}
             </h2>
             <p className={cx(bodyClass, "mx-auto")}>{copy.checklist.body}</p>

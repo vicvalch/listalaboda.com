@@ -12,7 +12,8 @@ import {
 // LB-24A (ADR-017): /app adapts to the user's own memberships. 0 → empty
 // state, 1 → straight into that wedding, 2+ → "Mis bodas". The header's
 // "Mis bodas" (`/app?all=1`) always shows the list; the URL stays the only
-// wedding selector.
+// wedding selector. ACCOUNT-01 (ADR-020): this is the PLANNER entry, so every
+// account here is a planner; the couple entry is in account-type.spec.ts.
 
 const copy = es.app.weddings;
 const WEDDING_URL = (id: string) => new RegExp(`/app/weddings/${id}$`);
@@ -58,7 +59,7 @@ test.describe("account entry (/app)", () => {
   test("zero weddings: neutral empty state with create CTA and invitation hint, no redirect", async ({
     page,
   }) => {
-    await logIn(page, await createAccount("entry-zero"));
+    await logIn(page, await createAccount("entry-zero", "planner"));
     await expect(page).toHaveURL(/\/app$/);
     await expect(page.getByRole("heading", { name: copy.emptyTitle })).toBeVisible();
     await expect(page.getByText(copy.emptyBody)).toBeVisible();
@@ -78,7 +79,7 @@ test.describe("account entry (/app)", () => {
   test("one wedding: /app opens it once; Mis bodas lists it; Crear boda stays available", async ({
     page,
   }) => {
-    const email = await createAccount("entry-one");
+    const email = await createAccount("entry-one", "planner");
     await logIn(page, email);
     const weddingId = await createWedding(page, "Boda única", "2027-06-12");
 
@@ -123,12 +124,12 @@ test.describe("account entry (/app)", () => {
     browser,
   }) => {
     const owner = await freshPage(browser);
-    await logIn(owner.page, await createAccount("entry-collab-owner"));
+    await logIn(owner.page, await createAccount("entry-collab-owner", "planner"));
     const weddingId = await createWedding(owner.page, "Boda de otra persona");
     const inviteUrl = await createInvite(owner.page, "collaborator");
 
     const collab = await freshPage(browser);
-    await logIn(collab.page, await createAccount("entry-collab"));
+    await logIn(collab.page, await createAccount("entry-collab", "planner"));
     await expect(collab.page).toHaveURL(/\/app$/);
     // Invite acceptance lands on the wedding with its feedback, not via /app.
     await acceptInvite(collab.page, inviteUrl, weddingId);
@@ -146,13 +147,13 @@ test.describe("account entry (/app)", () => {
     browser,
   }) => {
     const other = await freshPage(browser);
-    await logIn(other.page, await createAccount("entry-multi-other"));
+    await logIn(other.page, await createAccount("entry-multi-other", "planner"));
     const b = await createWedding(other.page, "Boda B de un cliente", "2027-03-02");
     const inviteB = await createInvite(other.page, "collaborator");
     const foreign = await createWeddingWithCity(other.page, "Boda ajena", "2027-01-01", "Cartago");
 
     const me = await freshPage(browser);
-    await logIn(me.page, await createAccount("entry-multi"));
+    await logIn(me.page, await createAccount("entry-multi", "planner"));
     const a = await createWeddingWithCity(me.page, "Boda A", "2027-08-14", "Escazú");
     const c = await createWedding(me.page, "Boda C sin fecha");
     await acceptInvite(me.page, inviteB, b);
@@ -211,7 +212,7 @@ test.describe("account entry on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
   test("empty state and wedding cards fit 390 px; the header stays usable", async ({ page }) => {
-    await logIn(page, await createAccount("entry-mobile"));
+    await logIn(page, await createAccount("entry-mobile", "planner"));
     await expect(page.getByRole("heading", { name: copy.emptyTitle })).toBeVisible();
     await expect(page.getByText(copy.emptyInviteHint)).toBeVisible();
     await expectNoHorizontalOverflow(page);

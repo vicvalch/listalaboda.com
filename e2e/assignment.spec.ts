@@ -52,13 +52,13 @@ function rowTitles(page: Page) {
 /** Owner + collaborator in one wedding; the collaborator joined through a real invite. */
 async function sharedWedding(browser: Browser, label: string) {
   const owner = await freshPage(browser);
-  await logIn(owner.page, await createAccount(`${label}-owner`));
+  await logIn(owner.page, await createAccount(`${label}-owner`, "couple"));
   const weddingId = await createWedding(owner.page, `Boda ${label}`, "2027-08-14");
   await initializeChecklist(owner.page);
   const inviteUrl = await createInvite(owner.page, "collaborator");
 
   const collab = await freshPage(browser);
-  await logIn(collab.page, await createAccount(`${label}-collab`));
+  await logIn(collab.page, await createAccount(`${label}-collab`, "planner"));
   await collab.page.goto(inviteUrl);
   await collab.page.getByRole("button", { name: es.inviteAccept.submit }).click();
   await expect(collab.page).toHaveURL(new RegExp(`/app/weddings/${weddingId}\\?joined=new$`));
@@ -76,7 +76,7 @@ test.describe("checklist assignment", () => {
   test("AA: owner assigns an item to themselves; it persists and shows in Mis pendientes", async ({
     page,
   }) => {
-    await logIn(page, await createAccount("as-self"));
+    await logIn(page, await createAccount("as-self", "couple"));
     const weddingId = await createWedding(page, "Boda con responsable", "2027-08-14");
     await initializeChecklist(page);
 
@@ -101,7 +101,7 @@ test.describe("checklist assignment", () => {
   });
 
   test("AB: status and assignment are independent (done, reopen, no aplica)", async ({ page }) => {
-    await logIn(page, await createAccount("as-status"));
+    await logIn(page, await createAccount("as-status", "couple"));
     const weddingId = await createWedding(page, "Boda independiente", "2027-08-14");
     await initializeChecklist(page);
     await assignTo(page, BUDGET, es.members.you);
@@ -261,7 +261,7 @@ test.describe("checklist assignment", () => {
     await assignTo(owner.page, BUDGET, es.members.you);
 
     const outsider = await freshPage(browser);
-    await logIn(outsider.page, await createAccount("as-outsider-x"));
+    await logIn(outsider.page, await createAccount("as-outsider-x", "couple"));
     const response = await outsider.page.goto(`${base}?view=mine`);
     expect(response?.status()).toBe(404);
     await expect(outsider.page.getByText(BUDGET)).toHaveCount(0);

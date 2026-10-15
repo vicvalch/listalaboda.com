@@ -8,8 +8,9 @@ import { MARKETING_LINKS } from "@/lib/marketing/links";
 const navLinkClass = "rounded-md px-1 py-2 text-sm font-semibold hover:text-accent";
 
 /**
- * The marketing header (Marketing Landing V1): the brand (home), the two
- * audience pages, how it works, login and the primary call to action. Phones
+ * The marketing header (Marketing Landing V1, ACCOUNT-01): the brand (the
+ * planner page), the two audience pages, how it works (on the current page),
+ * login and the primary call to action. Phones
  * get a native `<details>` menu (no client JavaScript), and so does any
  * screen narrower than `lg`, where five entries no longer fit in a row.
  */
@@ -24,7 +25,7 @@ export function MarketingHeader() {
   return (
     <header className="relative border-b border-border/70">
       <div className={`${containerClass} flex min-h-16 items-center justify-between gap-6`}>
-        <Link href={MARKETING_LINKS.HOME} className="py-2 text-lg font-semibold tracking-tight">
+        <Link href={MARKETING_LINKS.PLANNERS} className="py-2 text-lg font-semibold tracking-tight">
           {marketing.brand}
         </Link>
         <nav aria-label={marketing.nav.label}>

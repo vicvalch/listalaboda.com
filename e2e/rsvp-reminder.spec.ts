@@ -163,11 +163,11 @@ async function expectNoTokenOnPage(page: Page, weddingId: string, token: string)
 }
 
 async function ownerAndCollaborator(browser: Browser, page: Page, label: string) {
-  await logIn(page, await createAccount(`${label}-owner`));
+  await logIn(page, await createAccount(`${label}-owner`, "couple"));
   const weddingId = await createWedding(page, `Boda de prueba ${label}`, "2090-06-01");
   const inviteUrl = await createInvite(page, "collaborator");
   const collab = await freshPage(browser);
-  await logIn(collab.page, await createAccount(`${label}-collab`));
+  await logIn(collab.page, await createAccount(`${label}-collab`, "planner"));
   await collab.page.goto(inviteUrl);
   await collab.page.getByRole("button", { name: es.inviteAccept.submit }).click();
   await expect(collab.page).toHaveURL(new RegExp(`/app/weddings/${weddingId}\\?joined=new$`));
@@ -179,7 +179,7 @@ test.describe("manual RSVP reminders", () => {
     page,
     browser,
   }) => {
-    await logIn(page, await createAccount("lb14-email"));
+    await logIn(page, await createAccount("lb14-email", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Recordatorio", "2090-06-01");
     await openGuests(page, weddingId);
     const recipient = address("familia");
@@ -250,7 +250,7 @@ test.describe("manual RSVP reminders", () => {
     browser,
   }) => {
     await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-    await logIn(page, await createAccount("lb14-whatsapp"));
+    await logIn(page, await createAccount("lb14-whatsapp", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba WhatsApp", "2090-06-01");
     await openGuests(page, weddingId);
     const original = await createParty(page, "Familia Mensaje", ["Marta Mensaje", "Pablo Mensaje"]);
@@ -353,7 +353,7 @@ test.describe("manual RSVP reminders", () => {
     page,
     browser,
   }) => {
-    await logIn(page, await createAccount("lb14-rotated"));
+    await logIn(page, await createAccount("lb14-rotated", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Rotado", "2090-06-01");
     await openGuests(page, weddingId);
     const recipient = address("rotado");
@@ -378,7 +378,7 @@ test.describe("manual RSVP reminders", () => {
   });
 
   test("G: the RSVP confirmation still carries no /rsvp/ link; the reminder does", async ({ page, browser }) => {
-    await logIn(page, await createAccount("lb14-confirm"));
+    await logIn(page, await createAccount("lb14-confirm", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Distinción", "2090-06-01");
     await openGuests(page, weddingId);
     const recipient = address("distincion");
@@ -413,7 +413,7 @@ test.describe("manual RSVP reminders", () => {
   });
 
   test("H: the provider rejects — a calm error, no status, the link untouched and working", async ({ page, browser }) => {
-    await logIn(page, await createAccount("lb14-fail"));
+    await logIn(page, await createAccount("lb14-fail", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Falla", "2090-06-01");
     await openGuests(page, weddingId);
     const recipient = address("rechazo", REJECTING_DOMAIN);
@@ -436,7 +436,7 @@ test.describe("manual RSVP reminders", () => {
   });
 
   test("an inactive (revoked) link offers no reminder at all", async ({ page }) => {
-    await logIn(page, await createAccount("lb14-revoked"));
+    await logIn(page, await createAccount("lb14-revoked", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Revocada", "2090-06-01");
     await openGuests(page, weddingId);
     await createParty(page, "Familia Revocada", ["Nora"], address("revocada"));

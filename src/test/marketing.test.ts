@@ -19,6 +19,7 @@ vi.mock("next/headers", () => {
 });
 
 const { FaqList } = await import("@/components/marketing/FaqList");
+const { HowItWorks } = await import("@/components/marketing/HowItWorks");
 const { MarketingFooter } = await import("@/components/marketing/MarketingFooter");
 const { MarketingHeader } = await import("@/components/marketing/MarketingHeader");
 const { ThemeShowcase } = await import("@/components/marketing/ThemeShowcase");
@@ -29,7 +30,7 @@ const { WEDDING_SITE_THEME_KEYS } = await import("@/lib/wedding-site/design/them
 // Importing the page itself proves its whole module graph stays clear of the mocks above.
 const { default: PlannersPage, metadata: plannersMetadata } = await import("@/app/(marketing)/planners/page");
 const { default: CouplesPage, metadata: couplesMetadata } = await import("@/app/(marketing)/parejas/page");
-const { default: HomePage, metadata: homeMetadata } = await import("@/app/(marketing)/page");
+const { default: nextConfig } = await import("../../next.config");
 const { default: robots } = await import("@/app/robots");
 
 const render = (element: ReactElement) => renderToStaticMarkup(element);
@@ -39,7 +40,6 @@ const copy = getMessages();
 describe("marketing links (MKT-1)", () => {
   it("are the approved destinations, in one place", () => {
     expect(MARKETING_LINKS).toEqual({
-      HOME: "/",
       PLANNERS: "/planners",
       COUPLES: "/parejas",
       LOGIN: "/login",
@@ -47,8 +47,8 @@ describe("marketing links (MKT-1)", () => {
       PILOT: "mailto:vicvalch@onchainfest.xyz?subject=Aplicaci%C3%B3n%20al%20pilot%20-%20listalaboda.com",
       ACCESS: "mailto:vicvalch@onchainfest.xyz?subject=Solicitud%20de%20acceso%20-%20listalaboda.com",
       CONTACT: "mailto:vicvalch@onchainfest.xyz",
-      HOW_IT_WORKS: "/#como-funciona",
-      WEDDING_SITES: "/#sitios-de-boda",
+      // ACCOUNT-01: the section of the current page; both landings have it.
+      HOW_IT_WORKS: "#como-funciona",
     });
     expect(MARKETING_CONTACT_EMAIL).toBe("vicvalch@onchainfest.xyz");
   });
@@ -70,9 +70,10 @@ describe("marketing shell", () => {
     for (const href of hrefs(html)) expect(allowed.has(href), href).toBe(true);
     expect(hrefs(html)).toContain(MARKETING_LINKS.DEMO);
     expect(hrefs(html)).toContain(MARKETING_LINKS.LOGIN);
-    // MKT-3: the brand goes home, both audience pages and how it works, in this order.
+    // ACCOUNT-01: the brand opens the planner page; then exactly the two audience
+    // pages, how it works and login, in this order (no third, generic landing).
     const links = hrefs(html);
-    expect(links[0]).toBe(MARKETING_LINKS.HOME);
+    expect(links[0]).toBe(MARKETING_LINKS.PLANNERS);
     expect(links.slice(1, 5)).toEqual([
       MARKETING_LINKS.PLANNERS,
       MARKETING_LINKS.COUPLES,
@@ -87,8 +88,8 @@ describe("marketing shell", () => {
     expect(html).toMatch(/^<footer/);
     for (const href of hrefs(html)) expect(allowed.has(href), href).toBe(true);
     expect(html).toContain(`>${MARKETING_CONTACT_EMAIL}<`);
+    expect(hrefs(html)).not.toContain("/");
     for (const href of [
-      MARKETING_LINKS.HOME,
       MARKETING_LINKS.PLANNERS,
       MARKETING_LINKS.COUPLES,
       MARKETING_LINKS.LOGIN,
@@ -152,46 +153,63 @@ describe("FaqList (MKT-2)", () => {
   });
 });
 
-describe("/ (MKT-1, recomposed in MKT-4A)", () => {
-  const page = copy.marketing.home;
-  const html = render(createElement(HomePage));
-  // Unit tests don't resolve static image imports; each screen is told apart by its alt text.
-  // Wedding photographs (MKT-5, `data-lifestyle`) are not screens.
-  const imageAlts = [...html.matchAll(/<img [^>]*>/g)]
-    .map((m) => m[0])
-    .filter((tag) => !tag.includes("data-lifestyle"))
-    .map((tag) => /alt="([^"]+)"/.exec(tag)?.[1]);
-
-  it("has exactly one h1 of its own, the planner promise", () => {
-    // The other h1s are the five decorative theme renders' own (aria-hidden, inert).
-    expect(html.match(/data-testid="public-site"/g)).toHaveLength(5);
-    expect(html.match(/<h1/g)).toHaveLength(1 + 5);
-    expect(html).toMatch(new RegExp(`<h1[^>]*>${page.hero.title}</h1>`));
+describe("/ (ACCOUNT-01)", () => {
+  it("redirects to /planners on the server, temporarily (no generic homepage)", async () => {
+    const redirects = await nextConfig.redirects?.();
+    expect(redirects).toEqual([{ source: "/", destination: "/planners", permanent: false }]);
+    expect(existsSync("src/app/(marketing)/page.tsx")).toBe(false);
   });
 
-  it("leads with the demo, then how it works, and links only to known destinations", () => {
-    const links = hrefs(html);
-    expect(links.slice(0, 3)).toEqual([MARKETING_LINKS.DEMO, MARKETING_LINKS.HOW_IT_WORKS, MARKETING_LINKS.COUPLES]);
-    const allowed = new Set<string>(Object.values(MARKETING_LINKS));
-    for (const href of links) expect(allowed.has(href), href).toBe(true);
-    expect(html).not.toContain("/signup");
+  it("removes the homepage-only screens and copy", () => {
+    expect(existsSync("public/marketing/wedding-card-mobile.webp")).toBe(false);
+    expect(existsSync("public/marketing/timeline.webp")).toBe(false);
+    expect("home" in copy.marketing).toBe(false);
+    // Still used by /planners and /parejas.
+    for (const file of ["mis-bodas.webp", "wedding-card.webp", "timeline-mobile.webp", "lifestyle/tablescape-candles.webp"]) {
+      expect(existsSync(`public/marketing/${file}`), file).toBe(true);
+    }
   });
+});
 
-  it("is a short overview: seven sections, each real screen shown once", () => {
-    expect(html.match(/<section id="[^"]+" aria-labelledby="[^"]+-titulo"/g)).toHaveLength(7);
-    expect(imageAlts).toHaveLength(6);
-    expect(new Set(imageAlts).size).toBe(imageAlts.length);
-  });
+describe("Cómo funciona (ACCOUNT-01)", () => {
+  const steps = (html: string, audience: string) => {
+    const start = html.indexOf(`data-audience="${audience}"`);
+    const block = html.slice(start, html.indexOf("</ol>", start));
+    return [...block.matchAll(/<span class="text-lg[^"]*">([^<]+)<\/span>/g)].map((m) => m[1]);
+  };
+  const audiences = (html: string) => [...html.matchAll(/data-audience="(\w+)"/g)].map((m) => m[1]);
 
-  it("tells how it works in three ordered steps, not cards", () => {
-    const steps = html.slice(html.indexOf('id="como-funciona"'));
-    expect(steps.match(/<li /g)?.length).toBeGreaterThanOrEqual(3);
-    expect(page.howItWorks.steps.map((step) => step.title)).toEqual([
-      "Crea la boda",
-      "Invita a quienes colaboran",
-      "Trabaja desde un solo lugar",
+  it("one shared section explains both account paths, four steps each", () => {
+    const html = render(createElement(HowItWorks, { first: "planner" }));
+    expect(html).toMatch(/^<section id="como-funciona" aria-labelledby="como-funciona-titulo"/);
+    expect(steps(html, "planner")).toEqual([
+      "Crea y administra las bodas de tus clientes.",
+      "Controla invitados, mesas, presupuesto, proveedores y cronograma.",
+      "Detecta qué necesita atención entre todas tus bodas.",
+      "Comparte la experiencia con cada pareja.",
     ]);
-    expect(html).toContain(page.closing.title);
+    expect(steps(html, "couple")).toEqual([
+      "Crea tu boda.",
+      "Organiza invitados, mesas, presupuesto y proveedores.",
+      "Publica el sitio de tu boda.",
+      "Llega al gran día con todo bajo control.",
+    ]);
+    expect(html.match(/<ol/g)).toHaveLength(2);
+    expect(html).not.toMatch(/href=|<button|<script/);
+  });
+
+  it("each landing shows it once, its own audience first", () => {
+    const planners = render(createElement(PlannersPage));
+    const couples = render(createElement(CouplesPage));
+    expect(planners.match(/id="como-funciona"/g)).toHaveLength(1);
+    expect(couples.match(/id="como-funciona"/g)).toHaveLength(1);
+    expect(audiences(planners)).toEqual(["planner", "couple"]);
+    expect(audiences(couples)).toEqual(["couple", "planner"]);
+  });
+
+  it("never uses technical account vocabulary", () => {
+    const text = JSON.stringify(copy.marketing.howItWorks);
+    expect(text).not.toMatch(/\b(account_type|tenant|rol|role|workspace|portfolio)\b/i);
   });
 });
 
@@ -240,12 +258,11 @@ describe("/planners (MKT-2)", () => {
 });
 
 describe("wedding photography (MKT-5)", () => {
-  const pages = { home: render(createElement(HomePage)), planners: render(createElement(PlannersPage)), couples: render(createElement(CouplesPage)) };
+  const pages = { planners: render(createElement(PlannersPage)), couples: render(createElement(CouplesPage)) };
   const photos = (html: string) => [...html.matchAll(/<img [^>]*data-lifestyle=""[^>]*>/g)].map((m) => m[0]);
   const alt = (tag: string) => /alt="([^"]*)"/.exec(tag)?.[1];
 
-  it("stays restrained: three photos on the home page, one for planners, four for couples", () => {
-    expect(photos(pages.home)).toHaveLength(3);
+  it("stays restrained: one photo for planners, four for couples", () => {
     expect(photos(pages.planners)).toHaveLength(1);
     expect(photos(pages.couples)).toHaveLength(4);
   });
@@ -269,7 +286,6 @@ describe("wedding photography (MKT-5)", () => {
     expect(existsSync("public/marketing/lifestyle/product-context.webp")).toBe(false);
     for (const html of Object.values(pages)) expect(html).not.toContain("product-context");
     for (const [html, ids] of [
-      [pages.home, ["invitados-y-mesas", "presupuesto-y-cronograma"]],
       [pages.planners, ["invitados-y-mesas", "presupuesto", "cronograma"]],
       [pages.couples, ["invitados", "presupuesto"]],
     ] as const) {
@@ -285,7 +301,6 @@ describe("wedding photography (MKT-5)", () => {
 
 describe("marketing metadata and robots (MKT-3)", () => {
   const pages = [
-    { metadata: homeMetadata, title: "listalaboda.com · Gestión de bodas para wedding planners" },
     { metadata: plannersMetadata, title: "Software para wedding planners · listalaboda.com" },
     { metadata: couplesMetadata, title: "Organiza tu boda en un solo lugar · listalaboda.com" },
   ];
@@ -342,9 +357,9 @@ describe("/parejas (MKT-3)", () => {
 
   it("leads with access, then how it works, offers the planner page, and links only to known destinations", () => {
     const links = hrefs(html);
-    expect(links.slice(0, 3)).toEqual([MARKETING_LINKS.ACCESS, "#como-funciona", MARKETING_LINKS.PLANNERS]);
+    expect(links.slice(0, 3)).toEqual([MARKETING_LINKS.ACCESS, MARKETING_LINKS.HOW_IT_WORKS, MARKETING_LINKS.PLANNERS]);
     expect(html).toContain('id="como-funciona"');
-    const allowed = new Set<string>([...Object.values(MARKETING_LINKS), "#como-funciona"]);
+    const allowed = new Set<string>(Object.values(MARKETING_LINKS));
     for (const href of links) expect(allowed.has(href), href).toBe(true);
     // The closing band: access again, and the planner page.
     expect(links.slice(-2)).toEqual([MARKETING_LINKS.ACCESS, MARKETING_LINKS.PLANNERS]);

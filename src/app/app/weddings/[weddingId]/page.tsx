@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { Notice } from "@/components/ui/Notice";
 import { cardClass, textLinkClass } from "@/components/ui/styles";
+import { getCurrentAccountType } from "@/lib/accounts/session";
 import { loginPath } from "@/lib/auth/redirect";
 import { requireUser } from "@/lib/auth/session";
 import { requireWeddingMembership } from "@/lib/authz/wedding";
@@ -41,7 +42,7 @@ export default async function WeddingPage({
 }: PageProps<"/app/weddings/[weddingId]">) {
   const { weddingId } = await params;
   const selfPath = `/app/weddings/${encodeURIComponent(weddingId)}`;
-  await requireUser(selfPath);
+  const user = await requireUser(selfPath);
 
   const supabase = await createSupabaseServerClient();
   const access = await requireWeddingMembership(supabase, weddingId);
@@ -54,6 +55,10 @@ export default async function WeddingPage({
   if (!wedding) notFound();
 
   const isOwner = access.access.role === "owner";
+  // Presentation only (ADR-020): a couple's account has no "Mis bodas" list
+  // to go back to. Never an access decision; the /app layout already sent an
+  // untyped account to the one-time choice.
+  const isCouple = (await getCurrentAccountType(user.id)) === "couple";
   // Loaded once per page (no per-item lookups), only after the membership
   // check; labels (members, and each item's linked guest party) are derived
   // in memory.
@@ -264,11 +269,13 @@ export default async function WeddingPage({
         )}
       </section>
 
-      <p>
-        <Link href={MY_WEDDINGS_LIST_PATH} className={textLinkClass}>
-          {copy.backToWeddings}
-        </Link>
-      </p>
+      {isCouple ? null : (
+        <p>
+          <Link href={MY_WEDDINGS_LIST_PATH} className={textLinkClass}>
+            {copy.backToWeddings}
+          </Link>
+        </p>
+      )}
     </div>
   );
 }

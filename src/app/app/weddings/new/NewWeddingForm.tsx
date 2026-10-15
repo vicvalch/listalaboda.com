@@ -7,6 +7,7 @@ import { FormField } from "@/components/ui/FormField";
 import { Notice } from "@/components/ui/Notice";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { secondaryButtonClass } from "@/components/ui/styles";
+import type { AccountType } from "@/lib/accounts/account-type";
 import { getMessages } from "@/lib/i18n";
 import { WEDDING_CITY_MAX_LENGTH } from "@/lib/weddings/validation";
 
@@ -14,7 +15,13 @@ import { TimeZoneField } from "../TimeZoneField";
 import { createWeddingAction, type NewWeddingState } from "./actions";
 
 /** Name (required), then optional date, city and time zone. */
-export function NewWeddingForm({ timeZones }: { timeZones: readonly string[] }) {
+export function NewWeddingForm({
+  timeZones,
+  accountType,
+}: {
+  timeZones: readonly string[];
+  accountType: AccountType;
+}) {
   const [state, formAction] = useActionState<NewWeddingState, FormData>(createWeddingAction, null);
   const failure = state && !state.ok ? state : null;
   const { weddingNew } = getMessages();
@@ -62,7 +69,7 @@ export function NewWeddingForm({ timeZones }: { timeZones: readonly string[] }) 
       />
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         <Link href="/app" className={secondaryButtonClass}>
-          {weddingNew.cancel}
+          {accountType === "couple" ? weddingNew.cancelCouple : weddingNew.cancel}
         </Link>
         <SubmitButton label={weddingNew.submit} pendingLabel={weddingNew.submitting} />
       </div>

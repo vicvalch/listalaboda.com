@@ -34,6 +34,10 @@ async function account(label: string, metadata?: Record<string, unknown>): Promi
   });
   if (error || !data.session || !data.user) throw new Error(`sign-up failed: ${error?.message}`);
   accountIds.push(data.user.id);
+  // ACCOUNT-01: these accounts build multi-wedding lists, so they are planners
+  // (chosen through the real RPC as the account; create_wedding requires a type).
+  const typed = await client.rpc("select_account_type", { requested: "planner" });
+  if (typed.error) throw new Error(`select_account_type failed: ${typed.error.message}`);
   return { id: data.user.id, client };
 }
 

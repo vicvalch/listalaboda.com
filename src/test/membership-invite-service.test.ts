@@ -350,6 +350,10 @@ describe("createWedding", () => {
       [{ code: "22023", message: "invalid_time_zone" }, "invalid_time_zone"],
       [{ code: "22008", message: "date" }, "invalid_date"],
       [{ code: "42501", message: "not_authenticated" }, "unauthenticated"],
+      // ACCOUNT-01 (ADR-020 §5): the database's creation rule, by exact message.
+      [{ code: "55000", message: "account_type_required" }, "account_type_required"],
+      [{ code: "55000", message: "couple_wedding_limit" }, "couple_wedding_limit"],
+      [{ code: "55000", message: "something_else" }, "error"],
       [{ code: "XX000", message: "internal detail" }, "error"],
     ] as const;
     for (const [body, reason] of cases) {

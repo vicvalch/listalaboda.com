@@ -1,70 +1,57 @@
 import { expect, test } from "@playwright/test";
 
 import { MARKETING_LINKS } from "../src/lib/marketing/links";
-import { WEDDING_SITE_THEME_KEYS } from "../src/lib/wedding-site/design/themes";
 import { es } from "./support/flows";
-import { loadEveryImage, measure } from "./support/marketing";
+import { loadEveryImage } from "./support/marketing";
 
-// Marketing Landing V1 (MKT-1): the planner-first homepage. Static, public,
-// not indexed yet; every call to action comes from the central links module.
+// Marketing Landing V1 (MKT-1) and ACCOUNT-01: the shared marketing shell.
+// There are two landings, /planners and /parejas; `/` redirects to /planners.
+// Static, public, not indexed yet; every call to action comes from the
+// central links module.
 
 const copy = es.marketing;
-const WIDTHS = [360, 390, 768, 1280] as const;
 
-test.describe("marketing homepage", () => {
-  test("one h1, landmarks, noindex, centralized calls to action, the five themes, no dead links", async ({ page }) => {
-    const response = await page.goto("/");
-    expect(response?.status()).toBe(200);
-
-    await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(copy.home.hero.title);
-    await expect(page.getByRole("banner")).toHaveCount(1);
-    await expect(page.getByRole("navigation", { name: copy.nav.label })).toHaveCount(1);
-    await expect(page.locator("main#contenido")).toHaveCount(1);
-    await expect(page.getByRole("contentinfo")).toHaveCount(1);
-    await expect(page).toHaveTitle(copy.home.metadata.title);
-
-    // Not indexed while the production domain isn't connected; no canonical yet.
-    await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, nofollow");
-    await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
-
-    // Calls to action point at the central destinations.
-    const main = page.locator("main");
-    await expect(main.getByRole("link", { name: copy.cta.demo }).first()).toHaveAttribute("href", MARKETING_LINKS.DEMO);
-    await expect(main.getByRole("link", { name: copy.cta.howItWorks })).toHaveAttribute("href", MARKETING_LINKS.HOW_IT_WORKS);
-    // MKT-3: the couples' question leads to their own page.
-    await expect(main.getByRole("link", { name: copy.home.hero.couplesLink, exact: true })).toHaveAttribute("href", MARKETING_LINKS.COUPLES);
-    // MKT-4A: the couple's site is the bridge to their page; the money section leads planners to theirs.
-    await expect(main.getByRole("link", { name: copy.home.weddingSites.couplesLink })).toHaveAttribute("href", MARKETING_LINKS.COUPLES);
-    await expect(main.getByRole("link", { name: copy.home.moneyDay.more })).toHaveAttribute("href", MARKETING_LINKS.PLANNERS);
-    await expect(main.getByRole("link", { name: copy.cta.pilot })).toHaveAttribute("href", MARKETING_LINKS.PILOT);
-    await expect(page.getByRole("banner").getByRole("link", { name: copy.nav.login })).toHaveAttribute("href", MARKETING_LINKS.LOGIN);
-
-    // Every link on the page is a known destination: never self-signup.
-    const hrefs = await page.locator("a[href]").evaluateAll((anchors) => anchors.map((a) => a.getAttribute("href") ?? ""));
-    const known = new Set<string>(["/", "#contenido", ...Object.values(MARKETING_LINKS)]);
-    expect(hrefs.filter((href) => !known.has(href))).toEqual([]);
-
-    // The in-page anchors exist.
-    await expect(page.locator("#como-funciona")).toHaveCount(1);
-    await expect(page.locator("#sitios-de-boda")).toHaveCount(1);
-
-    // The five themes, named in text; their renders are hidden from assistive technology.
-    const showcase = page.getByTestId("theme-showcase");
-    for (const key of WEDDING_SITE_THEME_KEYS) {
-      await expect(showcase.getByRole("heading", { level: 3, name: es.site.themes[key].name })).toBeVisible();
+test.describe("marketing shell", () => {
+  test("the header exposes exactly the two audiences, how it works and login; no generic homepage", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    for (const path of [MARKETING_LINKS.PLANNERS, MARKETING_LINKS.COUPLES]) {
+      await page.goto(path);
+      const nav = page.getByRole("banner").getByRole("navigation", { name: copy.nav.label });
+      const links = nav.locator("ul").first().getByRole("link");
+      await expect(links).toHaveText([copy.nav.planners, copy.nav.couples, copy.nav.howItWorks, copy.nav.login, copy.cta.demo]);
+      await expect(page.getByRole("banner").getByRole("link", { name: copy.brand })).toHaveAttribute("href", MARKETING_LINKS.PLANNERS);
+      const hrefs = await page.locator("a[href]").evaluateAll((anchors) => anchors.map((a) => a.getAttribute("href") ?? ""));
+      expect(hrefs, path).not.toContain("/");
+      expect(hrefs, path).not.toContain("/signup");
     }
-    await expect(showcase.locator('[aria-hidden="true"][inert]')).toHaveCount(5);
+  });
 
-    // Every product screenshot has Spanish alt text.
-    const alts = await page.locator("main img:not([data-lifestyle])").evaluateAll((images) => images.map((img) => img.getAttribute("alt") ?? ""));
-    expect(alts.length).toBeGreaterThanOrEqual(6);
-    for (const alt of alts) expect(alt.length).toBeGreaterThan(20);
+  test("\"Cómo funciona\" scrolls to the current page's section, which shows both paths, its own audience first", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    for (const [path, first, second] of [
+      [MARKETING_LINKS.PLANNERS, "planner", "couple"],
+      [MARKETING_LINKS.COUPLES, "couple", "planner"],
+    ] as const) {
+      await page.goto(path);
+      await page.getByRole("banner").getByRole("link", { name: copy.nav.howItWorks }).click();
+      await expect(page).toHaveURL(new RegExp(`${path}#como-funciona$`));
+      const section = page.getByTestId("how-it-works");
+      await expect(section).toBeInViewport();
+      await expect(section.getByRole("heading", { level: 2 })).toHaveText(copy.howItWorks.title);
+      await expect(section.locator("[data-audience]")).toHaveCount(2);
+      await expect(section.locator("[data-audience]").nth(0)).toHaveAttribute("data-audience", first);
+      await expect(section.locator("[data-audience]").nth(1)).toHaveAttribute("data-audience", second);
+      for (const audience of [first, second]) {
+        const steps = section.locator(`[data-audience="${audience}"] li`);
+        await expect(steps).toHaveCount(4);
+        await expect(steps).toContainText([...copy.howItWorks[audience].steps]);
+      }
+    }
   });
 
   test("keyboard: the skip link comes first and every header link is reachable with a visible focus", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto("/");
+    await page.goto(MARKETING_LINKS.PLANNERS);
     await page.keyboard.press("Tab");
     const skip = page.getByRole("link", { name: copy.skipToContent });
     await expect(skip).toBeFocused();
@@ -72,7 +59,7 @@ test.describe("marketing homepage", () => {
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/#contenido$/);
 
-    await page.goto("/");
+    await page.goto(MARKETING_LINKS.PLANNERS);
     await page.keyboard.press("Tab"); // skip link
     for (const name of [copy.brand, copy.nav.planners, copy.nav.couples, copy.nav.howItWorks, copy.nav.login, copy.cta.demo]) {
       await page.keyboard.press("Tab");
@@ -84,7 +71,7 @@ test.describe("marketing homepage", () => {
 
   test("phone menu: a native disclosure, operable by keyboard, with the same links", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/");
+    await page.goto(MARKETING_LINKS.PLANNERS);
     const menu = page.getByRole("banner").locator("summary");
     await expect(menu).toHaveText(new RegExp(copy.nav.menu));
     const login = page.getByRole("banner").getByRole("link", { name: copy.nav.login });
@@ -96,41 +83,11 @@ test.describe("marketing homepage", () => {
     await page.keyboard.press("Enter");
     await expect(login).toBeHidden();
   });
-
-  test("fits 360, 390, 768 and 1280 px in light and dark, with AA text everywhere", async ({ browser }, testInfo) => {
-    // Eight full-page renders and screenshots.
-    test.setTimeout(180_000);
-    for (const colorScheme of ["light", "dark"] as const) {
-      const context = await browser.newContext({ colorScheme });
-      const page = await context.newPage();
-      for (const width of WIDTHS) {
-        await page.setViewportSize({ width, height: 900 });
-        await page.goto("/");
-        await loadEveryImage(page);
-        const result = await measure(page);
-        expect(result.scrolls, `${colorScheme} ${width}px: no horizontal scroll`).toBe(false);
-        expect(result.lowContrast, `${colorScheme} ${width}px: WCAG AA text`).toEqual([]);
-        await page.screenshot({ path: testInfo.outputPath(`home-${colorScheme}-${width}.png`), fullPage: true });
-      }
-      await context.close();
-    }
-  });
-
-  test("ships no page-specific client JavaScript: the menu and the showcase work without it", async ({ browser }) => {
-    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 390, height: 844 } });
-    const page = await context.newPage();
-    await page.goto("/");
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(copy.home.hero.title);
-    await page.getByRole("banner").locator("summary").click();
-    await expect(page.getByRole("banner").getByRole("link", { name: copy.nav.login })).toBeVisible();
-    await expect(page.getByTestId("theme-showcase-item")).toHaveCount(5);
-    await context.close();
-  });
 });
 
 // MKT-5: wedding photography and restrained motion, CSS only.
 test.describe("marketing photography and motion", () => {
-  const PAGES = ["/", "/planners", "/parejas"] as const;
+  const PAGES = ["/planners", "/parejas"] as const;
 
   test("every photo used loads, and the invented-interface photo is never served", async ({ page, request }) => {
     await page.setViewportSize({ width: 1280, height: 900 });

@@ -128,7 +128,7 @@ function money(minor: number, currency: "CRC" | "USD"): string {
 
 test.describe("vendors", () => {
   test("the planner journey: add, filter, search, edit, book, discard, delete", async ({ page }) => {
-    const email = await createAccount("vendors");
+    const email = await createAccount("vendors", "couple");
     await logIn(page, email);
     const weddingId = await createWedding(page, "Boda con proveedores");
 
@@ -287,7 +287,7 @@ test.describe("vendors", () => {
   });
 
   test("field errors are shown per field and keep the typed values", async ({ page }) => {
-    const email = await createAccount("vendor-errors");
+    const email = await createAccount("vendor-errors", "couple");
     await logIn(page, email);
     const weddingId = await createWedding(page, "Boda con errores de proveedor");
     await openVendors(page, weddingId);
@@ -336,7 +336,7 @@ test.describe("vendors", () => {
   });
 
   test("keyboard only: add, edit and delete a vendor", async ({ page }) => {
-    const email = await createAccount("vendor-keyboard");
+    const email = await createAccount("vendor-keyboard", "couple");
     await logIn(page, email);
     const weddingId = await createWedding(page, "Boda con teclado");
     await openVendors(page, weddingId);
@@ -384,7 +384,7 @@ test.describe("vendor privacy", () => {
   }) => {
     // Wedding B and its vendor.
     const other = await freshPage(browser);
-    const emailB = await createAccount("vendor-owner-b");
+    const emailB = await createAccount("vendor-owner-b", "couple");
     await logIn(other.page, emailB);
     const weddingB = await createWedding(other.page, "Boda ajena");
     await openVendors(other.page, weddingB);
@@ -393,7 +393,7 @@ test.describe("vendor privacy", () => {
     await other.context.close();
 
     // Wedding A.
-    const emailA = await createAccount("vendor-owner-a");
+    const emailA = await createAccount("vendor-owner-a", "couple");
     await logIn(page, emailA);
     const weddingA = await createWedding(page, "Boda propia", "2090-06-01");
     await openVendors(page, weddingA);
@@ -526,7 +526,7 @@ test.describe("vendors on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
   test("list, create, detail, edit and delete fit 390 px; 50 vendors filter instantly", async ({ page }) => {
-    const email = await createAccount("vendor-mobile");
+    const email = await createAccount("vendor-mobile", "couple");
     await logIn(page, email);
     const weddingId = await createWedding(page, "Boda en el teléfono");
     await openVendors(page, weddingId);

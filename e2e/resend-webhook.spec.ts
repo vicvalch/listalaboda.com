@@ -45,7 +45,7 @@ function eventId(): string {
 
 test.describe("Resend delivery webhook", () => {
   test("a signed delivery event for a real send is accepted; unsigned and forged ones are refused", async ({ page, request }) => {
-    await logIn(page, await createAccount("lb18-webhook-owner"));
+    await logIn(page, await createAccount("lb18-webhook-owner", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Webhook", "2090-06-01");
     await page.goto(`/app/weddings/${weddingId}/guests`);
     await expect(page.getByRole("heading", { level: 1, name: guests.title })).toBeVisible();

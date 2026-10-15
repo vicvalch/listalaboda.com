@@ -92,7 +92,7 @@ test.describe("RSVP confirmation email", () => {
     page,
     browser,
   }) => {
-    await logIn(page, await createAccount("lb12-owner"));
+    await logIn(page, await createAccount("lb12-owner", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Confirmación", "2090-06-01");
     await openGuests(page, weddingId);
     const recipient = address("confirma");
@@ -144,7 +144,7 @@ test.describe("RSVP confirmation email", () => {
   });
 
   test("C: a party without a contact email answers normally; no email, no warning", async ({ page, browser }) => {
-    await logIn(page, await createAccount("lb12-noemail"));
+    await logIn(page, await createAccount("lb12-noemail", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Sin Correo", "2090-06-01");
     await openGuests(page, weddingId);
     const link = await createParty(page, "Familia Sin Correo", ["Sol Sin Correo"]);
@@ -167,7 +167,7 @@ test.describe("RSVP confirmation email", () => {
     page,
     browser,
   }) => {
-    await logIn(page, await createAccount("lb12-fail"));
+    await logIn(page, await createAccount("lb12-fail", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Fallo Confirmación", "2090-06-01");
     await openGuests(page, weddingId);
     const failing = address("falla", REJECTING_DOMAIN);
@@ -202,7 +202,7 @@ test.describe("RSVP confirmation email", () => {
     page,
     browser,
   }) => {
-    await logIn(page, await createAccount("lb12-site"));
+    await logIn(page, await createAccount("lb12-site", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Sitio Confirmación", "2090-06-01");
     await openGuests(page, weddingId);
     const recipient = address("sitio");

@@ -2,8 +2,8 @@ import { headers } from "next/headers";
 import Link from "next/link";
 
 import { secondaryButtonClass } from "@/components/ui/styles";
+import { requireAccountType } from "@/lib/accounts/session";
 import { safeNextPath } from "@/lib/auth/redirect";
-import { requireUser } from "@/lib/auth/session";
 import { getMessages } from "@/lib/i18n";
 import { REQUEST_PATH_HEADER } from "@/lib/supabase/proxy";
 import { MY_WEDDINGS_LIST_PATH } from "@/lib/weddings/entry";
@@ -15,12 +15,17 @@ export const dynamic = "force-dynamic";
 
 /**
  * Protected shell. Validates the user on every request (pages and actions
- * validate again: a layout alone is not a security boundary).
+ * validate again: a layout alone is not a security boundary), and sends an
+ * account without an account type to the one-time choice first (ACCOUNT-01,
+ * ADR-020), whatever `/app` URL was opened: a deep link can't skip it.
+ *
+ * Planners get "Mis bodas" and "Crear boda"; a couple's account is about
+ * their own wedding, so neither is offered (the brand link opens it).
  */
 export default async function AppLayout({ children }: LayoutProps<"/app">) {
   // The requested path only shapes the post-login destination.
   const requestedPath = safeNextPath((await headers()).get(REQUEST_PATH_HEADER));
-  const user = await requireUser(requestedPath);
+  const { user, accountType } = await requireAccountType(requestedPath);
   const { app, common } = getMessages();
 
   return (
@@ -31,15 +36,17 @@ export default async function AppLayout({ children }: LayoutProps<"/app">) {
           <Link href="/app" className="text-lg font-semibold tracking-tight">
             {common.brand}
           </Link>
-          <nav aria-label={app.nav.label} className="flex flex-wrap items-center gap-x-5 gap-y-2">
-            {/* The list itself, even with one wedding (`/app` alone opens it). */}
-            <Link href={MY_WEDDINGS_LIST_PATH} className="text-sm font-semibold hover:underline">
-              {app.nav.myWeddings}
-            </Link>
-            <Link href="/app/weddings/new" className="text-sm font-semibold hover:underline">
-              {app.nav.createWedding}
-            </Link>
-          </nav>
+          {accountType === "planner" ? (
+            <nav aria-label={app.nav.label} className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              {/* The list itself, even with one wedding (`/app` alone opens it). */}
+              <Link href={MY_WEDDINGS_LIST_PATH} className="text-sm font-semibold hover:underline">
+                {app.nav.myWeddings}
+              </Link>
+              <Link href="/app/weddings/new" className="text-sm font-semibold hover:underline">
+                {app.nav.createWedding}
+              </Link>
+            </nav>
+          ) : null}
           <div className="flex flex-wrap items-center gap-3">
             {user.email ? (
               <p className="text-muted max-w-56 truncate text-sm">

@@ -114,7 +114,7 @@ test.describe("automatic RSVP reminders", () => {
     page,
     browser,
   }) => {
-    await logIn(page, await createAccount("lb17-owner"));
+    await logIn(page, await createAccount("lb17-owner", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Automática", "2090-06-30");
     const inviteUrl = await createInvite(page, "collaborator");
     await openGuests(page, weddingId);
@@ -145,7 +145,7 @@ test.describe("automatic RSVP reminders", () => {
 
     // The collaborator: status visible, no controls.
     const collab = await freshPage(browser);
-    await logIn(collab.page, await createAccount("lb17-collab"));
+    await logIn(collab.page, await createAccount("lb17-collab", "planner"));
     await collab.page.goto(inviteUrl);
     await collab.page.getByRole("button", { name: es.inviteAccept.submit }).click();
     await expect(collab.page).toHaveURL(new RegExp(`/app/weddings/${weddingId}\\?joined=new$`));
@@ -164,7 +164,7 @@ test.describe("automatic RSVP reminders", () => {
     browser,
     request,
   }) => {
-    await logIn(page, await createAccount("lb17-due"));
+    await logIn(page, await createAccount("lb17-due", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Recordatorio Automático", dueDate());
     await setTimeZone(weddingId, "UTC");
     await openGuests(page, weddingId);

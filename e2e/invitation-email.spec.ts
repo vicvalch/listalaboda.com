@@ -98,11 +98,11 @@ async function answerAll(page: Page, names: string[]) {
 
 /** Owner + a collaborator who joined through a real MembershipInvite. */
 async function ownerAndCollaborator(browser: Browser, page: Page, label: string) {
-  await logIn(page, await createAccount(`${label}-owner`));
+  await logIn(page, await createAccount(`${label}-owner`, "couple"));
   const weddingId = await createWedding(page, `Boda de prueba ${label}`, "2090-06-01");
   const inviteUrl = await createInvite(page, "collaborator");
   const collab = await freshPage(browser);
-  await logIn(collab.page, await createAccount(`${label}-collab`));
+  await logIn(collab.page, await createAccount(`${label}-collab`, "planner"));
   await collab.page.goto(inviteUrl);
   await collab.page.getByRole("button", { name: es.inviteAccept.submit }).click();
   await expect(collab.page).toHaveURL(new RegExp(`/app/weddings/${weddingId}\\?joined=new$`));
@@ -195,7 +195,7 @@ test.describe("guest invitation email", () => {
 
     // An outsider gets the same 404 as for any other wedding.
     const outsider = await freshPage(browser);
-    await logIn(outsider.page, await createAccount("lb11-contact-outsider"));
+    await logIn(outsider.page, await createAccount("lb11-contact-outsider", "couple"));
     const response = await outsider.page.goto(`/app/weddings/${weddingId}/guests`);
     expect(response?.status()).toBe(404);
     expect(await outsider.page.content()).not.toContain(first);
@@ -210,7 +210,7 @@ test.describe("guest invitation email", () => {
     page,
     browser,
   }) => {
-    await logIn(page, await createAccount("lb11-send-owner"));
+    await logIn(page, await createAccount("lb11-send-owner", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Correo", "2090-06-01");
     await openGuests(page, weddingId);
 
@@ -264,7 +264,7 @@ test.describe("guest invitation email", () => {
     page,
     browser,
   }) => {
-    await logIn(page, await createAccount("lb11-site-owner"));
+    await logIn(page, await createAccount("lb11-site-owner", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Sitio Correo", "2090-06-01");
     const slug = `correo-${RUN}`;
     await page.goto(`/app/weddings/${weddingId}/site`);
@@ -363,7 +363,7 @@ test.describe("guest invitation email", () => {
   });
 
   test("J, K: a provider failure keeps every link usable and records no send", async ({ page, browser }) => {
-    await logIn(page, await createAccount("lb11-fail-owner"));
+    await logIn(page, await createAccount("lb11-fail-owner", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Fallo", "2090-06-01");
     await openGuests(page, weddingId);
     const failing = address("falla", REJECTING_DOMAIN);

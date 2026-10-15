@@ -27,6 +27,8 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - `docs/architecture/ADR-017-dual-couple-planner-use.md` (couples and planners on the same Wedding membership model)
 - `docs/architecture/ADR-018-multi-wedding-overview-and-attention.md` (multi-wedding read model, derived attention)
 - `docs/architecture/ADR-019-wedding-site-design-and-themes.md` (wedding site themes: presentation-only design)
+- `docs/architecture/ADR-020-immutable-account-type.md` (one immutable planner/couple account type per user; amends
+  ADR-017 §4, §7)
 
 ## Product rules
 
@@ -580,14 +582,14 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 
 ## Dual couple/planner use (LB-24A, ADR-017)
 
-- Couple and planner are product personas, never authorization roles; never stored (no profile, `account_type`,
-  persona or planner flag) and never read from `user_metadata`/`app_metadata`.
+- Couple and planner are never authorization roles and never read from `user_metadata`/`app_metadata`. Since
+  ACCOUNT-01 they are a stored, immutable account type (ADR-020, below) that shapes entry and creation only.
 - Wedding access comes only from `wedding_memberships` through `@/lib/authz/wedding` and RLS. Roles stay
   `owner | collaborator`; a planner is one or the other in each wedding.
 - `[weddingId]` URL tenancy is authoritative: no stored/cookie/session "active" wedding; a switcher only navigates.
 - Operational domains stay Wedding-scoped. `/app` / "Mis bodas" lists (and may later aggregate) only the caller's
   memberships via `listMyWeddings` on their RLS client; no service-role or SECURITY DEFINER overview shortcut.
-- `/app` entry is `decideWeddingEntry` (`@/lib/weddings/entry`): list failed → error (never empty or a redirect);
+- Planner `/app` entry is `decideWeddingEntry` (`@/lib/weddings/entry`): list failed → error (never empty or a redirect);
   0 → empty state; 1 → redirect to `/app/weddings/{id}` (no query copied); 2+ → list. `MY_WEDDINGS_LIST_PATH`
   (`/app?all=1`, closed value, presentation only) always lists; "Mis bodas" links use it so one wedding never loops.
 - Billing/entitlements (future) gate features, never Wedding access: a purchase or subscription never creates or
@@ -701,11 +703,35 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - CP7 state: members customize the five themes with closed options or six AA-checked custom colors; no custom fonts,
   drafts, reordering, presets or images.
 
+## Account type (ACCOUNT-01, ADR-020)
+
+- Exactly two types, `planner | couple` (`public.account_type` enum ↔ `ACCOUNT_TYPES` in `@/lib/accounts/account-type`).
+  One user = one type, chosen explicitly after signing in, never changed. Both = two accounts with two emails.
+- `public.user_accounts` (`user_id` PK → `auth.users` cascade, `account_type`, `selected_at`): no row = not chosen yet.
+  No backfill; never inferred (landing, CTA, referrer, weddings, invitations, roles, email, metadata, behavior).
+- Only write path: `select_account_type(requested)` (SECURITY DEFINER, `auth.uid()`, no user id parameter; same type =
+  no-op, other type = `account_type_already_selected`). Clients only SELECT their own row. The guard trigger keeps it
+  immutable for EVERY role; DELETE only via the `auth.users` cascade. No UI or API to change it.
+- `requireAccountType` (`@/lib/accounts/session`) in the `/app` layout is the deep-link guard: no type →
+  `/onboarding/account-type?next=…` (outside `/app`); a failed read throws, never "no type". Pages/actions that depend on
+  the type call it again (memoized). The onboarding page: two choices, none preselected, warning, a confirmation button
+  named after the choice; typed accounts are redirected to `next` (`afterAccountTypePath`, never back into onboarding).
+- Planner: `/app` and creation exactly as LB-24A/LB-24C. Couple: 0 → couple empty state, 1 → redirect, 2+ (legacy) →
+  plain list (`CoupleWeddings`), nothing deleted or chosen; `canCreateWedding` = only with 0 memberships, enforced in
+  `createWeddingAction` and `/app/weddings/new`; "Mis bodas"/"Crear boda"/"Volver a mis bodas" are planner-only.
+- `create_wedding` enforces the same creation rule (migration `20261025120100`): it locks the caller's `user_accounts` row
+  `FOR UPDATE`, then refuses untyped (`account_type_required`) and couples with any membership (`couple_wedding_limit`),
+  both 55000; `createWedding` (`@/lib/weddings/service`) and `createWeddingAction` map them (→ onboarding / "ya tiene
+  una boda"). Invitations still add memberships.
+- Never wedding access authorization: memberships and RLS are unchanged. DB test users are planners (global setup, RPC).
+- Fixtures say their type explicitly (`createAccount(label, type | null)`), set through the real RPC as the account.
+
 ## Marketing pages (Marketing Landing V1)
 
 - The marketing pages live in `src/app/(marketing)/` (shared layout: skip link, `MarketingHeader`, `<main id="contenido">`,
-  `MarketingFooter`): `/` is the planner-first homepage (MKT-1), `/planners` the B2B page (MKT-2), `/parejas` the
-  couples page (MKT-3). They are static: no cookies, session, Supabase or
+  `MarketingFooter`): `/planners` the B2B page (MKT-2) and default entry, `/parejas` the couples page (MKT-3). `/`
+  redirects to `/planners` (ACCOUNT-01, `next.config.ts`, 307); there is no generic homepage. Both share
+  `HowItWorks` (`#como-funciona`, both account paths, the page's audience first). They are static: no cookies, session, Supabase or
   database reads, and no client components (the phone menu is a native `<details>`). `/app`, auth, `/rsvp`, `/boda` and
   `src/proxy.ts` are untouched by marketing work.
 - Copy is in `es.marketing` (tú, brand `listalaboda.com`, no claims, metrics, logos or testimonials). Every call to action
@@ -808,4 +834,7 @@ render, with live contrast feedback and preview (no fonts, drafts, reordering, p
 Marketing Landing V1 (separate from LB-24D): MKT-1 adds the shared marketing shell and the planner-first homepage at `/`
 (real fictional-fixture screenshots, the real theme renderer, mailto calls to action, noindex); MKT-2 adds `/planners`
 and MKT-3 `/parejas` plus `robots.txt` (sitemap deferred until the domain is connected).
+ACCOUNT-01 (ADR-020) splits the audiences: `/` redirects to `/planners` (the homepage is removed), a shared "Cómo
+funciona" explains both paths, and every account has one immutable type (`planner | couple`) chosen after signing in,
+which shapes `/app` (planner "Mis bodas" vs. the couple's own wedding) and wedding creation (no billing or authorization).
 Don't implement ahead of the current prompt.

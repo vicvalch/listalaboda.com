@@ -54,3 +54,44 @@ export function parseCredentials(
   if (Object.keys(fieldErrors).length > 0) return { ok: false, fieldErrors };
   return { ok: true, credentials: { email, password } };
 }
+
+export type EmailResult =
+  | Readonly<{ ok: true; email: string }>
+  | Readonly<{ ok: false; fieldErrors: Partial<Record<"email", string>> }>;
+
+/** The recovery request's only field, with the same rules as sign-in. */
+export function parseEmail(value: string): EmailResult {
+  const messages = es.auth.validation;
+  const email = normalizeEmail(value);
+  if (!email) return { ok: false, fieldErrors: { email: messages.emailRequired } };
+  if (!isPlausibleEmail(email)) return { ok: false, fieldErrors: { email: messages.emailInvalid } };
+  return { ok: true, email };
+}
+
+export type NewPasswordField = "password" | "confirmPassword";
+
+export type NewPasswordResult =
+  | Readonly<{ ok: true; password: string }>
+  | Readonly<{ ok: false; fieldErrors: Partial<Record<NewPasswordField, string>> }>;
+
+/**
+ * A new password (recovery): the sign-up policy, typed twice. Supabase Auth
+ * stays authoritative for its own policy (`weak_password`).
+ */
+export function parseNewPassword(input: { password: string; confirmPassword: string }): NewPasswordResult {
+  const messages = es.auth.validation;
+  const fieldErrors: Partial<Record<NewPasswordField, string>> = {};
+  const { password, confirmPassword } = input;
+
+  if (!password) fieldErrors.password = messages.passwordRequired;
+  else if (password.length < PASSWORD_MIN_LENGTH) fieldErrors.password = messages.passwordTooShort;
+  else if (new TextEncoder().encode(password).length > PASSWORD_MAX_LENGTH) {
+    fieldErrors.password = messages.passwordTooLong;
+  }
+
+  if (!confirmPassword) fieldErrors.confirmPassword = messages.confirmPasswordRequired;
+  else if (password && confirmPassword !== password) fieldErrors.confirmPassword = messages.passwordMismatch;
+
+  if (Object.keys(fieldErrors).length > 0) return { ok: false, fieldErrors };
+  return { ok: true, password };
+}

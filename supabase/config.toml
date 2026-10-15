@@ -162,7 +162,9 @@ site_url = "http://127.0.0.1:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# AUTH-RECOVERY-01: the local app (`next dev` on 3000, E2E on 3100 or another local port) receives
+# recovery links at /auth/callback. LOCAL ONLY: production redirect URLs are set on the project.
+additional_redirect_urls = ["https://127.0.0.1:3000", "http://localhost:*/auth/callback**", "http://127.0.0.1:*/auth/callback**"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.

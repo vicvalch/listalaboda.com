@@ -16,11 +16,9 @@ export const es = {
     nav: {
       label: "Navegación principal",
       menu: "Menú",
-      home: "Inicio",
       planners: "Para planners",
       couples: "Para parejas",
       howItWorks: "Cómo funciona",
-      weddingSites: "Sitios de boda",
       login: "Iniciar sesión",
     },
     cta: {
@@ -29,67 +27,31 @@ export const es = {
       access: "Pedir acceso",
       howItWorks: "Ver cómo funciona",
     },
-    /** MKT-4A: the homepage is the short, planner-first overview; the detail lives on /planners and /parejas. */
-    home: {
-      metadata: {
-        title: "listalaboda.com · Gestión de bodas para wedding planners",
-        description:
-          "Invitados, RSVP, mesas, proveedores, presupuesto, cronograma y sitio web de cada boda en un solo lugar.",
-      },
-      hero: {
-        eyebrow: "Para wedding planners",
-        title: "Una boda, todo bajo control.",
-        body: "Invitados, RSVP, mesas, proveedores, presupuesto, cronograma y sitio web, organizados en un solo lugar.",
-        couples: "¿Organizas tu propia boda?",
-        couplesLink: "Para parejas",
-        shotAlt:
-          "Pantalla «Mis bodas» de listalaboda.com con lo que necesita atención en tres bodas de ejemplo: cuotas vencidas, pendientes atrasados, cuotas próximas y personas sentadas que no asistirán.",
-        cardAlt:
-          "La tarjeta de una de esas bodas, «Laura y Martín»: su fecha, los días que faltan, dos avisos atrasados y el avance de pendientes, invitados y proveedores.",
-      },
-      problem: {
-        eyebrow: "El día a día de hoy",
-        title: "Menos WhatsApp, hojas de cálculo y memoria.",
-        body: "Cuando manejas varias bodas, lo importante se pierde entre mensajes. Aquí sabes qué falta, quién confirmó y qué vence esta semana, sin buscarlo.",
-      },
-      guestsSeating: {
-        eyebrow: "Invitados, RSVP y mesas",
-        title: "Del RSVP a la mesa, sin perseguir a nadie.",
-        body: "Cada grupo confirma con su propio enlace, y en el plano cada invitado tiene su lugar.",
-        guestsAlt:
-          "Un grupo de invitados de ejemplo, «Amigos de la U», con la respuesta de cada persona: dos asistirán y una no ha respondido.",
-        seatingAlt:
-          "Plano visual de mesas de la misma boda de ejemplo, con mesas redondas y rectangulares, sus invitados y quienes aún no tienen mesa.",
-      },
-      moneyDay: {
-        eyebrow: "Presupuesto y cronograma",
-        title: "El dinero y el día, a la vista.",
-        body: "Lo contratado, lo pagado y lo que vence, y el día de la boda hora por hora.",
-        more: "Todo el detalle para planners",
-        budgetAlt:
-          "Presupuesto de una boda de ejemplo en colones: presupuesto total, contratado, pagado, pendiente, sin programar y disponible.",
-        timelineAlt:
-          "Cronograma del día de una boda de ejemplo, de la preparación al cierre, con horas, lugares, responsables y proveedores.",
-      },
-      weddingSites: {
-        eyebrow: "Sitio web de la boda",
-        title: "Y para la pareja, un sitio propio.",
-        body: "Tu trabajo termina en una experiencia que la pareja también siente suya: cinco estilos para el sitio de su boda, y nada es público hasta que se publica.",
-        couplesLink: "Ver listalaboda.com para parejas",
-        photoAlt: "Pareja recién casada sonriendo al atardecer.",
-        showcaseLabel: "Los cinco estilos del sitio web de la boda",
-      },
-      howItWorks: {
-        title: "Cómo funciona",
+    /**
+     * ACCOUNT-01: "Cómo funciona" on both landings, one section with the two
+     * account paths; each page lists its own audience first.
+     */
+    howItWorks: {
+      eyebrow: "Cómo funciona",
+      title: "Dos caminos, una misma boda.",
+      body: "Cada cuenta es de un tipo: wedding planner o pareja. Elige el tuyo al entrar por primera vez.",
+      planner: {
+        title: "Para wedding planners",
         steps: [
-          { title: "Crea la boda", body: "Fecha, ciudad y zona horaria. La lista de pendientes puede empezar con una plantilla." },
-          { title: "Invita a quienes colaboran", body: "La pareja y tu equipo entran con su propia cuenta a la misma boda." },
-          { title: "Trabaja desde un solo lugar", body: "Invitados, mesas, proveedores, presupuesto, cronograma y sitio web, al día." },
+          "Crea y administra las bodas de tus clientes.",
+          "Controla invitados, mesas, presupuesto, proveedores y cronograma.",
+          "Detecta qué necesita atención entre todas tus bodas.",
+          "Comparte la experiencia con cada pareja.",
         ],
       },
-      closing: {
-        title: "Prueba listalaboda.com con una boda real.",
-        note: "Programa piloto con cupos limitados.",
+      couple: {
+        title: "Para parejas",
+        steps: [
+          "Crea tu boda.",
+          "Organiza invitados, mesas, presupuesto y proveedores.",
+          "Publica el sitio de tu boda.",
+          "Llega al gran día con todo bajo control.",
+        ],
       },
     },
     /** MKT-2: `/planners`, the deeper page for wedding planners. Short copy: the real screens carry the story. */
@@ -385,6 +347,28 @@ export const es = {
     },
     rateLimited: "Demasiados intentos. Espera unos minutos y vuelve a intentarlo.",
   },
+  /** ACCOUNT-01 (ADR-020): the one-time account type choice, right after signing in. */
+  accountType: {
+    title: "¿Qué tipo de cuenta quieres crear?",
+    intro: "Así preparamos tu cuenta para cómo vas a organizar.",
+    legend: "Tipo de cuenta",
+    planner: {
+      label: "Wedding planner",
+      description: "Organizo bodas para clientes.",
+      submit: "Continuar como wedding planner",
+    },
+    couple: {
+      label: "Pareja",
+      description: "Estoy organizando mi propia boda.",
+      submit: "Continuar como pareja",
+    },
+    warning:
+      "Elige la opción que corresponde a cómo vas a usar esta cuenta. Después no podrás cambiar el tipo de cuenta.",
+    bothHint: "¿Organizas bodas y también la tuya? Usa otra cuenta, con otro correo, para cada una.",
+    submit: "Continuar",
+    submitting: "Guardando…",
+    required: "Elige el tipo de cuenta para continuar.",
+  },
   app: {
     nav: {
       label: "Navegación principal",
@@ -403,6 +387,18 @@ export const es = {
       noDate: "Fecha por definir",
       roleOwner: "Organizas esta boda",
       roleCollaborator: "Colaboras en esta boda",
+      /** ACCOUNT-01 (ADR-020 §6): a couple's account is about their own wedding. */
+      couple: {
+        emptyTitle: "Empieza a organizar tu boda",
+        emptyBody: "Crea tu boda y tendrás tus pendientes, invitados, mesas, presupuesto y más en un solo lugar.",
+        emptyInviteHint: "Si tu pareja o tu wedding planner ya la creó, abre el enlace de invitación que te compartieron.",
+        emptyCta: "Crear mi boda",
+        legacyTitle: "Tus bodas",
+        legacyBody:
+          "Esta cuenta ya participaba en varias bodas antes de que existieran los tipos de cuenta. Todas siguen aquí, sin cambios: entra a la que quieras.",
+        legacyNote: "Una cuenta de pareja no crea bodas nuevas. Para organizar bodas de clientes, usa una cuenta de wedding planner con otro correo.",
+        createBlocked: "Tu cuenta de pareja ya tiene una boda. Para organizar otra, usa una cuenta de wedding planner con otro correo.",
+      },
       /** LB-24C: the operational "Mis bodas" page (ADR-018 §12). */
       overview: {
         listTitle: "Tus bodas",
@@ -524,6 +520,7 @@ export const es = {
     submit: "Crear boda",
     submitting: "Creando boda…",
     cancel: "Volver a mis bodas",
+    cancelCouple: "Volver",
     validation: {
       nameRequired: "Escribe un nombre para la boda.",
       nameTooLong: "El nombre es demasiado largo (máximo 200 caracteres).",

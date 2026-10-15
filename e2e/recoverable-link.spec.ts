@@ -119,11 +119,11 @@ async function makeLegacy(weddingId: string, label: string) {
 }
 
 async function ownerAndCollaborator(browser: Browser, page: Page, label: string) {
-  await logIn(page, await createAccount(`${label}-owner`));
+  await logIn(page, await createAccount(`${label}-owner`, "couple"));
   const weddingId = await createWedding(page, `Boda de prueba ${label}`, "2090-06-01");
   const inviteUrl = await createInvite(page, "collaborator");
   const collab = await freshPage(browser);
-  await logIn(collab.page, await createAccount(`${label}-collab`));
+  await logIn(collab.page, await createAccount(`${label}-collab`, "planner"));
   await collab.page.goto(inviteUrl);
   await collab.page.getByRole("button", { name: es.inviteAccept.submit }).click();
   await expect(collab.page).toHaveURL(new RegExp(`/app/weddings/${weddingId}\\?joined=new$`));
@@ -135,7 +135,7 @@ test.describe("recoverable RSVP link", () => {
     page,
     browser,
   }) => {
-    await logIn(page, await createAccount("lb13-owner"));
+    await logIn(page, await createAccount("lb13-owner", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Enlace", "2090-06-01");
     await openGuests(page, weddingId);
     const original = await createParty(page, "Familia Igual", ["Ana Igual", "Luis Igual"]);
@@ -243,7 +243,7 @@ test.describe("recoverable RSVP link", () => {
   });
 
   test("E: the public site and the RSVP page carry no token, envelope or hash", async ({ page, browser }) => {
-    await logIn(page, await createAccount("lb13-site"));
+    await logIn(page, await createAccount("lb13-site", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Sitio Enlace", "2090-06-01");
     await openGuests(page, weddingId);
     const link = await createParty(page, "Familia Pública", ["Paula"]);
@@ -284,7 +284,7 @@ test.describe("recoverable RSVP link", () => {
     page,
     browser,
   }) => {
-    await logIn(page, await createAccount("lb13-mail"));
+    await logIn(page, await createAccount("lb13-mail", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Correo Enlace", "2090-06-01");
     await openGuests(page, weddingId);
     const recipient = `e2e-${RUN}-enlace@example.com`;

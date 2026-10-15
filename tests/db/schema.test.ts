@@ -39,6 +39,8 @@ const TABLES = [
   "wedding_timeline_entries",
   // ADR-019 (wedding site themes, CP4)
   "wedding_site_designs",
+  // ACCOUNT-01 (ADR-020)
+  "user_accounts",
 ];
 
 /**
@@ -146,7 +148,8 @@ describe("schema guarantees", () => {
                                 'set_rsvp_reminder_policy', 'claim_automatic_rsvp_reminders',
                                 'prepare_automatic_rsvp_reminder', 'begin_automatic_rsvp_reminder_send',
                                 'record_automatic_rsvp_reminder_email', 'finish_automatic_rsvp_reminder',
-                                'ingest_email_delivery_event', 'get_guest_invitation_email_block'))
+                                'ingest_email_delivery_event', 'get_guest_invitation_email_block',
+                                'select_account_type'))
        order by 1`,
     );
 
@@ -171,6 +174,7 @@ describe("schema guarantees", () => {
       "private.guard_email_delivery_events",
       "private.guard_guest_invitation_link",
       "private.guard_membership_invite_state",
+      "private.guard_user_accounts",
       "private.guard_wedding_activity",
       "private.guest_invitation_expires_at",
       "private.has_wedding_role",
@@ -208,6 +212,7 @@ describe("schema guarantees", () => {
       "public.rotate_guest_invitation_link",
       "public.save_wedding_site_design",
       "public.save_wedding_site_section",
+      "public.select_account_type",
       "public.set_rsvp_reminder_policy",
       "public.set_wedding_display_name",
       "public.set_wedding_site_slug",
@@ -246,6 +251,8 @@ describe("schema guarantees", () => {
       // ADR-019: membership-checked, runs as the caller (RLS).
       "public.save_wedding_site_design",
       "public.save_wedding_site_section",
+      // ACCOUNT-01 (ADR-020): the caller's own account type, once.
+      "public.select_account_type",
       // LB-17: owner-checked inside; the five scheduler functions are NOT here.
       "public.set_rsvp_reminder_policy",
       "public.set_wedding_display_name",
@@ -281,6 +288,9 @@ describe("schema guarantees", () => {
     expect(definer).toContain("public.create_guest_invitation");
     expect(definer).not.toContain("public.save_wedding_site_section");
     expect(definer).not.toContain("public.save_wedding_site_design");
+    // ACCOUNT-01 (ADR-020): clients have no write privilege on user_accounts;
+    // the function writes only the caller's own row (auth.uid()).
+    expect(definer).toContain("public.select_account_type");
     // LB-15 (ADR-008): revocation's one door checks the owner role itself and
     // writes the history row; the history read runs as the caller (RLS).
     expect(definer).toContain("public.revoke_guest_invitation_link");
@@ -316,7 +326,7 @@ describe("schema guarantees", () => {
                            'get_guest_invitation_recovery_envelope', 'record_rsvp_reminder_email',
                            'revoke_guest_invitation_link', 'get_wedding_activity',
                            'set_rsvp_reminder_policy', 'record_automatic_rsvp_reminder_email',
-                           'begin_automatic_rsvp_reminder_send')
+                           'begin_automatic_rsvp_reminder_send', 'select_account_type')
        order by 1`,
     );
     expect(rows).toEqual([
@@ -379,6 +389,8 @@ describe("schema guarantees", () => {
         name: "save_wedding_site_section",
         args: "target_wedding_id uuid, section_kind content_section_kind, section_title text, section_body text, section_visible boolean",
       },
+      // ACCOUNT-01 (ADR-020): never a user id; the caller is auth.uid().
+      { name: "select_account_type", args: "requested account_type" },
       {
         name: "set_rsvp_reminder_policy",
         args: "target_wedding_id uuid, reminders_enabled boolean, reminder_days_before integer",

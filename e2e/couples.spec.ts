@@ -12,7 +12,8 @@ import { loadEveryImage, measure } from "./support/marketing";
 const copy = es.marketing;
 const page$ = copy.couples;
 const WIDTHS = [360, 390, 768, 1280] as const;
-const MARKETING_PAGES = [MARKETING_LINKS.HOME, MARKETING_LINKS.PLANNERS, MARKETING_LINKS.COUPLES] as const;
+// ACCOUNT-01: only the two audience pages; `/` redirects to /planners.
+const MARKETING_PAGES = [MARKETING_LINKS.PLANNERS, MARKETING_LINKS.COUPLES] as const;
 
 test.describe("marketing /parejas", () => {
   test("one h1, noindex, access first, the planner switch, no dead links, five themes", async ({ page }) => {
@@ -34,7 +35,7 @@ test.describe("marketing /parejas", () => {
     await expect(heroLinks.nth(0)).toHaveText(copy.cta.access);
     await expect(heroLinks.nth(0)).toHaveAttribute("href", MARKETING_LINKS.ACCESS);
     await expect(heroLinks.nth(1)).toHaveText(copy.cta.howItWorks);
-    await expect(heroLinks.nth(1)).toHaveAttribute("href", "#como-funciona");
+    await expect(heroLinks.nth(1)).toHaveAttribute("href", MARKETING_LINKS.HOW_IT_WORKS);
     await expect(heroLinks.nth(2)).toHaveAccessibleName(page$.hero.plannerLink);
     await expect(heroLinks.nth(2)).toHaveAttribute("href", MARKETING_LINKS.PLANNERS);
     await expect(page.locator("#como-funciona")).toHaveCount(1);
@@ -73,7 +74,7 @@ test.describe("marketing /parejas", () => {
       await page.goto(path);
       const banner = page.getByRole("banner");
       const footer = page.getByRole("contentinfo");
-      await expect(banner.getByRole("link", { name: copy.brand })).toHaveAttribute("href", MARKETING_LINKS.HOME);
+      await expect(banner.getByRole("link", { name: copy.brand })).toHaveAttribute("href", MARKETING_LINKS.PLANNERS);
       for (const region of [banner, footer]) {
         await expect(region.getByRole("link", { name: copy.nav.planners })).toHaveAttribute("href", MARKETING_LINKS.PLANNERS);
         await expect(region.getByRole("link", { name: copy.nav.couples })).toHaveAttribute("href", MARKETING_LINKS.COUPLES);
@@ -96,15 +97,19 @@ test.describe("marketing /parejas", () => {
     }
 
     // Moving between the audience pages through the header.
-    await page.goto(MARKETING_LINKS.HOME);
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/planners$/);
     await page.getByRole("banner").getByRole("link", { name: copy.nav.couples }).click();
     await expect(page).toHaveURL(/\/parejas$/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(page$.hero.title);
     await page.getByRole("banner").getByRole("link", { name: copy.nav.planners }).click();
     await expect(page).toHaveURL(/\/planners$/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(copy.planners.hero.title);
+    await page.getByRole("banner").getByRole("link", { name: copy.nav.couples }).click();
+    await expect(page).toHaveURL(/\/parejas$/);
     await page.getByRole("banner").getByRole("link", { name: copy.brand }).click();
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(copy.home.hero.title);
+    await expect(page).toHaveURL(/\/planners$/);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(copy.planners.hero.title);
   });
 
   test("the FAQ opens and closes by keyboard, with a visible focus", async ({ page }) => {

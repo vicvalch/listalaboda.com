@@ -43,7 +43,7 @@ function panel(page: Page) {
 
 test.describe("Mis bodas: account states", () => {
   test("one wedding: /app redirects; ?all=1 shows one rich card and no global panel", async ({ page }) => {
-    const me = await createAccountWithId("lb24c-one");
+    const me = await createAccountWithId("lb24c-one", "planner");
     const id = await seedWedding({
       name: "Boda de Lucía y Andrés",
       city: "Heredia",
@@ -82,8 +82,8 @@ test.describe("Mis bodas: account states", () => {
   });
 
   test("three weddings, mixed attention: header, global panel, cards, disclosure, deep links", async ({ page }) => {
-    const me = await createAccountWithId("lb24c-mixed");
-    const other = await createAccountWithId("lb24c-mixed-other");
+    const me = await createAccountWithId("lb24c-mixed", "planner");
+    const other = await createAccountWithId("lb24c-mixed-other", "planner");
     const busy = await seedWedding({
       name: "Boda de Sofía y Víctor",
       city: "San José",
@@ -178,7 +178,7 @@ test.describe("Mis bodas: account states", () => {
   });
 
   test("owner setup items open settings", async ({ page }) => {
-    const me = await createAccountWithId("lb24c-setup");
+    const me = await createAccountWithId("lb24c-setup", "planner");
     const undated = await seedWedding({ name: "Boda sin fecha propia", date: null, members: [{ userId: me.id, role: "owner" }] });
     await seedWedding({ name: "Boda sin zona", timeZone: null, members: [{ userId: me.id, role: "owner" }] });
     await logIn(page, me.email);
@@ -189,7 +189,7 @@ test.describe("Mis bodas: account states", () => {
   });
 
   test("all clear: only with complete data and 2+ weddings", async ({ page }) => {
-    const me = await createAccountWithId("lb24c-clear");
+    const me = await createAccountWithId("lb24c-clear", "planner");
     await seedWedding({ name: "Boda uno", members: [{ userId: me.id, role: "owner" }], doneChecklist: 2 });
     await seedWedding({ name: "Boda dos", members: [{ userId: me.id, role: "owner" }] });
     await logIn(page, me.email);
@@ -202,7 +202,7 @@ test.describe("Mis bodas: account states", () => {
   });
 
   test("partial data: info notice, 'No disponible', never all-clear", async ({ page }) => {
-    const me = await createAccountWithId("lb24c-partial");
+    const me = await createAccountWithId("lb24c-partial", "planner");
     await seedWedding({ name: "Boda enorme", members: [{ userId: me.id, role: "owner" }], truncatedChecklist: true });
     await seedWedding({ name: "Boda normal", members: [{ userId: me.id, role: "owner" }] });
     await logIn(page, me.email);
@@ -218,7 +218,7 @@ test.describe("Mis bodas: account states", () => {
   });
 
   test("over the overview limit: the whole list, basic cards, a notice", async ({ page }) => {
-    const me = await createAccountWithId("lb24c-over");
+    const me = await createAccountWithId("lb24c-over", "planner");
     await seedManyWeddings(me.id, 101);
     await logIn(page, me.email);
     await expect(page.locator("main").getByRole("status")).toHaveText(
@@ -233,7 +233,7 @@ test.describe("Mis bodas: account states", () => {
   });
 
   test("no browser-side REST reads: the overview is server-rendered", async ({ page }) => {
-    const me = await createAccountWithId("lb24c-norest");
+    const me = await createAccountWithId("lb24c-norest", "planner");
     await seedWedding({ name: "Boda A", members: [{ userId: me.id, role: "owner" }], overdueChecklist: 1 });
     await seedWedding({ name: "Boda B", members: [{ userId: me.id, role: "owner" }] });
     await logIn(page, me.email);
@@ -252,7 +252,7 @@ test.describe("Mis bodas on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
   test("stacked header, readable rows and cards, no overflow, long names", async ({ page }) => {
-    const me = await createAccountWithId("lb24c-mobile");
+    const me = await createAccountWithId("lb24c-mobile", "planner");
     await seedWedding({
       name: "Boda de Alejandra Montenegro Villalobos y Sebastián Rodríguez Quesada",
       city: "San Rafael de Escazú, San José, Costa Rica",

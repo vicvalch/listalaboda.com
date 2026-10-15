@@ -1,5 +1,7 @@
 import { expect, type Locator, type Page } from "@playwright/test";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
+import type { Database } from "../../src/lib/supabase/database.types";
 
 import { es } from "../../src/lib/i18n/messages/es";
 import { E2E_PASSWORD, uniqueEmail } from "./identities";
@@ -11,21 +13,47 @@ const WEDDING_PATH = /\/app\/weddings\/([0-9a-f-]{36})(?:\?.*)?$/;
 const INVITE_URL = /^http:\/\/localhost:\d+\/invite\/[A-Za-z0-9_-]{43}$/;
 
 /**
- * Creates a confirmed account through normal sign-up against the local
- * stack (which auto-confirms; see supabase/config.toml). For journeys where
- * the account must already exist before the browser part starts.
+ * ACCOUNT-01 (ADR-020): every journey says which account it is. `null` = an
+ * account that hasn't chosen yet (it meets the one-time choice on entry).
  */
-export async function createAccount(label: string): Promise<string> {
+export type E2EAccountType = "planner" | "couple" | null;
+
+/**
+ * Creates a confirmed account through normal sign-up against the local
+ * stack (which auto-confirms; see supabase/config.toml), and chooses its
+ * account type through the real `select_account_type` RPC as that account
+ * (no superuser write). For journeys where the account must already exist
+ * before the browser part starts.
+ */
+export async function createAccount(label: string, accountType: E2EAccountType): Promise<string> {
   const { apiUrl, publishableKey } = readLocalSupabase();
   const email = uniqueEmail(label);
-  const auth = createClient(apiUrl, publishableKey, {
+  const client = createClient<Database>(apiUrl, publishableKey, {
     auth: { persistSession: false, autoRefreshToken: false },
-  }).auth;
-  const { data, error } = await auth.signUp({ email, password: E2E_PASSWORD });
+  });
+  const { data, error } = await client.auth.signUp({ email, password: E2E_PASSWORD });
   if (error || !data.session) {
     throw new Error(`Could not create local E2E account: ${error?.code ?? "no session"}`);
   }
+  if (accountType) await chooseAccountType(client, accountType);
   return email;
+}
+
+/** The account's own choice, through the one write path (the client holds its session). */
+export async function chooseAccountType(
+  client: SupabaseClient<Database>,
+  accountType: "planner" | "couple",
+): Promise<void> {
+  const { error } = await client.rpc("select_account_type", { requested: accountType });
+  if (error) throw new Error(`Could not choose the E2E account type: ${error.code}`);
+}
+
+/** The one-time choice in the browser: pick a card, then confirm with the named button. */
+export async function chooseAccountTypeInBrowser(page: Page, accountType: "planner" | "couple") {
+  await expect(page).toHaveURL(/\/onboarding\/account-type(?:\?.*)?$/);
+  await page.getByRole("radio", { name: es.accountType[accountType].label }).check();
+  await page.getByRole("button", { name: es.accountType[accountType].submit }).click();
+  await expect(page).not.toHaveURL(/\/onboarding\//);
 }
 
 /** The page's own alert (excludes Next's empty route announcer). */
@@ -43,7 +71,8 @@ export async function logIn(page: Page, email: string) {
   await fillCredentials(page, email);
   await page.getByRole("button", { name: es.auth.login.submit }).click();
   // LB-24A: /app opens the only wedding directly (0 or 2+ stay on /app).
-  await expect(page).toHaveURL(/\/app(?:\/weddings\/[0-9a-f-]{36})?$/);
+  // ACCOUNT-01: an account without a type lands on the one-time choice.
+  await expect(page).toHaveURL(/\/(?:app(?:\/weddings\/[0-9a-f-]{36})?|onboarding\/account-type)$/);
 }
 
 export async function logOut(page: Page) {

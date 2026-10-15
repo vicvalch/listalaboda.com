@@ -146,14 +146,12 @@ test("captures the marketing product screenshots from the fictional fixture", as
     { file: "mis-bodas-mobile.webp", path: "/app?all=1", width: 390, crop: { kind: "element", selector: "main", maxHeight: 860 } },
     // One wedding's card: its own attention items and facts.
     { file: "wedding-card.webp", path: "/app?all=1", width: 1280, crop: { kind: "element", selector: '[data-testid="wedding-card"]', maxHeight: 700 } },
-    { file: "wedding-card-mobile.webp", path: "/app?all=1", width: 390, crop: { kind: "element", selector: '[data-testid="wedding-card"]', maxHeight: 900 } },
     { file: "guests.webp", path: `${wedding}/guests`, width: 1280, crop: { kind: "from", selector: party, height: 448 } },
     { file: "guests-mobile.webp", path: `${wedding}/guests`, width: 390, crop: { kind: "from", selector: party, height: 640 } },
     { file: "seating.webp", path: `${wedding}/seating?view=plan`, width: 1920, crop: { kind: "planner" } },
     { file: "seating-mobile.webp", path: `${wedding}/seating?view=plan`, width: 1920, crop: { kind: "tables", names: ["Mesa 2", "Mesa 3"] } },
     { file: "budget.webp", path: `${wedding}/budget`, width: 1280, crop: { kind: "from", selector: '[data-testid="budget-currency-CRC"]', height: 900 } },
     { file: "budget-mobile.webp", path: `${wedding}/budget`, width: 390, crop: { kind: "from", selector: '[data-testid="budget-currency-CRC"]', height: 820 } },
-    { file: "timeline.webp", path: `${wedding}/timeline`, width: 1280, crop: { kind: "from", selector: '[data-testid="timeline-overview"]', height: 900 } },
     { file: "timeline-mobile.webp", path: `${wedding}/timeline`, width: 390, crop: { kind: "from", selector: '[data-testid="timeline-overview"]', height: 820 } },
     // A vendor's payments: what was agreed, paid and still due, installment by installment.
     { file: "vendor-payments.webp", path: caterer, width: 1280, crop: { kind: "element", selector: '[data-testid="vendor-payments"]', maxHeight: 1100 } },

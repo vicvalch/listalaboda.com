@@ -12,11 +12,9 @@ export function MarketingFooter() {
     {
       title: marketing.footer.product,
       links: [
-        { href: MARKETING_LINKS.HOME, label: marketing.nav.home },
         { href: MARKETING_LINKS.PLANNERS, label: marketing.nav.planners },
         { href: MARKETING_LINKS.COUPLES, label: marketing.nav.couples },
         { href: MARKETING_LINKS.HOW_IT_WORKS, label: marketing.nav.howItWorks },
-        { href: MARKETING_LINKS.WEDDING_SITES, label: marketing.nav.weddingSites },
       ],
     },
     { title: marketing.footer.account, links: [{ href: MARKETING_LINKS.LOGIN, label: marketing.nav.login }] },

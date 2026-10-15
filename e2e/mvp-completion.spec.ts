@@ -47,14 +47,15 @@ async function saveSettings(page: Page) {
 }
 
 /** Owner + collaborator in one wedding; the collaborator joined through a real invite. */
-async function sharedWedding(browser: Browser, label: string) {
+/** `ownerType`: a couple by default; a planner where the journey creates further weddings (ACCOUNT-01). */
+async function sharedWedding(browser: Browser, label: string, ownerType: "couple" | "planner" = "couple") {
   const owner = await freshPage(browser);
-  await logIn(owner.page, await createAccount(`${label}-owner`));
+  await logIn(owner.page, await createAccount(`${label}-owner`, ownerType));
   const weddingId = await createWedding(owner.page, `Boda ${label}`, "2027-08-14");
   const inviteUrl = await createInvite(owner.page, "collaborator");
 
   const collab = await freshPage(browser);
-  await logIn(collab.page, await createAccount(`${label}-collab`));
+  await logIn(collab.page, await createAccount(`${label}-collab`, "planner"));
   await collab.page.goto(inviteUrl);
   await collab.page.getByRole("button", { name: es.inviteAccept.submit }).click();
   await expect(collab.page).toHaveURL(new RegExp(`/app/weddings/${weddingId}\\?joined=new$`));
@@ -63,7 +64,7 @@ async function sharedWedding(browser: Browser, label: string) {
 
 test.describe("wedding city and time zone", () => {
   test("LA: create a wedding with date, city and time zone; everything persists", async ({ page }) => {
-    await logIn(page, await createAccount("lb8-create"));
+    await logIn(page, await createAccount("lb8-create", "couple"));
     await page.goto("/app/weddings/new");
     await page.getByLabel(newCopy.nameLabel).fill("Boda de Ana y Luis");
     await page.getByLabel(newCopy.dateLabel).fill("2027-08-14");
@@ -87,7 +88,7 @@ test.describe("wedding city and time zone", () => {
   });
 
   test("LB: a wedding without city or time zone shows no city clutter", async ({ page }) => {
-    await logIn(page, await createAccount("lb8-plain"));
+    await logIn(page, await createAccount("lb8-plain", "couple"));
     const weddingId = await createWedding(page, "Boda sin ciudad");
     await expect(page.getByTestId("wedding-city")).toHaveCount(0);
     await openSettings(page, weddingId);
@@ -133,7 +134,7 @@ test.describe("wedding city and time zone", () => {
   test("LD: the owner sets and changes the time zone; a forged invalid zone is refused", async ({
     page,
   }) => {
-    await logIn(page, await createAccount("lb8-tz"));
+    await logIn(page, await createAccount("lb8-tz", "couple"));
     const weddingId = await createWedding(page, "Boda con zona horaria");
 
     await openSettings(page, weddingId);
@@ -175,7 +176,7 @@ test.describe("wedding city and time zone", () => {
   test("LE: the device time zone is only a visible, editable suggestion", async ({ browser }) => {
     const context = await browser.newContext({ timezoneId: "America/Lima" });
     const page = await context.newPage();
-    await logIn(page, await createAccount("lb8-device"));
+    await logIn(page, await createAccount("lb8-device", "couple"));
     await page.goto("/app/weddings/new");
     await expect(timeZoneSelect(page)).toHaveValue("");
     await page.getByRole("button", { name: newCopy.timeZoneUseDevice }).click();
@@ -191,7 +192,7 @@ test.describe("overdue (atrasado)", () => {
   test("LF: a past pending item is Pendiente · Atrasado once the wedding has a time zone", async ({
     page,
   }) => {
-    await logIn(page, await createAccount("lb8-overdue"));
+    await logIn(page, await createAccount("lb8-overdue", "couple"));
     const weddingId = await createWedding(page, "Boda con atrasos", "2091-01-01");
     const base = `/app/weddings/${weddingId}`;
     await addChecklistItem(page, { title: "Confirmar fotógrafo", timing: { mode: "absolute", date: PAST } });
@@ -354,11 +355,11 @@ test.describe("member removal", () => {
     browser,
   }) => {
     const owner = await freshPage(browser);
-    await logIn(owner.page, await createAccount("lb8-coowner-a"));
+    await logIn(owner.page, await createAccount("lb8-coowner-a", "couple"));
     const weddingId = await createWedding(owner.page, "Boda con dos organizadores");
     const inviteUrl = await createInvite(owner.page, "owner");
     const partner = await freshPage(browser);
-    await logIn(partner.page, await createAccount("lb8-coowner-b"));
+    await logIn(partner.page, await createAccount("lb8-coowner-b", "couple"));
     await partner.page.goto(inviteUrl);
     await partner.page.getByRole("button", { name: es.inviteAccept.submit }).click();
     await expect(partner.page).toHaveURL(new RegExp(`/app/weddings/${weddingId}\\?joined=new$`));
@@ -395,7 +396,8 @@ test.describe("phone width", () => {
   test("LJ: new wedding, settings, Atrasados and member removal fit a phone screen", async ({
     browser,
   }) => {
-    const { owner, collab, weddingId, base } = await sharedWedding(browser, "lb8-phone");
+    // A planner: the journey also opens the new-wedding form (a couple with a wedding can't).
+    const { owner, collab, weddingId, base } = await sharedWedding(browser, "lb8-phone", "planner");
     // A common small phone width.
     await owner.page.setViewportSize({ width: 360, height: 740 });
 

@@ -15,8 +15,7 @@ function mailto(subject: string): string {
 }
 
 export const MARKETING_LINKS = {
-  HOME: "/",
-  /** MKT-2: the page for wedding planners. */
+  /** MKT-2: the page for wedding planners, and the brand's home (`/` redirects here, ACCOUNT-01). */
   PLANNERS: "/planners",
   /** MKT-3: the page for couples organizing their own wedding. */
   COUPLES: "/parejas",
@@ -25,7 +24,6 @@ export const MARKETING_LINKS = {
   PILOT: mailto("Aplicación al pilot - listalaboda.com"),
   ACCESS: mailto("Solicitud de acceso - listalaboda.com"),
   CONTACT: `mailto:${MARKETING_CONTACT_EMAIL}`,
-  /** In-page anchors of the homepage, valid from any marketing page. */
-  HOW_IT_WORKS: "/#como-funciona",
-  WEDDING_SITES: "/#sitios-de-boda",
+  /** ACCOUNT-01: the shared "Cómo funciona" section of the CURRENT page (both landings have it). */
+  HOW_IT_WORKS: "#como-funciona",
 } as const;

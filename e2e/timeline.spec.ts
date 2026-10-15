@@ -165,7 +165,7 @@ async function entryRows(weddingId: string) {
 test.describe("cronograma", () => {
   test("build a run of show: days, midnight, ties, Sin hora, vendor, edits, date change, delete", async ({ page }) => {
     // 1–5. Account, wedding, date and time zone, open Cronograma.
-    await logIn(page, await createAccount("timeline-owner"));
+    await logIn(page, await createAccount("timeline-owner", "couple"));
     const weddingId = await createWedding(page, "Boda del cronograma", "2027-08-14");
     await addVendor(page, weddingId, {
       name: "Studio Luz",
@@ -333,7 +333,7 @@ test.describe("cronograma", () => {
   });
 
   test("deleting a linked vendor unlinks the entry; a vendor with payments stays protected", async ({ page }) => {
-    await logIn(page, await createAccount("timeline-vendor-delete"));
+    await logIn(page, await createAccount("timeline-vendor-delete", "couple"));
     const weddingId = await createWedding(page, "Boda sin proveedor", "2027-08-14");
     await addVendor(page, weddingId, { name: "DJ Temporal", category: "music", contact: "Pablo", phone: "8777-6655" });
     await openTimeline(page, weddingId);
@@ -377,13 +377,13 @@ test.describe("cronograma", () => {
 
   test("a vendor of another wedding can't be linked, even through a forged form", async ({ page, browser }) => {
     const other = await freshPage(browser);
-    await logIn(other.page, await createAccount("timeline-owner-b"));
+    await logIn(other.page, await createAccount("timeline-owner-b", "couple"));
     const weddingB = await createWedding(other.page, "Boda ajena del cronograma");
     await addVendor(other.page, weddingB, { name: "Proveedor Ajeno", category: "venue" });
     const vendorB = await vendorIdByName(weddingB, "Proveedor Ajeno");
     await other.context.close();
 
-    await logIn(page, await createAccount("timeline-owner-a"));
+    await logIn(page, await createAccount("timeline-owner-a", "couple"));
     const weddingA = await createWedding(page, "Boda propia del cronograma");
     await openTimeline(page, weddingA);
     await addEntry(page, { title: "Llega la banda", start: "18:00" });
@@ -431,7 +431,7 @@ test.describe("cronograma", () => {
   });
 
   test("the window: nothing may end after midnight following the next day", async ({ page }) => {
-    await logIn(page, await createAccount("timeline-window"));
+    await logIn(page, await createAccount("timeline-window", "couple"));
     const weddingId = await createWedding(page, "Boda de la ventana", "2027-08-14");
     await openTimeline(page, weddingId);
 
@@ -457,7 +457,7 @@ test.describe("cronograma", () => {
   });
 
   test("without a time zone everything works but there is no Ahora / Siguiente", async ({ page }) => {
-    await logIn(page, await createAccount("timeline-no-zone"));
+    await logIn(page, await createAccount("timeline-no-zone", "couple"));
     const today = new Date().toISOString().slice(0, 10);
     const weddingId = await createWedding(page, "Boda sin zona", today);
     await openTimeline(page, weddingId);
@@ -474,7 +474,7 @@ test.describe("cronograma", () => {
     // entries cover the whole of day 0 and day 1, so whichever of those days
     // the page loads on, something is current. Exact current/next logic is
     // covered with fixed instants in src/test/timeline-summary.test.ts.
-    await logIn(page, await createAccount("timeline-now"));
+    await logIn(page, await createAccount("timeline-now", "couple"));
     const today = new Date().toISOString().slice(0, 10);
     const weddingId = await createWedding(page, "Boda de hoy", today);
     await db((c) => c.query("update public.weddings set time_zone = 'UTC' where id = $1", [weddingId]));
@@ -500,7 +500,7 @@ test.describe("cronograma", () => {
   });
 
   test("the published site and the RSVP page carry no timeline data", async ({ page, browser }) => {
-    await logIn(page, await createAccount("timeline-privacy"));
+    await logIn(page, await createAccount("timeline-privacy", "couple"));
     const weddingId = await createWedding(page, "Boda privada del cronograma", "2090-06-01");
     await addVendor(page, weddingId, { name: "Proveedor del Cronograma", category: "music", phone: "8111-2233" });
     await openTimeline(page, weddingId);
@@ -574,7 +574,7 @@ test.describe("cronograma on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
   test("rows, create, edit, duration and tel: links fit 390 px", async ({ page }) => {
-    await logIn(page, await createAccount("timeline-mobile"));
+    await logIn(page, await createAccount("timeline-mobile", "couple"));
     const weddingId = await createWedding(page, "Boda en el teléfono", "2027-08-14");
     await addVendor(page, weddingId, {
       name: "Floristería con un nombre bastante largo para un teléfono",

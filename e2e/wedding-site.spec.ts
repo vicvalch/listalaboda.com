@@ -171,7 +171,7 @@ test.describe("wedding website", () => {
     page,
     browser,
   }) => {
-    await logIn(page, await createAccount("lb10-owner"));
+    await logIn(page, await createAccount("lb10-owner", "couple"));
     const weddingId = await createFullWedding(page, "Boda de prueba Sitio");
     const slug = uniqueSlug("boda-prueba-sitio");
     const visitor = await freshPage(browser);
@@ -293,12 +293,12 @@ test.describe("wedding website", () => {
     browser,
   }) => {
     const owner = await freshPage(browser);
-    await logIn(owner.page, await createAccount("lb10-collab-owner"));
+    await logIn(owner.page, await createAccount("lb10-collab-owner", "planner"));
     const weddingId = await createFullWedding(owner.page, "Boda de prueba Colaboración");
     const inviteUrl = await createInvite(owner.page, "collaborator");
 
     const collab = await freshPage(browser);
-    await logIn(collab.page, await createAccount("lb10-collab"));
+    await logIn(collab.page, await createAccount("lb10-collab", "planner"));
     await collab.page.goto(inviteUrl);
     await collab.page.getByRole("button", { name: es.inviteAccept.submit }).click();
     await expect(collab.page).toHaveURL(new RegExp(`/app/weddings/${weddingId}\\?joined=new$`));
@@ -359,7 +359,7 @@ test.describe("wedding website", () => {
     expect(await publication(weddingId)).toEqual({ slug, published: true });
     // The same requests from an outsider: the same 404 as a missing wedding.
     const outsider = await freshPage(browser);
-    await logIn(outsider.page, await createAccount("lb10-forger"));
+    await logIn(outsider.page, await createAccount("lb10-forger", "couple"));
     await replayAction(outsider.page, unpublishRequest);
     expect(await publication(weddingId)).toEqual({ slug, published: true });
     await outsider.context.close();
@@ -385,7 +385,7 @@ test.describe("wedding website", () => {
   });
 
   test("I, J, K: unpublish, republish at the same address, then move the address", async ({ page, browser }) => {
-    await logIn(page, await createAccount("lb10-lifecycle"));
+    await logIn(page, await createAccount("lb10-lifecycle", "couple"));
     const weddingId = await createFullWedding(page, "Boda de prueba Ciclo");
     await openSite(page, weddingId);
     await saveSection(page, "intro", { body: "Bienvenida del ciclo", visible: true });
@@ -425,7 +425,7 @@ test.describe("wedding website", () => {
 
     // A taken address is refused without saying whose it is.
     const other = await freshPage(browser);
-    await logIn(other.page, await createAccount("lb10-other"));
+    await logIn(other.page, await createAccount("lb10-other", "couple"));
     const otherWedding = await createFullWedding(other.page, "Boda de prueba Otra");
     await openSite(other.page, otherWedding);
     await other.page.getByLabel(site.slug.label, { exact: true }).fill(next);
@@ -440,7 +440,7 @@ test.describe("wedding website", () => {
     page,
     browser,
   }) => {
-    await logIn(page, await createAccount("lb10-rsvp"));
+    await logIn(page, await createAccount("lb10-rsvp", "couple"));
     const weddingId = await createFullWedding(page, "Boda de prueba RSVP Sitio");
     await page.goto(`/app/weddings/${weddingId}/guests`);
     const section = page.getByRole("region", { name: es.guests.newParty.title });
@@ -505,10 +505,10 @@ test.describe("wedding website", () => {
 
   test("an outsider gets a 404 for another wedding's editor", async ({ browser }) => {
     const owner = await freshPage(browser);
-    await logIn(owner.page, await createAccount("lb10-outsider-owner"));
+    await logIn(owner.page, await createAccount("lb10-outsider-owner", "couple"));
     const weddingId = await createFullWedding(owner.page, "Boda de prueba Ajena");
     const outsider = await freshPage(browser);
-    await logIn(outsider.page, await createAccount("lb10-outsider"));
+    await logIn(outsider.page, await createAccount("lb10-outsider", "couple"));
     const response = await outsider.page.goto(`/app/weddings/${weddingId}/site`);
     expect(response?.status()).toBe(404);
     await expect(outsider.page.getByText("Boda de prueba Ajena")).toHaveCount(0);
@@ -516,7 +516,7 @@ test.describe("wedding website", () => {
   });
 
   test("P: the editor and the public site fit a phone screen (360 and 390 px)", async ({ page, browser }) => {
-    await logIn(page, await createAccount("lb10-phone"));
+    await logIn(page, await createAccount("lb10-phone", "couple"));
     const weddingId = await createFullWedding(
       page,
       "Boda de prueba de María Fernanda de los Ángeles y Juan Sebastián Rodríguez",
@@ -553,7 +553,7 @@ test.describe("wedding website", () => {
     page,
     browser,
   }, testInfo) => {
-    await logIn(page, await createAccount("lb-site-classic"));
+    await logIn(page, await createAccount("lb-site-classic", "couple"));
     const weddingId = await createFullWedding(page, "Boda de prueba Clásica");
     await openSite(page, weddingId);
     await saveSection(page, "intro", { body: "Bienvenidos.\nNos alegra compartir este día.", visible: true });
@@ -591,7 +591,7 @@ test.describe("wedding website", () => {
   test("R: the public site renders the theme a member saved; no design row is Classic", async ({ page, browser }, testInfo) => {
     // ADR-019 CP4. There is no theme selector yet: the theme is saved through
     // the member RPC (save_wedding_site_design), as a collaborator would.
-    const owner = await createAccount("lb-site-theme-owner");
+    const owner = await createAccount("lb-site-theme-owner", "couple");
     await logIn(page, owner);
     const weddingId = await createFullWedding(page, "Boda de prueba con tema");
     await openSite(page, weddingId);
@@ -601,7 +601,7 @@ test.describe("wedding website", () => {
     await saveSlug(page, slug);
     await publishSite(page);
 
-    const collaborator = await createAccount("lb-site-theme-collab");
+    const collaborator = await createAccount("lb-site-theme-collab", "planner");
     const db = new pg.Client({ connectionString: readLocalSupabase().dbUrl });
     await db.connect();
     try {
@@ -674,7 +674,7 @@ test.describe("wedding website", () => {
     page,
     browser,
   }) => {
-    const ownerEmail = await createAccount("lb-site-style-owner");
+    const ownerEmail = await createAccount("lb-site-style-owner", "couple");
     await logIn(page, ownerEmail);
     const weddingId = await createFullWedding(page, "Boda de prueba Estilo");
     await openSite(page, weddingId);
@@ -715,7 +715,7 @@ test.describe("wedding website", () => {
     await expect(visitor.page.locator("main")).toHaveAttribute("data-site-palette", "ivory");
 
     // A collaborator chooses too (but still can't publish), live at once.
-    const collaboratorEmail = await createAccount("lb-site-style-collab");
+    const collaboratorEmail = await createAccount("lb-site-style-collab", "planner");
     await addCollaborator(weddingId, collaboratorEmail);
     const collab = await freshPage(browser);
     await logIn(collab.page, collaboratorEmail);
@@ -746,7 +746,7 @@ test.describe("wedding website", () => {
       themeOption(page, "minimal").getByRole("button", { name: `${site.design.use}: ${site.themes.minimal.name}` }).click(),
     );
     const outsider = await freshPage(browser);
-    await logIn(outsider.page, await createAccount("lb-site-style-outsider"));
+    await logIn(outsider.page, await createAccount("lb-site-style-outsider", "couple"));
     await replayAction(outsider.page, saveRequest);
     const anonymous = await freshPage(browser);
     await replayAction(anonymous.page, saveRequest);
@@ -759,7 +759,7 @@ test.describe("wedding website", () => {
   });
 
   test("T: the member-only preview draws any theme, published or not, and never writes", async ({ page, browser }, testInfo) => {
-    const ownerEmail = await createAccount("lb-site-preview-owner");
+    const ownerEmail = await createAccount("lb-site-preview-owner", "couple");
     await logIn(page, ownerEmail);
     const weddingId = await createFullWedding(page, "Boda de prueba Vista previa");
     await openSite(page, weddingId);
@@ -818,7 +818,7 @@ test.describe("wedding website", () => {
     await screenshotPreview(page, testInfo, "preview-tropical");
 
     // A collaborator previews too.
-    const collaboratorEmail = await createAccount("lb-site-preview-collab");
+    const collaboratorEmail = await createAccount("lb-site-preview-collab", "planner");
     await addCollaborator(weddingId, collaboratorEmail);
     const collab = await freshPage(browser);
     await logIn(collab.page, collaboratorEmail);
@@ -830,7 +830,7 @@ test.describe("wedding website", () => {
 
     // An outsider gets a 404; a signed-out visitor is sent to log in.
     const outsider = await freshPage(browser);
-    await logIn(outsider.page, await createAccount("lb-site-preview-outsider"));
+    await logIn(outsider.page, await createAccount("lb-site-preview-outsider", "couple"));
     const response = await outsider.page.goto(`/app/weddings/${weddingId}/site/preview?theme=minimal`);
     expect(response?.status()).toBe(404);
     await expect(outsider.page.getByText("Texto visible de la introducción.")).toHaveCount(0);
@@ -845,7 +845,7 @@ test.describe("wedding website", () => {
   });
 
   test("U: the selector and the preview fit 360, 390, 768 and 1280 px, keyboard included", async ({ page }, testInfo) => {
-    await logIn(page, await createAccount("lb-site-style-widths"));
+    await logIn(page, await createAccount("lb-site-style-widths", "couple"));
     const weddingId = await createFullWedding(
       page,
       "Boda de prueba de María Fernanda de los Ángeles y Juan Sebastián Rodríguez",
@@ -888,7 +888,7 @@ test.describe("wedding website", () => {
     browser,
   }, testInfo) => {
     const customize = site.customize;
-    const ownerEmail = await createAccount("lb-site-custom-owner");
+    const ownerEmail = await createAccount("lb-site-custom-owner", "couple");
     await logIn(page, ownerEmail);
     const weddingId = await createFullWedding(page, "Boda de prueba Personalizada");
     await openSite(page, weddingId);
@@ -1006,7 +1006,7 @@ test.describe("wedding website", () => {
     await expectPublicLook(visitor.page, { palette: "mono", bodyFont: "sans" });
 
     // 11. A collaborator customizes too.
-    const collaboratorEmail = await createAccount("lb-site-custom-collab");
+    const collaboratorEmail = await createAccount("lb-site-custom-collab", "planner");
     await addCollaborator(weddingId, collaboratorEmail);
     const collab = await freshPage(browser);
     await logIn(collab.page, collaboratorEmail);
@@ -1030,7 +1030,7 @@ test.describe("wedding website", () => {
     // 12. The same save request from an outsider or a signed-out visitor: refused, nothing changes.
     await withDb((db) => db.query("update public.wedding_site_designs set customization = '{}' where wedding_id = $1", [weddingId]));
     const outsider = await freshPage(browser);
-    await logIn(outsider.page, await createAccount("lb-site-custom-outsider"));
+    await logIn(outsider.page, await createAccount("lb-site-custom-outsider", "couple"));
     await replayAction(outsider.page, saveRequest);
     const anonymous = await freshPage(browser);
     await replayAction(anonymous.page, saveRequest);
@@ -1052,7 +1052,7 @@ test.describe("wedding website", () => {
     browser,
   }) => {
     const customize = site.customize;
-    const ownerEmail = await createAccount("lb-site-custom-private");
+    const ownerEmail = await createAccount("lb-site-custom-private", "couple");
     await logIn(page, ownerEmail);
     const weddingId = await createFullWedding(page, "Boda de prueba Personalizada privada");
     await openSite(page, weddingId);
@@ -1062,7 +1062,7 @@ test.describe("wedding website", () => {
     const visitor = await freshPage(browser);
 
     // A collaborator customizes the unpublished site.
-    const collaboratorEmail = await createAccount("lb-site-custom-private-collab");
+    const collaboratorEmail = await createAccount("lb-site-custom-private-collab", "planner");
     await addCollaborator(weddingId, collaboratorEmail);
     const collab = await freshPage(browser);
     await logIn(collab.page, collaboratorEmail);
@@ -1108,7 +1108,7 @@ test.describe("wedding website", () => {
 
   test("X: the customization controls and the preview fit 360, 390, 768 and 1280 px, keyboard included", async ({ page }, testInfo) => {
     const customize = site.customize;
-    await logIn(page, await createAccount("lb-site-custom-widths"));
+    await logIn(page, await createAccount("lb-site-custom-widths", "couple"));
     const weddingId = await createFullWedding(
       page,
       "Boda de prueba de María Fernanda de los Ángeles y Juan Sebastián Rodríguez",
@@ -1171,7 +1171,7 @@ test.describe("wedding website", () => {
   }, testInfo) => {
     const customize = site.customize;
     const colors = customize.colors;
-    const ownerEmail = await createAccount("lb-site-colors-owner");
+    const ownerEmail = await createAccount("lb-site-colors-owner", "couple");
     await logIn(page, ownerEmail);
     const weddingId = await createFullWedding(page, "Boda de prueba Colores");
     await openSite(page, weddingId);
@@ -1296,7 +1296,7 @@ test.describe("wedding website", () => {
     await expect(light.page.locator("main")).toHaveCSS("background-color", "rgb(251, 248, 242)");
 
     // 13. A collaborator saves custom colors (and they survive a theme change).
-    const collaboratorEmail = await createAccount("lb-site-colors-collab");
+    const collaboratorEmail = await createAccount("lb-site-colors-collab", "planner");
     await addCollaborator(weddingId, collaboratorEmail);
     const collab = await freshPage(browser);
     await logIn(collab.page, collaboratorEmail);
@@ -1323,7 +1323,7 @@ test.describe("wedding website", () => {
     // 14. The collaborator's save request from an outsider or a signed-out visitor: nothing changes.
     await withDb((db) => db.query("update public.wedding_site_designs set customization = '{}' where wedding_id = $1", [weddingId]));
     const outsider = await freshPage(browser);
-    await logIn(outsider.page, await createAccount("lb-site-colors-outsider"));
+    await logIn(outsider.page, await createAccount("lb-site-colors-outsider", "couple"));
     await replayAction(outsider.page, collabSave);
     const anonymous = await freshPage(browser);
     await replayAction(anonymous.page, collabSave);
@@ -1342,7 +1342,7 @@ test.describe("wedding website", () => {
   }, testInfo) => {
     const customize = site.customize;
     const colors = customize.colors;
-    const ownerEmail = await createAccount("lb-site-colors-private");
+    const ownerEmail = await createAccount("lb-site-colors-private", "couple");
     await logIn(page, ownerEmail);
     const weddingId = await createFullWedding(page, "Boda de prueba de María Fernanda de los Ángeles y Juan Sebastián Rodríguez");
     await openSite(page, weddingId);

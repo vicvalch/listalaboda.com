@@ -188,7 +188,7 @@ test.describe("visual seating planner (desktop)", () => {
     browser,
   }) => {
     test.setTimeout(180_000);
-    await logIn(page, await createAccount("lb20-owner"));
+    await logIn(page, await createAccount("lb20-owner", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Plano", "2090-06-01");
 
     await page.goto(`/app/weddings/${weddingId}/guests`);
@@ -337,7 +337,7 @@ test.describe("visual seating planner (desktop)", () => {
   });
 
   test("keyboard: move a table one grid step, and seat a guest through the inspector", async ({ page }) => {
-    await logIn(page, await createAccount("lb20-keyboard"));
+    await logIn(page, await createAccount("lb20-keyboard", "couple"));
     const weddingId = await createWedding(page, "Boda teclado Plano", "2090-06-01");
     await page.goto(`/app/weddings/${weddingId}/guests`);
     await createParty(page, "Familia Núñez", ["Nora Núñez"]);
@@ -383,7 +383,7 @@ test.describe("visual seating planner (desktop)", () => {
   ]) {
     test(`the planner page has no horizontal overflow at ${viewport.width}×${viewport.height}`, async ({ page }) => {
       await page.setViewportSize(viewport);
-      await logIn(page, await createAccount(`lb20-width-${viewport.width}`));
+      await logIn(page, await createAccount(`lb20-width-${viewport.width}`, "couple"));
       const weddingId = await createWedding(page, "Boda ancho Plano");
       await page.goto(seatingPath(weddingId));
       await createListTable(page, "Mesa ancha", 50);
@@ -404,7 +404,7 @@ test.describe("visual seating planner (narrow screens)", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
   test("the list keeps every operation; ?view=plan shows a notice, never the board", async ({ page }) => {
-    await logIn(page, await createAccount("lb20-mobile"));
+    await logIn(page, await createAccount("lb20-mobile", "couple"));
     const weddingId = await createWedding(page, "Boda móvil Plano");
     await page.goto(`/app/weddings/${weddingId}/guests`);
     await createParty(page, "Familia Ríos", ["Iván Ríos", "Eva Ríos"]);
@@ -444,7 +444,7 @@ test.describe("visual seating planner (50 tables, 250 guests)", () => {
 
   test("stays responsive and writes once per completed drag", async ({ page }) => {
     test.setTimeout(240_000);
-    const email = await createAccount("lb20-perf");
+    const email = await createAccount("lb20-perf", "couple");
     await logIn(page, email);
     const weddingId = await createWedding(page, "Boda grande Plano");
 

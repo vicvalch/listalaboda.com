@@ -40,6 +40,9 @@ export type CreateWeddingResult =
         | "invalid_city"
         | "invalid_time_zone"
         | "unauthenticated"
+        // ACCOUNT-01 (ADR-020 §5): the database's creation rule.
+        | "account_type_required"
+        | "couple_wedding_limit"
         | "error";
     }>;
 
@@ -69,6 +72,10 @@ function weddingFieldError(
  * wedding (name, optional date, city and time zone) and the caller's owner
  * membership atomically for `auth.uid()`. No user id, owner or role is
  * sent: the database derives them. An invalid city or zone leaves nothing.
+ *
+ * ACCOUNT-01: the database refuses an account without a type
+ * (`account_type_required`) and a couple who already belongs to a wedding
+ * (`couple_wedding_limit`); both SQLSTATE 55000, told apart by message.
  */
 export async function createWedding(
   supabase: Client,
@@ -85,6 +92,12 @@ export async function createWedding(
       const field = weddingFieldError(error);
       if (field) return { ok: false, reason: field };
       if (error.code === "42501") return { ok: false, reason: "unauthenticated" };
+      if (error.code === "55000" && error.message === "account_type_required") {
+        return { ok: false, reason: "account_type_required" };
+      }
+      if (error.code === "55000" && error.message === "couple_wedding_limit") {
+        return { ok: false, reason: "couple_wedding_limit" };
+      }
       return { ok: false, reason: "error" };
     }
     if (!data?.id) return { ok: false, reason: "error" };

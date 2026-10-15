@@ -1,8 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 import pg from "pg";
 
+import type { Database } from "../../src/lib/supabase/database.types";
 import { addDaysToIsoDate } from "../../src/lib/checklist/timing";
 import { weddingLocalToday } from "../../src/lib/weddings/timezone";
+import { chooseAccountType, type E2EAccountType } from "./flows";
 import { E2E_PASSWORD, uniqueEmail } from "./identities";
 import { readLocalSupabase } from "./local-supabase";
 
@@ -32,17 +34,28 @@ async function db<T>(run: (client: pg.Client) => Promise<T>): Promise<T> {
   }
 }
 
-/** A confirmed local account; `metadata` lands in user_metadata (e.g. a fake planner flag). */
+/**
+ * A confirmed local account with its account type chosen through the real
+ * RPC as itself (ACCOUNT-01; null = not chosen yet); `metadata` lands in
+ * user_metadata (e.g. a fake planner flag, which must never matter).
+ */
 export async function createAccountWithId(
   label: string,
+  accountType: E2EAccountType,
   metadata?: Record<string, unknown>,
 ): Promise<{ email: string; id: string }> {
   const { apiUrl, publishableKey } = readLocalSupabase();
   const email = uniqueEmail(label);
-  const { data, error } = await createClient(apiUrl, publishableKey, {
+  const client = createClient<Database>(apiUrl, publishableKey, {
     auth: { persistSession: false, autoRefreshToken: false },
-  }).auth.signUp({ email, password: E2E_PASSWORD, ...(metadata ? { options: { data: metadata } } : {}) });
+  });
+  const { data, error } = await client.auth.signUp({
+    email,
+    password: E2E_PASSWORD,
+    ...(metadata ? { options: { data: metadata } } : {}),
+  });
   if (error || !data.user || !data.session) throw new Error(`Could not create local E2E account: ${error?.code}`);
+  if (accountType) await chooseAccountType(client, accountType);
   return { email, id: data.user.id };
 }
 

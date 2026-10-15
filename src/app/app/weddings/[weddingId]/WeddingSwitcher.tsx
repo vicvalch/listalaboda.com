@@ -15,6 +15,8 @@ type Props = {
   weddings: readonly SwitcherWedding[];
   /** The URL's wedding id: the only notion of "current" (no stored active wedding). */
   currentId: string;
+  /** Planners only (ADR-020 §5): a couple's account never offers another wedding. */
+  canCreate: boolean;
 };
 
 /** Search appears only for longer lists. */
@@ -26,7 +28,7 @@ const SEARCH_THRESHOLD = 8;
  * closes on Escape (focus back to the summary), on choosing a wedding, on a
  * route change and on an outside click. Nothing is remembered anywhere.
  */
-export function WeddingSwitcher({ weddings, currentId }: Props) {
+export function WeddingSwitcher({ weddings, currentId, canCreate }: Props) {
   const { switcher: copy, noDate } = getMessages().app.weddings;
   const pathname = usePathname();
   const detailsRef = useRef<HTMLDetailsElement>(null);
@@ -145,9 +147,11 @@ export function WeddingSwitcher({ weddings, currentId }: Props) {
           <Link href={MY_WEDDINGS_LIST_PATH} onClick={close} className={`${textLinkClass} flex min-h-11 items-center px-3`}>
             {copy.viewAll}
           </Link>
-          <Link href="/app/weddings/new" onClick={close} className={`${textLinkClass} flex min-h-11 items-center px-3`}>
-            {copy.create}
-          </Link>
+          {canCreate ? (
+            <Link href="/app/weddings/new" onClick={close} className={`${textLinkClass} flex min-h-11 items-center px-3`}>
+              {copy.create}
+            </Link>
+          ) : null}
         </div>
       </div>
     </details>

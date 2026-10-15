@@ -138,7 +138,7 @@ const M = 100; // minor units per major unit
 
 test.describe("budget and payments", () => {
   test("estimate, commit, schedule, pay, guard and decompose", async ({ page }) => {
-    const email = await createAccount("budget");
+    const email = await createAccount("budget", "couple");
     await logIn(page, email);
     const weddingId = await createWedding(page, "Boda con presupuesto");
     await setTimeZone(weddingId, "UTC");
@@ -324,7 +324,7 @@ test.describe("budget and payments", () => {
   });
 
   test("payments to a vendor not marked Contratado count as paid, not committed, and need attention", async ({ page }) => {
-    const email = await createAccount("budget-attention");
+    const email = await createAccount("budget-attention", "couple");
     await logIn(page, email);
     const weddingId = await createWedding(page, "Boda atención");
     const vendorId = await addVendor(page, weddingId, {
@@ -352,7 +352,7 @@ test.describe("budget and payments", () => {
   });
 
   test("CRC and USD stay separate blocks: no combined total, no conversion", async ({ page }) => {
-    const email = await createAccount("budget-mixed");
+    const email = await createAccount("budget-mixed", "couple");
     await logIn(page, email);
     const weddingId = await createWedding(page, "Boda dos monedas");
     await addVendor(page, weddingId, { name: "Salón", category: "venue", status: "booked", currency: "CRC", contracted: "3.000.000" });
@@ -376,7 +376,7 @@ test.describe("budget and payments", () => {
   });
 
   test("no time zone: dates show, nothing is labelled overdue, with a hint", async ({ page }) => {
-    const email = await createAccount("budget-no-zone");
+    const email = await createAccount("budget-no-zone", "couple");
     await logIn(page, email);
     const weddingId = await createWedding(page, "Boda sin zona");
     await addVendor(page, weddingId, { name: "Catering", category: "catering", status: "booked", currency: "CRC", contracted: "1.000" });
@@ -419,7 +419,7 @@ test.describe("budget and payments on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
   test("budget summaries, the category form and the vendor's Pagos forms fit 390 px", async ({ page }) => {
-    const email = await createAccount("budget-mobile");
+    const email = await createAccount("budget-mobile", "couple");
     await logIn(page, email);
     const weddingId = await createWedding(page, "Boda en el teléfono con un nombre bastante largo");
     await setTimeZone(weddingId, "UTC");

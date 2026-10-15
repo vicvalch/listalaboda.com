@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { containerClass, cx } from "@/components/marketing/classes";
 import { FaqList } from "@/components/marketing/FaqList";
+import { HowItWorks } from "@/components/marketing/HowItWorks";
 import { LifestylePhoto } from "@/components/marketing/LifestylePhoto";
 import { ProductShot } from "@/components/marketing/ProductShot";
 import { ThemeShowcase } from "@/components/marketing/ThemeShowcase";
@@ -31,9 +32,10 @@ const { marketing } = getMessages();
 const copy = marketing.planners;
 
 /**
- * Marketing Landing V1, MKT-2: the page for wedding planners. Static, like
- * the homepage; not indexed yet and without a canonical until the production
- * domain is connected.
+ * Marketing Landing V1, MKT-2: the page for wedding planners, and the
+ * default commercial entry (`/` redirects here, ACCOUNT-01). Static; not
+ * indexed yet and without a canonical until the production domain is
+ * connected.
  *
  * One visual narrative built from real product screens (fictional fixture):
  * every wedding and what needs attention (hero), from the RSVP to the table,
@@ -160,6 +162,9 @@ export default function PlannersPage() {
           <p className="max-w-2xl text-xl leading-9 sm:text-2xl sm:leading-10">{copy.problem.body}</p>
         </div>
       </section>
+
+      {/* How it works (ACCOUNT-01): both account paths, the planner's first. */}
+      <HowItWorks first="planner" />
 
       {/* 3. From the RSVP to the table: one party's answers laid over the
           planner where the same guests are seated (or still waiting). */}

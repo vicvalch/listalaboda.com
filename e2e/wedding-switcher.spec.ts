@@ -42,7 +42,7 @@ async function snapshot(page: Page, context: BrowserContext): Promise<StorageSna
 
 test.describe("wedding switcher", () => {
   test("one wedding: no switcher", async ({ page }) => {
-    const me = await createAccountWithId("lb24c-sw-one");
+    const me = await createAccountWithId("lb24c-sw-one", "planner");
     const id = await seedWedding({ name: "Boda única", members: [{ userId: me.id, role: "owner" }] });
     await logIn(page, me.email);
     await expect(page).toHaveURL(URL_OF(id));
@@ -54,8 +54,8 @@ test.describe("wedding switcher", () => {
     page,
     context,
   }) => {
-    const me = await createAccountWithId("lb24c-sw");
-    const other = await createAccountWithId("lb24c-sw-other");
+    const me = await createAccountWithId("lb24c-sw", "planner");
+    const other = await createAccountWithId("lb24c-sw-other", "planner");
     const mine = await seedWedding({
       name: "Boda de Sofía y Víctor",
       city: "San José",
@@ -183,7 +183,7 @@ test.describe("wedding switcher", () => {
   });
 
   test("renaming in settings updates the switcher", async ({ page }) => {
-    const me = await createAccountWithId("lb24c-sw-rename");
+    const me = await createAccountWithId("lb24c-sw-rename", "planner");
     const id = await seedWedding({ name: "Boda vieja", members: [{ userId: me.id, role: "owner" }] });
     await seedWedding({ name: "Otra boda", members: [{ userId: me.id, role: "owner" }] });
     await logIn(page, me.email);
@@ -196,8 +196,8 @@ test.describe("wedding switcher", () => {
   });
 
   test("persona metadata changes nothing", async ({ page }) => {
-    const planner = await createAccountWithId("lb24c-sw-planner", { planner: true, persona: "planner", account_type: "planner" });
-    const other = await createAccountWithId("lb24c-sw-planner-other");
+    const planner = await createAccountWithId("lb24c-sw-planner", "planner", { planner: true, persona: "planner", account_type: "planner" });
+    const other = await createAccountWithId("lb24c-sw-planner-other", "planner");
     const a = await seedWedding({ name: "Boda cliente 1", members: [{ userId: planner.id, role: "collaborator" }] });
     await seedWedding({ name: "Boda cliente 2", members: [{ userId: planner.id, role: "owner" }] });
     await seedWedding({ name: "Boda no asignada", members: [{ userId: other.id, role: "owner" }] });
@@ -211,7 +211,7 @@ test.describe("wedding switcher", () => {
   });
 
   test("8+ weddings: local search by name or city, accent-insensitive, with a polite result count", async ({ page }) => {
-    const me = await createAccountWithId("lb24c-sw-search");
+    const me = await createAccountWithId("lb24c-sw-search", "planner");
     await seedManyWeddings(me.id, 7, "Boda lista");
     const first = await seedWedding({
       name: "Boda de Sofía",
@@ -252,7 +252,7 @@ test.describe("wedding switcher on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
   test("full width, 44 px targets, no overflow, long names wrap", async ({ page }) => {
-    const me = await createAccountWithId("lb24c-sw-mobile");
+    const me = await createAccountWithId("lb24c-sw-mobile", "planner");
     const id = await seedWedding({
       name: "Boda de Alejandra Montenegro Villalobos y Sebastián Rodríguez Quesada",
       city: "San Rafael de Escazú, San José",

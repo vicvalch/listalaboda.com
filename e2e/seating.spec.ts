@@ -121,7 +121,7 @@ test.describe("seating plan", () => {
     page,
     browser,
   }) => {
-    await logIn(page, await createAccount("lb19-owner"));
+    await logIn(page, await createAccount("lb19-owner", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Mesas", "2090-06-01");
 
     // Guests: one party answers (two yes, one no), another doesn't answer.
@@ -235,12 +235,12 @@ test.describe("seating plan", () => {
   });
 
   test("a non-member gets the same 404 as a missing wedding", async ({ page, browser }) => {
-    await logIn(page, await createAccount("lb19-owner-404"));
+    await logIn(page, await createAccount("lb19-owner-404", "couple"));
     const weddingId = await createWedding(page, "Boda privada Mesas");
 
     const other = await freshPage(browser);
     try {
-      await logIn(other.page, await createAccount("lb19-outsider"));
+      await logIn(other.page, await createAccount("lb19-outsider", "couple"));
       const response = await other.page.goto(`/app/weddings/${weddingId}/seating`);
       expect(response?.status()).toBe(404);
       await expect(other.page.getByRole("heading", { level: 1, name: seating.title })).toHaveCount(0);

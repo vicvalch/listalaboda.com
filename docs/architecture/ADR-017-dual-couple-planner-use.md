@@ -1,6 +1,7 @@
 # ADR-017 — Dual Couple/Planner Use on Wedding Membership
 
-Status: Accepted (LB-24A) · Date: 2026-10-09
+Status: Accepted (LB-24A) · Date: 2026-10-09 · Amended by [ADR-020](ADR-020-immutable-account-type.md) (ACCOUNT-01):
+§4 (persona is now a stored, immutable account type) and §7 (entry depends on it).
 Related: [Product Constitution §2, §3, §6, §8, §9, §11, §14, §17](../product/PRODUCT-CONSTITUTION.md), [ADR-001 §3, §4, §6](ADR-001-product-domain-and-tenancy.md), [ADR-002 §2, §3, §4, §6](ADR-002-auth-and-security-boundaries.md)
 Amends: ADR-001 §6 (steps 1–2, the planned `planner` role) and ADR-002 §2 (Planner actor row).
 

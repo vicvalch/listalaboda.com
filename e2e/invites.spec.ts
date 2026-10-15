@@ -1,6 +1,7 @@
 import { expect, test, type Browser } from "@playwright/test";
 
 import {
+  chooseAccountTypeInBrowser,
   createAccount,
   createInvite,
   createWedding,
@@ -23,7 +24,7 @@ test.describe("membership invites", () => {
   }) => {
     // D: owner creates a collaborator invite and gets a copyable link.
     const { context, page } = await freshPage(browser);
-    await logIn(page, await createAccount("owner-d"));
+    await logIn(page, await createAccount("owner-d", "couple"));
     const weddingId = await createWedding(page, "Boda con colaboradora");
     const inviteUrl = await createInvite(page, "collaborator");
     // Scoped: the wedding page also shows checklist "Pendiente" labels.
@@ -55,6 +56,12 @@ test.describe("membership invites", () => {
     await expect(page).toHaveURL(/\/invite\/continue$/);
     await page.getByRole("button", { name: es.inviteAccept.submit }).click();
 
+    // ACCOUNT-01: the new account chooses its type first (here the couple's
+    // planner, invited as a collaborator), then continues to the wedding it joined.
+    await expect(page).toHaveURL(
+      new RegExp(`/onboarding/account-type\\?next=${encodeURIComponent(`/app/weddings/${weddingId}?joined=new`)}$`),
+    );
+    await chooseAccountTypeInBrowser(page, "planner");
     await expect(page).toHaveURL(new RegExp(`/app/weddings/${weddingId}\\?joined=new$`));
     await expect(page.getByText(es.wedding.joined)).toBeVisible();
     await expect(page.getByTestId("wedding-role")).toHaveText(es.roles.collaborator.label);
@@ -76,11 +83,11 @@ test.describe("membership invites", () => {
     browser,
   }) => {
     const owner = await freshPage(browser);
-    await logIn(owner.page, await createAccount("owner-f"));
+    await logIn(owner.page, await createAccount("owner-f", "couple"));
     const weddingId = await createWedding(owner.page, "Boda de dos organizadores");
     const inviteUrl = await createInvite(owner.page, "owner");
 
-    const recipientEmail = await createAccount("partner-f");
+    const recipientEmail = await createAccount("partner-f", "couple");
     const recipient = await freshPage(browser);
     await recipient.page.goto(inviteUrl);
     await expect(recipient.page).toHaveURL(/\/login\?next=%2Finvite%2Fcontinue$/);
@@ -106,7 +113,7 @@ test.describe("membership invites", () => {
     browser,
   }) => {
     const owner = await freshPage(browser);
-    await logIn(owner.page, await createAccount("owner-direct"));
+    await logIn(owner.page, await createAccount("owner-direct", "couple"));
     const weddingId = await createWedding(owner.page, "Boda de acceso directo");
     const inviteUrl = await createInvite(owner.page, "collaborator");
 
@@ -119,7 +126,7 @@ test.describe("membership invites", () => {
 
     // The invite is still pending and usable by someone else.
     const recipient = await freshPage(browser);
-    await logIn(recipient.page, await createAccount("direct"));
+    await logIn(recipient.page, await createAccount("direct", "planner"));
     await recipient.page.goto(inviteUrl);
     await expect(recipient.page).toHaveURL(/\/invite\/continue$/);
     await recipient.page.getByRole("button", { name: es.inviteAccept.submit }).click();
@@ -133,13 +140,13 @@ test.describe("membership invites", () => {
 
   test("an email-bound invite can't be used by a different account", async ({ browser }) => {
     const owner = await freshPage(browser);
-    await logIn(owner.page, await createAccount("owner-bound"));
+    await logIn(owner.page, await createAccount("owner-bound", "couple"));
     await createWedding(owner.page, "Boda con invitación personal");
     const intended = uniqueEmail("intended");
     const inviteUrl = await createInvite(owner.page, "collaborator", intended);
 
     const other = await freshPage(browser);
-    await logIn(other.page, await createAccount("someone-else"));
+    await logIn(other.page, await createAccount("someone-else", "planner"));
     await other.page.goto(inviteUrl);
     await other.page.getByRole("button", { name: es.inviteAccept.submit }).click();
     await expect(other.page.getByRole("heading", { name: es.inviteInvalid.title })).toBeVisible();
@@ -152,14 +159,14 @@ test.describe("membership invites", () => {
 
   test("a revoked invite is invalid", async ({ browser }) => {
     const owner = await freshPage(browser);
-    await logIn(owner.page, await createAccount("owner-revoke"));
+    await logIn(owner.page, await createAccount("owner-revoke", "couple"));
     await createWedding(owner.page, "Boda con invitación cancelada");
     const inviteUrl = await createInvite(owner.page, "collaborator");
     await owner.page.getByRole("button", { name: es.invites.revoke }).click();
     await expect(owner.page.getByText(es.invites.status.revoked, { exact: true })).toBeVisible();
 
     const recipient = await freshPage(browser);
-    await logIn(recipient.page, await createAccount("late"));
+    await logIn(recipient.page, await createAccount("late", "planner"));
     await recipient.page.goto(inviteUrl);
     await recipient.page.getByRole("button", { name: es.inviteAccept.submit }).click();
     await expect(
@@ -174,11 +181,11 @@ test.describe("membership invites", () => {
     browser,
   }) => {
     const ownerB = await freshPage(browser);
-    await logIn(ownerB.page, await createAccount("owner-b"));
+    await logIn(ownerB.page, await createAccount("owner-b", "couple"));
     const weddingB = await createWedding(ownerB.page, "Boda privada B");
 
     const ownerA = await freshPage(browser);
-    await logIn(ownerA.page, await createAccount("owner-a"));
+    await logIn(ownerA.page, await createAccount("owner-a", "couple"));
     await createWedding(ownerA.page, "Boda A");
 
     const response = await ownerA.page.goto(`/app/weddings/${weddingB}`);
@@ -205,7 +212,7 @@ test.describe("membership invites", () => {
   });
 
   test("H: a well-formed but unknown token is equally invalid", async ({ page }) => {
-    await logIn(page, await createAccount("unknown-token"));
+    await logIn(page, await createAccount("unknown-token", null));
     await page.goto(`/invite/${"A".repeat(43)}`);
     await page.getByRole("button", { name: es.inviteAccept.submit }).click();
     await expect(page.getByRole("heading", { name: es.inviteInvalid.title })).toBeVisible();

@@ -120,7 +120,7 @@ test.describe("automatic reminders and undeliverable recipients", () => {
     page,
     request,
   }) => {
-    await logIn(page, await createAccount("lb184-owner"));
+    await logIn(page, await createAccount("lb184-owner", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Rebote Automático", dueDate());
     await withDb((db) => db.query("update public.weddings set time_zone = 'UTC' where id = $1", [weddingId]));
     await openGuests(page, weddingId);

@@ -31,7 +31,7 @@ async function freshPage(browser: Browser) {
 
 test.describe("wedding checklist", () => {
   test("I: an owner creates the suggested checklist explicitly; it starts at 0", async ({ page }) => {
-    await logIn(page, await createAccount("cl-init"));
+    await logIn(page, await createAccount("cl-init", "couple"));
     await createWedding(page, "Boda con lista nueva", "2027-08-14");
 
     // Nothing is seeded on GET: the owner sees the explicit onboarding step.
@@ -59,7 +59,7 @@ test.describe("wedding checklist", () => {
   test("J+K: completing an item raises progress; reopening lowers it; both persist", async ({
     page,
   }) => {
-    await logIn(page, await createAccount("cl-complete"));
+    await logIn(page, await createAccount("cl-complete", "couple"));
     await createWedding(page, "Boda que avanza", "2027-08-14");
     await initializeChecklist(page);
 
@@ -94,7 +94,7 @@ test.describe("wedding checklist", () => {
   test("L: 'No aplica' leaves the denominator, shows in its filter, and can be undone", async ({
     page,
   }) => {
-    await logIn(page, await createAccount("cl-na"));
+    await logIn(page, await createAccount("cl-na", "couple"));
     const weddingId = await createWedding(page, "Boda sin estilo", "2027-08-14");
     await initializeChecklist(page);
 
@@ -138,7 +138,7 @@ test.describe("wedding checklist", () => {
   });
 
   test("M: a custom item can be added, edited, completed, and it persists", async ({ page }) => {
-    await logIn(page, await createAccount("cl-custom"));
+    await logIn(page, await createAccount("cl-custom", "couple"));
     await createWedding(page, "Boda con pendiente propio", "2027-08-14");
     await initializeChecklist(page);
 
@@ -178,7 +178,7 @@ test.describe("wedding checklist", () => {
   });
 
   test("the add form explains errors next to the field", async ({ page }) => {
-    await logIn(page, await createAccount("cl-invalid"));
+    await logIn(page, await createAccount("cl-invalid", "couple"));
     await createWedding(page, "Boda con errores", "2027-08-14");
     const section = page.getByRole("region", { name: es.checklist.form.addTitle });
     await section.getByRole("radio", { name: es.checklist.form.timingRelative }).check();
@@ -198,7 +198,7 @@ test.describe("wedding checklist", () => {
   });
 
   test("N: deleting an item needs a confirmation and is permanent", async ({ page }) => {
-    await logIn(page, await createAccount("cl-delete"));
+    await logIn(page, await createAccount("cl-delete", "couple"));
     await createWedding(page, "Boda que borra", "2027-08-14");
     await initializeChecklist(page);
     await addChecklistItem(page, { title: "Pendiente para borrar" });
@@ -223,13 +223,13 @@ test.describe("wedding checklist", () => {
     browser,
   }) => {
     const owner = await freshPage(browser);
-    await logIn(owner.page, await createAccount("cl-owner"));
+    await logIn(owner.page, await createAccount("cl-owner", "couple"));
     const weddingId = await createWedding(owner.page, "Boda compartida", "2027-08-14");
     const inviteUrl = await createInvite(owner.page, "collaborator");
 
     // The collaborator joins before the list exists: a safe waiting state.
     const collab = await freshPage(browser);
-    await logIn(collab.page, await createAccount("cl-collab"));
+    await logIn(collab.page, await createAccount("cl-collab", "planner"));
     await collab.page.goto(inviteUrl);
     await collab.page.getByRole("button", { name: es.inviteAccept.submit }).click();
     await expect(collab.page).toHaveURL(new RegExp(`/app/weddings/${weddingId}`));
@@ -263,13 +263,13 @@ test.describe("wedding checklist", () => {
 
   test("P: an outsider gets a 404 and no checklist content", async ({ browser }) => {
     const owner = await freshPage(browser);
-    await logIn(owner.page, await createAccount("cl-private"));
+    await logIn(owner.page, await createAccount("cl-private", "couple"));
     const weddingId = await createWedding(owner.page, "Boda con lista privada", "2027-08-14");
     await initializeChecklist(owner.page);
     await addChecklistItem(owner.page, { title: "Secreto de la boda privada" });
 
     const outsider = await freshPage(browser);
-    await logIn(outsider.page, await createAccount("cl-outsider"));
+    await logIn(outsider.page, await createAccount("cl-outsider", "couple"));
     const response = await outsider.page.goto(`/app/weddings/${weddingId}`);
     expect(response?.status()).toBe(404);
     await expect(outsider.page.getByRole("heading", { name: es.notFound.title })).toBeVisible();
@@ -286,7 +286,7 @@ test.describe("wedding checklist", () => {
   });
 
   test("Q: relative items show the date computed from the wedding date", async ({ page }) => {
-    await logIn(page, await createAccount("cl-dates"));
+    await logIn(page, await createAccount("cl-dates", "couple"));
     await createWedding(page, "Boda con fechas", "2027-08-14");
     await initializeChecklist(page);
 
@@ -306,7 +306,7 @@ test.describe("wedding checklist", () => {
   test("Q: without a wedding date, relative items keep their rule and wait for the date", async ({
     page,
   }) => {
-    await logIn(page, await createAccount("cl-nodate"));
+    await logIn(page, await createAccount("cl-nodate", "couple"));
     await createWedding(page, "Boda sin fecha todavía");
     await initializeChecklist(page);
     await expect(checklistItem(page, BUDGET).getByTestId("checklist-item-timing")).toHaveText(

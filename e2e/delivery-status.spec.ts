@@ -103,12 +103,12 @@ async function sendReminder(card: Locator): Promise<Locator> {
 }
 
 async function ownerAndCollaborator(browser: Browser, page: Page, label: string) {
-  await logIn(page, await createAccount(`${label}-owner`));
+  await logIn(page, await createAccount(`${label}-owner`, "couple"));
   const weddingId = await createWedding(page, `Boda de prueba ${label}`, "2090-06-01");
   const inviteUrl = await createInvite(page, "collaborator");
   const context = await browser.newContext();
   const collab = await context.newPage();
-  await logIn(collab, await createAccount(`${label}-collab`));
+  await logIn(collab, await createAccount(`${label}-collab`, "planner"));
   await collab.goto(inviteUrl);
   await collab.getByRole("button", { name: es.inviteAccept.submit }).click();
   await expect(collab).toHaveURL(new RegExp(`/app/weddings/${weddingId}\\?joined=new$`));
@@ -120,7 +120,7 @@ test.describe("email delivery status and the same-address guard", () => {
     page,
     browser,
   }) => {
-    await logIn(page, await createAccount("lb183-bounce"));
+    await logIn(page, await createAccount("lb183-bounce", "couple"));
     const weddingId = await createWedding(page, "Boda de prueba Entrega", "2090-06-01");
     await openGuests(page, weddingId);
 

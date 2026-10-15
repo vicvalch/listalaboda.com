@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  chooseAccountTypeInBrowser,
   createAccount,
   createWedding,
   es,
@@ -12,7 +13,7 @@ import {
 import { uniqueEmail } from "./support/identities";
 
 test.describe("authentication", () => {
-  test("A: new owner signs up, sees the empty state, creates a wedding and owns it", async ({
+  test("A: new owner signs up, chooses a planner account, sees the empty state, creates a wedding and owns it", async ({
     page,
   }) => {
     const email = uniqueEmail("new-owner");
@@ -24,7 +25,10 @@ test.describe("authentication", () => {
     await fillCredentials(page, email);
     await page.getByRole("button", { name: es.auth.signup.submit }).click();
 
-    // Local Supabase auto-confirms, so sign-up returns a session directly.
+    // Local Supabase auto-confirms, so sign-up returns a session directly;
+    // the new account first chooses its type (ACCOUNT-01).
+    await expect(page).toHaveURL(/\/onboarding\/account-type$/);
+    await chooseAccountTypeInBrowser(page, "planner");
     await expect(page).toHaveURL(/\/app$/);
     await expect(page.getByRole("heading", { name: es.app.weddings.emptyTitle })).toBeVisible();
 
@@ -42,7 +46,7 @@ test.describe("authentication", () => {
   });
 
   test("wedding form rejects a blank name with a Spanish field error", async ({ page }) => {
-    await logIn(page, await createAccount("blank-name"));
+    await logIn(page, await createAccount("blank-name", "planner"));
     await page.goto("/app/weddings/new");
     await page.getByLabel(es.weddingNew.nameLabel).fill("   ");
     await page.getByRole("button", { name: es.weddingNew.submit }).click();
@@ -51,7 +55,7 @@ test.describe("authentication", () => {
   });
 
   test("B: an existing user logs in; wrong password gets a generic error", async ({ page }) => {
-    const email = await createAccount("existing");
+    const email = await createAccount("existing", "planner");
 
     await page.goto("/login");
     await fillCredentials(page, email, "wrong-password-123");
@@ -78,7 +82,7 @@ test.describe("authentication", () => {
   test("C: logout ends the session; /app requires login again, even via back", async ({
     page,
   }) => {
-    await logIn(page, await createAccount("logout"));
+    await logIn(page, await createAccount("logout", "planner"));
     await logOut(page);
 
     await page.goto("/app");
@@ -98,7 +102,7 @@ test.describe("authentication", () => {
   });
 
   test("an external next= is ignored after login", async ({ page }) => {
-    const email = await createAccount("open-redirect");
+    const email = await createAccount("open-redirect", "planner");
     await page.goto("/login?next=https://evil.example/");
     await fillCredentials(page, email);
     await page.getByRole("button", { name: es.auth.login.submit }).click();
@@ -106,7 +110,7 @@ test.describe("authentication", () => {
   });
 
   test("signing up with an already-registered email doesn't reveal it", async ({ page }) => {
-    const email = await createAccount("taken");
+    const email = await createAccount("taken", null);
     await page.goto("/signup");
     await fillCredentials(page, email);
     await page.getByRole("button", { name: es.auth.signup.submit }).click();

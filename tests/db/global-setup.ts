@@ -47,9 +47,10 @@ function readLocalStatus(): Required<SupabaseStatus> {
 
 /** Signs in a fake local user, creating it through normal sign-up if needed. */
 async function signIn(apiUrl: string, publishableKey: string, email: string) {
-  const auth = createClient(apiUrl, publishableKey, {
+  const client = createClient(apiUrl, publishableKey, {
     auth: { persistSession: false, autoRefreshToken: false },
-  }).auth;
+  });
+  const { auth } = client;
 
   const credentials = { email, password: LOCAL_TEST_PASSWORD };
   const signedIn = await auth.signInWithPassword(credentials);
@@ -61,6 +62,14 @@ async function signIn(apiUrl: string, publishableKey: string, email: string) {
     throw new Error(
       `Could not sign in local test user ${email}: ${result.error?.message ?? "no session"}`,
     );
+  }
+  // ACCOUNT-01 (ADR-020 §5): create_wedding refuses untyped accounts and
+  // limits couples, so the shared generic users are planners (unrestricted
+  // creation). Chosen through the real one-time RPC as each user; choosing
+  // the same type again on a later run is a no-op.
+  const typed = await client.rpc("select_account_type", { requested: "planner" });
+  if (typed.error) {
+    throw new Error(`Could not type local test user ${email} as a planner: ${typed.error.message}`);
   }
   return {
     id: session.user.id,

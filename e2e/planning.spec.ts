@@ -64,7 +64,7 @@ async function saveSettings(page: Page, weddingId: string) {
 
 test.describe("wedding settings and date recalculation", () => {
   test("R: moving the wedding date moves relative items; specific dates stay", async ({ page }) => {
-    await logIn(page, await createAccount("pl-move"));
+    await logIn(page, await createAccount("pl-move", "couple"));
     const weddingId = await createWedding(page, "Boda que cambia de fecha", "2027-08-14");
     await initializeChecklist(page);
     await addChecklistItem(page, {
@@ -105,7 +105,7 @@ test.describe("wedding settings and date recalculation", () => {
   test("S: clearing the wedding date keeps relative rules and drops only the exact date", async ({
     page,
   }) => {
-    await logIn(page, await createAccount("pl-clear"));
+    await logIn(page, await createAccount("pl-clear", "couple"));
     const weddingId = await createWedding(page, "Boda que pierde la fecha", "2027-08-14");
     await initializeChecklist(page);
     await expect(timing(page, BUDGET)).toHaveText("14 de agosto de 2026 · 365 días antes de la boda");
@@ -138,14 +138,14 @@ test.describe("wedding settings and date recalculation", () => {
     browser,
   }) => {
     const owner = await freshPage(browser);
-    await logIn(owner.page, await createAccount("pl-owner"));
+    await logIn(owner.page, await createAccount("pl-owner", "couple"));
     const weddingId = await createWedding(owner.page, "Boda con ajustes protegidos", "2027-08-14");
     const settingsPath = `/app/weddings/${weddingId}/settings`;
     const inviteUrl = await createInvite(owner.page, "collaborator");
     await initializeChecklist(owner.page);
 
     const collab = await freshPage(browser);
-    await logIn(collab.page, await createAccount("pl-collab"));
+    await logIn(collab.page, await createAccount("pl-collab", "planner"));
     await collab.page.goto(inviteUrl);
     await collab.page.getByRole("button", { name: es.inviteAccept.submit }).click();
     await expect(collab.page).toHaveURL(new RegExp(`/app/weddings/${weddingId}`));
@@ -206,11 +206,11 @@ test.describe("wedding settings and date recalculation", () => {
 
   test("an outsider gets a 404 for wedding settings", async ({ browser }) => {
     const owner = await freshPage(browser);
-    await logIn(owner.page, await createAccount("pl-private"));
+    await logIn(owner.page, await createAccount("pl-private", "couple"));
     const weddingId = await createWedding(owner.page, "Boda con ajustes privados", "2027-08-14");
 
     const outsider = await freshPage(browser);
-    await logIn(outsider.page, await createAccount("pl-outsider"));
+    await logIn(outsider.page, await createAccount("pl-outsider", "couple"));
     const response = await outsider.page.goto(`/app/weddings/${weddingId}/settings`);
     expect(response?.status()).toBe(404);
     await expect(outsider.page.getByText("Boda con ajustes privados")).toHaveCount(0);
@@ -222,7 +222,7 @@ test.describe("wedding settings and date recalculation", () => {
 
 test.describe("planning views", () => {
   test("U: Plan orders by date without touching the list's own order", async ({ page }) => {
-    await logIn(page, await createAccount("pl-plan"));
+    await logIn(page, await createAccount("pl-plan", "couple"));
     const weddingId = await createWedding(page, "Boda con plan", "2027-08-14");
     await initializeChecklist(page);
     const CUSTOM = "Reservar la prueba de menú";
@@ -265,7 +265,7 @@ test.describe("planning views", () => {
   });
 
   test("V: Por categoría groups items and shows each category's progress", async ({ page }) => {
-    await logIn(page, await createAccount("pl-category"));
+    await logIn(page, await createAccount("pl-category", "couple"));
     const weddingId = await createWedding(page, "Boda por categorías", "2027-08-14");
     await initializeChecklist(page);
     await addChecklistItem(page, { title: "Pendiente suelto" });
@@ -312,7 +312,7 @@ test.describe("planning views", () => {
   test("W: view and status live in the URL, preserve each other and fall back safely", async ({
     page,
   }) => {
-    await logIn(page, await createAccount("pl-url"));
+    await logIn(page, await createAccount("pl-url", "couple"));
     const weddingId = await createWedding(page, "Boda con filtros", "2027-08-14");
     await initializeChecklist(page);
     const base = `/app/weddings/${weddingId}`;
@@ -351,7 +351,7 @@ test.describe("planning views", () => {
   });
 
   test("X: all done and nothing applicable are calm, explicit states", async ({ page }) => {
-    await logIn(page, await createAccount("pl-states"));
+    await logIn(page, await createAccount("pl-states", "couple"));
     await createWedding(page, "Boda pequeña", "2027-08-14");
     await addChecklistItem(page, { title: "Firmar en el registro civil" });
     const row = checklistItem(page, "Firmar en el registro civil");

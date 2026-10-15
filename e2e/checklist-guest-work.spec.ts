@@ -120,7 +120,7 @@ async function partyId(weddingId: string, label: string): Promise<string> {
 
 /** One wedding with two parties and two custom items, set up through the real UI. */
 async function setUp(page: Page, label: string) {
-  await logIn(page, await createAccount(label));
+  await logIn(page, await createAccount(label, "couple"));
   const weddingId = await createWedding(page, `Boda ${label}`, "2090-06-01");
   await addChecklistItem(page, { title: TRANSPORT, category: "invitations" });
   await addChecklistItem(page, { title: HOTEL });
@@ -247,7 +247,7 @@ test.describe("checklist ↔ guest work", () => {
   test("F: a forged party of another wedding is refused and reveals nothing", async ({ page, browser }) => {
     // Wedding B, with its own party, belongs to someone else.
     const other = await freshPage(browser);
-    await logIn(other.page, await createAccount("lb16-other"));
+    await logIn(other.page, await createAccount("lb16-other", "couple"));
     const weddingB = await createWedding(other.page, "Boda ajena lb16", "2090-07-01");
     await openGuests(other.page, weddingB);
     await createParty(other.page, "Familia Secreta", ["Persona Secreta"]);
@@ -283,7 +283,7 @@ test.describe("checklist ↔ guest work", () => {
     const inviteUrl = await createInvite(page, "collaborator");
 
     const collab = await freshPage(browser);
-    await logIn(collab.page, await createAccount("lb16-collab"));
+    await logIn(collab.page, await createAccount("lb16-collab", "planner"));
     await collab.page.goto(inviteUrl);
     await collab.page.getByRole("button", { name: es.inviteAccept.submit }).click();
     await expect(collab.page).toHaveURL(new RegExp(`/app/weddings/${weddingId}\\?joined=new$`));
@@ -295,7 +295,7 @@ test.describe("checklist ↔ guest work", () => {
     expect(await itemRow(weddingId, HOTEL)).toMatchObject([{ guest_invitation_id: null, status: "pending" }]);
 
     const outsider = await freshPage(browser);
-    await logIn(outsider.page, await createAccount("lb16-outsider"));
+    await logIn(outsider.page, await createAccount("lb16-outsider", "couple"));
     const denied = await outsider.page.goto(`/app/weddings/${weddingId}`);
     expect(denied?.status()).toBe(404);
     await expect(outsider.page.getByText(TRANSPORT)).toHaveCount(0);

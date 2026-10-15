@@ -43,6 +43,15 @@ const publicSiteHeaders = [{ key: "X-Robots-Tag", value: "noindex, nofollow" }];
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  /**
+   * ACCOUNT-01: there is no generic homepage; `/` opens the planner page, the
+   * default commercial entry. A server-side redirect (no client JavaScript).
+   * Temporary (307), not permanent: while the marketing pages are noindex and
+   * the production domain isn't connected, nothing should cache it for good.
+   */
+  async redirects() {
+    return [{ source: "/", destination: "/planners", permanent: false }];
+  },
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },

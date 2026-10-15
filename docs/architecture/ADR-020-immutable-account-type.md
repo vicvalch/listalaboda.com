@@ -74,6 +74,16 @@ The `/app` layout is the shared deep-link guard: every `/app/**` page renders in
 Server Actions don't run layouts; the one action whose outcome depends on the type (`createWeddingAction`) calls
 `requireAccountType` itself. All others are authorized by wedding membership, which the type doesn't affect.
 
+**Amendment (SIT-01): invite completion.** An invitation decides a person's role in ONE wedding, never their account
+type, so accepting an invite never asks for, infers or writes one. An untyped account that has just accepted an invite
+enters that wedding directly: the `/app` layout (`requireAppEntry`) and the wedding layout (`requireWeddingEntry`, which
+also runs on client navigation between weddings) let an untyped account through only for `/app/weddings/{id}/**` when
+its OWN `wedding_memberships` row for that wedding was created within 30 minutes (`@/lib/accounts/invite-entry`,
+database clock, read on its RLS client). For an untyped account such a row can only come from `accept_membership_invite`
+(`create_wedding` refuses it). Nothing in the URL, a cookie or a form decides it (`?joined=` is presentation only);
+`/app`, `/app/weddings/new`, any other wedding and the same wedding after the window still go to the choice. No
+migration; the type stays null until the person chooses it.
+
 ### 5. Wedding creation
 
 The account type also constrains wedding **creation**, enforced the same way by the database and the application:

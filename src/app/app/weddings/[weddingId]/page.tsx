@@ -56,8 +56,8 @@ export default async function WeddingPage({
 
   const isOwner = access.access.role === "owner";
   // Presentation only (ADR-020): a couple's account has no "Mis bodas" list
-  // to go back to. Never an access decision; the /app layout already sent an
-  // untyped account to the one-time choice.
+  // to go back to. Never an access decision. An untyped account here has just
+  // joined through an invite (SIT-01); "Mis bodas" sends it to the one-time choice.
   const isCouple = (await getCurrentAccountType(user.id)) === "couple";
   // Loaded once per page (no per-item lookups), only after the membership
   // check; labels (members, and each item's linked guest party) are derived

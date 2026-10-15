@@ -14,7 +14,7 @@ import {
 import { E2E_PASSWORD } from "./support/identities";
 import { readLocalSupabase } from "./support/local-supabase";
 import { measure } from "./support/marketing";
-import { createAccountWithId, seedWedding } from "./support/overview";
+import { backdateMemberships, createAccountWithId, seedWedding } from "./support/overview";
 
 // ACCOUNT-01 (ADR-020): one account = one type, chosen once after signing in.
 // Synthetic local accounts only (fake @example.test addresses, no email sent).
@@ -163,6 +163,8 @@ test.describe("account type onboarding", () => {
     // A fake planner flag in user_metadata never decides the type.
     const me = await createAccountWithId("acct-deep", null, { account_type: "planner", planner: true });
     const weddingId = await seedWedding({ name: "Boda heredada", members: [{ userId: me.id, role: "owner" }] });
+    // A legacy membership (not one just accepted through an invite, SIT-01).
+    await backdateMemberships(me.id);
     const { context, page } = await freshPage(browser);
 
     // Signed out, a deep link goes to login and keeps the destination...

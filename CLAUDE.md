@@ -712,7 +712,7 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - Only write path: `select_account_type(requested)` (SECURITY DEFINER, `auth.uid()`, no user id parameter; same type =
   no-op, other type = `account_type_already_selected`). Clients only SELECT their own row. The guard trigger keeps it
   immutable for EVERY role; DELETE only via the `auth.users` cascade. No UI or API to change it.
-- `requireAccountType` (`@/lib/accounts/session`) in the `/app` layout is the deep-link guard: no type →
+- `requireAccountType` (`@/lib/accounts/session`; the `/app` layout's `requireAppEntry`) is the deep-link guard: no type →
   `/onboarding/account-type?next=…` (outside `/app`); a failed read throws, never "no type". Pages/actions that depend on
   the type call it again (memoized). The onboarding page: two choices, none preselected, warning, a confirmation button
   named after the choice; typed accounts are redirected to `next` (`afterAccountTypePath`, never back into onboarding).
@@ -723,6 +723,10 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   `FOR UPDATE`, then refuses untyped (`account_type_required`) and couples with any membership (`couple_wedding_limit`),
   both 55000; `createWedding` (`@/lib/weddings/service`) and `createWeddingAction` map them (→ onboarding / "ya tiene
   una boda"). Invitations still add memberships.
+- Invites never ask, infer or write a type (SIT-01, ADR-020 §4 amendment): an untyped account enters only the wedding
+  whose OWN membership row was created < 30 min ago (`@/lib/accounts/invite-entry`; `requireAppEntry` in the `/app`
+  layout, `requireWeddingEntry` in the wedding layout). Never a query flag (`?joined=` is presentation), cookie or route
+  exemption; `/app`, creation and other weddings still go to the choice.
 - Never wedding access authorization: memberships and RLS are unchanged. DB test users are planners (global setup, RPC).
 - Fixtures say their type explicitly (`createAccount(label, type | null)`), set through the real RPC as the account.
 

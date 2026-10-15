@@ -1,7 +1,6 @@
 import { expect, test, type Browser } from "@playwright/test";
 
 import {
-  chooseAccountTypeInBrowser,
   createAccount,
   createInvite,
   createWedding,
@@ -56,12 +55,8 @@ test.describe("membership invites", () => {
     await expect(page).toHaveURL(/\/invite\/continue$/);
     await page.getByRole("button", { name: es.inviteAccept.submit }).click();
 
-    // ACCOUNT-01: the new account chooses its type first (here the couple's
-    // planner, invited as a collaborator), then continues to the wedding it joined.
-    await expect(page).toHaveURL(
-      new RegExp(`/onboarding/account-type\\?next=${encodeURIComponent(`/app/weddings/${weddingId}?joined=new`)}$`),
-    );
-    await chooseAccountTypeInBrowser(page, "planner");
+    // SIT-01: the invite decides the role, not the account type: the new,
+    // untyped account goes straight into the wedding it joined.
     await expect(page).toHaveURL(new RegExp(`/app/weddings/${weddingId}\\?joined=new$`));
     await expect(page.getByText(es.wedding.joined)).toBeVisible();
     await expect(page.getByTestId("wedding-role")).toHaveText(es.roles.collaborator.label);

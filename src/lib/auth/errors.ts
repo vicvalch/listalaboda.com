@@ -32,6 +32,53 @@ export function normalizeSignInError(error: AuthFailure): SignInOutcome {
   }
 }
 
+/**
+ * The recovery request (`resetPasswordForEmail`). Anti-enumeration: every
+ * Auth outcome that could depend on whether the account exists (success,
+ * the per-address resend interval, the email-sending limit, a mailer
+ * failure) gets the same neutral "if an account exists…" answer. Only the
+ * per-client request limit, which Auth applies before looking anyone up,
+ * is reported as such.
+ */
+export type PasswordResetRequestOutcome =
+  | Readonly<{ kind: "requested" }>
+  | Readonly<{ kind: "form"; message: string }>;
+
+export function normalizePasswordResetRequestError(error: AuthFailure): PasswordResetRequestOutcome {
+  return error.code === "over_request_rate_limit"
+    ? { kind: "form", message: es.auth.rateLimited }
+    : { kind: "requested" };
+}
+
+export type PasswordUpdateOutcome =
+  | Readonly<{ kind: "field"; message: string }>
+  | Readonly<{ kind: "session_expired" }>
+  | Readonly<{ kind: "form"; message: string }>;
+
+/** The new password (`updateUser`) on a recovery session. */
+export function normalizePasswordUpdateError(error: AuthFailure): PasswordUpdateOutcome {
+  switch (error.code) {
+    case "weak_password":
+      return { kind: "field", message: es.auth.signup.weakPassword };
+    case "same_password":
+      return { kind: "field", message: es.auth.resetPassword.samePassword };
+    case "session_not_found":
+    case "session_expired":
+    case "refresh_token_not_found":
+    case "user_not_found":
+    case "bad_jwt":
+    case "no_authorization":
+    case "reauthentication_needed":
+      return { kind: "session_expired" };
+    case "over_request_rate_limit":
+      return { kind: "form", message: es.auth.rateLimited };
+    default:
+      return error.status === 401 || error.status === 403
+        ? { kind: "session_expired" }
+        : { kind: "form", message: es.common.unexpectedError };
+  }
+}
+
 export type SignUpOutcome =
   | Readonly<{ kind: "confirmation_required" }>
   | Readonly<{ kind: "field"; field: "email" | "password"; message: string }>

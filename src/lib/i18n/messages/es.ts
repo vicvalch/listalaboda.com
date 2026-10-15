@@ -323,6 +323,7 @@ export const es = {
       invalidCredentials: "El correo o la contraseña no son correctos.",
       emailNotConfirmed: "Confirma tu correo antes de entrar. Revisa tu bandeja de entrada.",
       callbackFailed: "No pudimos completar el acceso. Vuelve a entrar.",
+      forgotPassword: "Olvidé mi contraseña",
     },
     signup: {
       title: "Crea tu cuenta",
@@ -336,6 +337,36 @@ export const es = {
         "Si el correo es válido, te enviamos un enlace para confirmar tu cuenta. Ábrelo desde este mismo navegador para continuar.",
       weakPassword: "Elige una contraseña más segura.",
     },
+    /** AUTH-RECOVERY-01: never says whether an account exists. */
+    forgotPassword: {
+      title: "Restablece tu contraseña",
+      intro: "Escribe el correo de tu cuenta y te enviaremos un enlace para elegir una contraseña nueva.",
+      submit: "Enviar enlace",
+      submitting: "Enviando…",
+      sentTitle: "Revisa tu correo",
+      sentBody:
+        "Si existe una cuenta con ese correo, te enviaremos un enlace para restablecer tu contraseña. Ábrelo desde este mismo navegador.",
+      sentHint: "Si no llega en unos minutos, revisa la carpeta de spam o vuelve a intentarlo más tarde.",
+      backToLogin: "Volver a entrar",
+      linkInvalid:
+        "El enlace para restablecer tu contraseña no es válido o ya caducó. Pide uno nuevo y ábrelo desde este mismo navegador.",
+      sessionExpired: "Pasó demasiado tiempo desde que abriste el enlace. Pide uno nuevo para elegir tu contraseña.",
+      unavailable: "No podemos enviar el enlace en este momento. Vuelve a intentarlo más tarde.",
+    },
+    resetPassword: {
+      title: "Elige una contraseña nueva",
+      intro: "Escríbela dos veces. Después entrarás a tu cuenta con ella.",
+      account: "Cuenta:",
+      newPassword: "Contraseña nueva",
+      confirmPassword: "Repite la contraseña nueva",
+      submit: "Guardar contraseña",
+      submitting: "Guardando…",
+      samePassword: "Elige una contraseña distinta de la anterior.",
+      invalidTitle: "Este enlace ya no sirve",
+      invalidBody:
+        "El enlace para restablecer tu contraseña no es válido o caducó. Pide uno nuevo y ábrelo desde este mismo navegador.",
+      requestNew: "Pedir un enlace nuevo",
+    },
     invitePending:
       "Te invitaron a una boda. Entra o crea tu cuenta y te llevaremos directo a ella.",
     validation: {
@@ -344,6 +375,8 @@ export const es = {
       passwordRequired: "Escribe tu contraseña.",
       passwordTooShort: "La contraseña debe tener al menos 8 caracteres.",
       passwordTooLong: "La contraseña es demasiado larga.",
+      confirmPasswordRequired: "Repite la contraseña nueva.",
+      passwordMismatch: "Las contraseñas no coinciden.",
     },
     rateLimited: "Demasiados intentos. Espera unos minutos y vuelve a intentarlo.",
   },

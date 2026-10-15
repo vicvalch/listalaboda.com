@@ -750,6 +750,27 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   `/rsvp`, `/api` and leaves the marketing pages and `/boda` crawlable so their `noindex` is read; no `Sitemap:`/`Host:`.
   The sitemap and an OG image are deferred until the domain is connected.
 
+## Password recovery (AUTH-RECOVERY-01)
+
+- Supabase Auth's own recovery only: `resetPasswordForEmail` (PKCE, verifier in the httpOnly code-verifier cookie) →
+  emailed link → the SHARED `/auth/callback` exchange (no second callback) → `/reset-password` → `updateUser({ password })`.
+  No app tokens, no stored recovery state, no user id from the browser. Pure rules in `@/lib/auth/recovery`.
+- `/forgot-password` never reveals whether an account exists: success, unknown addresses and every account-dependent
+  Auth outcome (resend interval, email-send limit, mailer failure, thrown errors) get the same "Si existe una cuenta…"
+  answer (`normalizePasswordResetRequestError`). Only `over_request_rate_limit` (per client, before any lookup) and a
+  missing origin say something else. No retries.
+- `redirectTo` = `recoveryRedirectUrl(APP_ORIGIN, next)`; without `APP_ORIGIN` only a LOCAL request may use its own
+  origin, otherwise nothing is sent (`getRecoveryRedirectOrigin`). Never request headers in deployed environments;
+  Supabase's redirect allow-list is the second check. `next` goes through `recoveryNext` (never a recovery page).
+- The form unlocks only for `getRecoveryUser` (`@/lib/auth/recovery-session`): the `auth.getUser()` user whose
+  signature-verified `getClaims()` `amr` has `recovery` within 30 minutes. Never a query parameter or a cookie of ours;
+  the action checks it again. A failed exchange of a recovery continuation → `/forgot-password?error=link`.
+- After the update: no type → `/onboarding/account-type`, planner/couple → `/app` (`afterPasswordResetPath`).
+- Local config allows `http://localhost:*/auth/callback**`; CI's E2E job keeps Mailpit for the recovery journey.
+- Production (configured outside the repo, 2026-10-15): `APP_ORIGIN` = Site URL = `https://listalaboda.com`, redirect
+  allow-list includes `https://listalaboda.com/auth/callback**`, Auth email via Supabase Custom SMTP on Resend (sender
+  `cuenta@listalaboda.com`, verified domain). Project settings change only as an explicit, approved step.
+
 ## Commands
 
 - `npm run verify`: lint, typecheck, unit tests, build (same as CI)
@@ -837,4 +858,6 @@ and MKT-3 `/parejas` plus `robots.txt` (sitemap deferred until the domain is con
 ACCOUNT-01 (ADR-020) splits the audiences: `/` redirects to `/planners` (the homepage is removed), a shared "Cómo
 funciona" explains both paths, and every account has one immutable type (`planner | couple`) chosen after signing in,
 which shapes `/app` (planner "Mis bodas" vs. the couple's own wedding) and wedding creation (no billing or authorization).
+AUTH-RECOVERY-01 adds real password recovery through Supabase Auth ("Olvidé mi contraseña" → `/forgot-password` →
+the shared `/auth/callback` → `/reset-password`, gated on the session's signed recovery claim; no custom tokens).
 Don't implement ahead of the current prompt.

@@ -76,10 +76,12 @@ jobs:
 
       - run: npm ci
 
+      # Mailpit stays on here: the password recovery journey (AUTH-RECOVERY-01)
+      # reads the local Auth server's recovery email from it. Nothing is sent anywhere.
       - name: Start local Supabase (applies all migrations from zero)
         run: >-
           npx supabase start
-          -x realtime,storage-api,imgproxy,mailpit,studio,edge-runtime,logflare,vector,supavisor
+          -x realtime,storage-api,imgproxy,studio,edge-runtime,logflare,vector,supavisor
 
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

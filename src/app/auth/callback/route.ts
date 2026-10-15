@@ -1,16 +1,20 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { callbackFailurePath } from "@/lib/auth/recovery";
 import { safeNextPath } from "@/lib/auth/redirect";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
- * PKCE code exchange for Supabase Auth email links (signup confirmation).
- * The code verifier lives in an httpOnly cookie set when sign-up started, so
- * the link must be opened in the same browser.
+ * PKCE code exchange for Supabase Auth email links (signup confirmation and,
+ * since AUTH-RECOVERY-01, password recovery, which continues to
+ * `/reset-password`). The code verifier lives in an httpOnly cookie set when
+ * the flow started, so the link must be opened in the same browser.
  *
  * The code is never logged or echoed; `next` is re-validated so this route
  * can't be used as an open redirect. Failures land on /login with a generic
- * message.
+ * message, or for a recovery link on the request page ("ask for a new one").
+ * Reaching the reset page proves nothing by itself: it checks the session's
+ * signed recovery claim.
  */
 export const dynamic = "force-dynamic";
 
@@ -31,7 +35,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return redirectTo(request, "/login?error=callback");
+  return redirectTo(request, callbackFailurePath(next));
 }
 
 function redirectTo(request: NextRequest, path: string) {

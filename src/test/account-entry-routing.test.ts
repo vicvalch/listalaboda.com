@@ -10,9 +10,23 @@ const navigation = vi.hoisted(() => ({
   notFound: vi.fn(() => {
     throw new Error("NEXT_NOT_FOUND");
   }),
+  // For the wedding switcher (a client component) rendered by the wedding layout.
+  usePathname: () => "/app/weddings",
+  useRouter: () => ({ push: () => undefined }),
 }));
 vi.mock("next/navigation", () => navigation);
-vi.mock("next/headers", () => ({ headers: async () => new Headers({ "x-lb-request-path": "/app" }) }));
+const request = vi.hoisted(() => ({
+  path: "/app",
+  cookies: new Map<string, string>(),
+  set: vi.fn(),
+}));
+vi.mock("next/headers", () => ({
+  headers: async () => new Headers({ "x-lb-request-path": request.path }),
+  cookies: async () => ({
+    get: (name: string) => (request.cookies.has(name) ? { name, value: request.cookies.get(name) } : undefined),
+    set: request.set,
+  }),
+}));
 
 const user = { id: "user-1", email: "persona@example.test" };
 const auth = vi.hoisted(() => ({
@@ -27,6 +41,9 @@ const accounts = vi.hoisted(() => {
     AccountTypeUnavailableError,
     // The real guard's contract (tested in account-type.test.ts): typed → returns, null → onboarding.
     requireAccountType: vi.fn(),
+    // The /app shell's variant (SIT-01 invite exception tested in invite-account-type-entry.test.ts).
+    requireAppEntry: vi.fn(),
+    requireWeddingEntry: vi.fn(),
     getCurrentAccountType: vi.fn(),
   };
 });
@@ -40,6 +57,10 @@ const weddings = vi.hoisted(() => ({ listMyWeddings: vi.fn(), createWedding: vi.
 vi.mock("@/lib/weddings/service", () => weddings);
 const myWeddingsPage = vi.hoisted(() => ({ loadMyWeddingsPage: vi.fn() }));
 vi.mock("@/lib/weddings/my-weddings-page", () => myWeddingsPage);
+const switcher = vi.hoisted(() => ({ loadSwitcherWeddings: vi.fn(async () => null) }));
+vi.mock("@/lib/weddings/switcher", () => switcher);
+const invites = vi.hoisted(() => ({ acceptMembershipInvite: vi.fn() }));
+vi.mock("@/lib/membership-invites/service", () => invites);
 
 const { selectAccountTypeAction } = await import("@/app/onboarding/account-type/actions");
 const { default: AccountTypePage } = await import("@/app/onboarding/account-type/page");
@@ -47,6 +68,8 @@ const { default: MyWeddingsPage } = await import("@/app/app/page");
 const { default: AppLayout } = await import("@/app/app/layout");
 const { default: NewWeddingPage } = await import("@/app/app/weddings/new/page");
 const { createWeddingAction } = await import("@/app/app/weddings/new/actions");
+const { default: WeddingLayout } = await import("@/app/app/weddings/[weddingId]/layout");
+const { acceptInviteAction } = await import("@/app/invite/continue/actions");
 const { getMessages } = await import("@/lib/i18n");
 
 // ACCOUNT-01 (ADR-020): first login → the one-time choice → the account's own
@@ -82,18 +105,22 @@ async function settle<T>(run: () => Promise<T>): Promise<{ value?: T; redirect?:
 const html = (element: unknown) => renderToStaticMarkup(element as ReactElement);
 const asType = (accountType: "planner" | "couple" | null) => {
   accounts.getCurrentAccountType.mockResolvedValue(accountType);
-  accounts.requireAccountType.mockImplementation(async (next?: string) => {
+  const guard = async (next?: string) => {
     if (accountType === null) {
       navigation.redirect(
         next && next !== "/app" ? `/onboarding/account-type?next=${encodeURIComponent(next)}` : "/onboarding/account-type",
       );
     }
     return { user, accountType };
-  });
+  };
+  accounts.requireAccountType.mockImplementation(guard);
+  accounts.requireAppEntry.mockImplementation(guard);
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  request.path = "/app";
+  request.cookies.clear();
 });
 
 describe("selectAccountTypeAction (onboarding completion)", () => {
@@ -238,7 +265,7 @@ describe("/app layout (shared deep-link guard)", () => {
     asType(null);
     const { redirect } = await open();
     expect(redirect).toBe("/onboarding/account-type");
-    expect(accounts.requireAccountType).toHaveBeenCalledWith("/app");
+    expect(accounts.requireAppEntry).toHaveBeenCalledWith("/app");
   });
 
   it("planner chrome offers Mis bodas and Crear boda", async () => {
@@ -325,5 +352,62 @@ describe("creating a wedding", () => {
       "/onboarding/account-type?next=%2Fapp%2Fweddings%2Fnew",
     );
     expect(weddings.createWedding).not.toHaveBeenCalled();
+  });
+});
+
+// SIT-01: an invite decides the role in one wedding, never the account type.
+describe("accepting an invite (no account type involved)", () => {
+  const TOKEN = "a".repeat(43);
+
+  it("an untyped account accepts and is sent straight to the wedding it joined", async () => {
+    request.cookies.set("lb_membership_invite", TOKEN);
+    invites.acceptMembershipInvite.mockResolvedValue({ ok: true, weddingId: W(1).id, role: "collaborator", alreadyMember: false });
+    const result = await settle(() => acceptInviteAction());
+    expect(result.redirect).toBe(`/app/weddings/${W(1).id}?joined=new`);
+    expect(invites.acceptMembershipInvite).toHaveBeenCalledExactlyOnceWith(client, TOKEN);
+    // Never reads, infers or writes a type: no account-type call of any kind.
+    expect(accounts.getCurrentAccountType).not.toHaveBeenCalled();
+    expect(accounts.requireAccountType).not.toHaveBeenCalled();
+    expect(accountService.selectAccountType).not.toHaveBeenCalled();
+  });
+
+  it("an invalid or expired invite still fails normally (generic invalid state)", async () => {
+    request.cookies.set("lb_membership_invite", TOKEN);
+    invites.acceptMembershipInvite.mockResolvedValue({ ok: false, reason: "invalid" });
+    const result = await settle(() => acceptInviteAction());
+    expect(result.redirect).toBe("/invite/continue");
+    expect(accountService.selectAccountType).not.toHaveBeenCalled();
+  });
+});
+
+describe("wedding layout (entry rule re-applied per wedding)", () => {
+  const open = (weddingId: string) =>
+    settle(() => WeddingLayout({ children: createElement("p", null, "contenido"), params: Promise.resolve({ weddingId }) }));
+
+  it("checks the account-type entry rule for THIS wedding with the requested path", async () => {
+    request.path = `/app/weddings/${W(1).id}/guests`;
+    accounts.requireWeddingEntry.mockResolvedValue(null);
+    const markup = html((await open(W(1).id)).value);
+    expect(markup).toContain("contenido");
+    expect(accounts.requireWeddingEntry).toHaveBeenCalledExactlyOnceWith("user-1", W(1).id, `/app/weddings/${W(1).id}/guests`);
+  });
+
+  it("an untyped account outside the invite exception is sent to onboarding", async () => {
+    request.path = `/app/weddings/${W(2).id}?joined=new`;
+    accounts.requireWeddingEntry.mockImplementation(async (_user: string, _id: string, next: string) =>
+      navigation.redirect(`/onboarding/account-type?next=${encodeURIComponent(next)}`),
+    );
+    expect((await open(W(2).id)).redirect).toBe(
+      `/onboarding/account-type?next=${encodeURIComponent(`/app/weddings/${W(2).id}?joined=new`)}`,
+    );
+  });
+
+  it("only a planner's switcher offers creating a wedding (untyped: no)", async () => {
+    switcher.loadSwitcherWeddings.mockResolvedValue([W(1), W(2)] as never);
+    for (const [type, offered] of [["planner", true], ["couple", false], [null, false]] as const) {
+      accounts.requireWeddingEntry.mockResolvedValue(type);
+      const markup = html((await open(W(1).id)).value);
+      expect(markup.includes("/app/weddings/new")).toBe(offered);
+    }
   });
 });

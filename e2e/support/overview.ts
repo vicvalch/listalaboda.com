@@ -191,6 +191,20 @@ export async function seedWedding(spec: SeedWedding): Promise<string> {
   });
 }
 
+/**
+ * Moves a user's memberships back in time, as data from before ACCOUNT-01
+ * would be. A freshly seeded membership of an untyped account looks exactly
+ * like one it has just accepted through an invite (SIT-01's window).
+ */
+export async function backdateMemberships(userId: string, minutes = 24 * 60): Promise<void> {
+  await db((client) =>
+    client.query(
+      "update public.wedding_memberships set created_at = now() - make_interval(mins => $2) where user_id = $1",
+      [userId, minutes],
+    ),
+  );
+}
+
 /** Many plain weddings (dated, with a zone) owned by one user, in one statement. */
 export async function seedManyWeddings(userId: string, count: number, prefix = "Boda"): Promise<void> {
   await db(async (client) => {

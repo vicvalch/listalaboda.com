@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 
 import { secondaryButtonClass } from "@/components/ui/styles";
-import { requireAccountType } from "@/lib/accounts/session";
+import { requireAppEntry } from "@/lib/accounts/session";
 import { safeNextPath } from "@/lib/auth/redirect";
 import { getMessages } from "@/lib/i18n";
 import { REQUEST_PATH_HEADER } from "@/lib/supabase/proxy";
@@ -17,7 +17,9 @@ export const dynamic = "force-dynamic";
  * Protected shell. Validates the user on every request (pages and actions
  * validate again: a layout alone is not a security boundary), and sends an
  * account without an account type to the one-time choice first (ACCOUNT-01,
- * ADR-020), whatever `/app` URL was opened: a deep link can't skip it.
+ * ADR-020), whatever `/app` URL was opened: a deep link can't skip it. The
+ * one exception (SIT-01) is the wedding that account has just joined through
+ * an invite, decided from its membership row, never from the URL.
  *
  * Planners get "Mis bodas" and "Crear boda"; a couple's account is about
  * their own wedding, so neither is offered (the brand link opens it).
@@ -25,7 +27,7 @@ export const dynamic = "force-dynamic";
 export default async function AppLayout({ children }: LayoutProps<"/app">) {
   // The requested path only shapes the post-login destination.
   const requestedPath = safeNextPath((await headers()).get(REQUEST_PATH_HEADER));
-  const { user, accountType } = await requireAccountType(requestedPath);
+  const { user, accountType } = await requireAppEntry(requestedPath);
   const { app, common } = getMessages();
 
   return (

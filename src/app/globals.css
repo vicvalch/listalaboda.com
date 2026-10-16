@@ -37,6 +37,18 @@
   }
 }
 
+/*
+ * The official signature's ink is dark brown on transparency. On the dark
+ * palette it is inverted and turned back to its warm hue, so it reads as a
+ * light warm ink; the source artwork is never edited. Screens only: paper
+ * stays light.
+ */
+@media screen and (prefers-color-scheme: dark) {
+  .brand-ink {
+    filter: invert(1) hue-rotate(180deg);
+  }
+}
+
 /* Paper is light: printing (the Cronograma's "Imprimir") always uses the light palette. */
 @media print {
   :root {

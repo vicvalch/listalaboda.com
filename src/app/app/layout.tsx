@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import Link from "next/link";
 
+import { BrandMonogram, BrandSignature } from "@/components/brand/BrandLogo";
 import { secondaryButtonClass } from "@/components/ui/styles";
 import { requireAppEntry } from "@/lib/accounts/session";
 import { safeNextPath } from "@/lib/auth/redirect";
@@ -35,8 +36,10 @@ export default async function AppLayout({ children }: LayoutProps<"/app">) {
       {/* Printed pages (the Cronograma) leave the app chrome out. */}
       <header className="border-b border-border bg-surface print:hidden">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-4 py-4">
-          <Link href="/app" className="text-lg font-semibold tracking-tight">
-            {common.brand}
+          {/* Phones get the monogram: the header also wraps navigation, email and logout. */}
+          <Link href="/app" className="shrink-0 rounded-md">
+            <BrandMonogram alt={common.brand} className="h-10 sm:hidden" />
+            <BrandSignature alt={common.brand} className="hidden h-9 sm:block" />
           </Link>
           {accountType === "planner" ? (
             <nav aria-label={app.nav.label} className="flex flex-wrap items-center gap-x-5 gap-y-2">

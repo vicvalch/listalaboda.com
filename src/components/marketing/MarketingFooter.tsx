@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { BrandSignature } from "@/components/brand/BrandLogo";
 import { containerClass } from "@/components/marketing/classes";
 import { textLinkClass } from "@/components/ui/styles";
 import { getMessages } from "@/lib/i18n";
@@ -23,7 +24,9 @@ export function MarketingFooter() {
     <footer className="border-t border-border">
       <div className={`${containerClass} grid gap-10 py-12 sm:grid-cols-[1.5fr_1fr_1fr_1.4fr]`}>
         <div className="space-y-2">
-          <p className="text-lg font-semibold tracking-tight">{marketing.brand}</p>
+          <p>
+            <BrandSignature alt={marketing.brand} className="h-11" />
+          </p>
           <p className="text-muted text-sm">{marketing.footer.tagline}</p>
         </div>
         {groups.map((group) => (

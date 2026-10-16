@@ -22,6 +22,7 @@ export function LifestylePhoto({
   sizes,
   position = "object-center",
   drift = false,
+  priority = false,
   className,
 }: {
   image: StaticImageData;
@@ -35,6 +36,8 @@ export function LifestylePhoto({
   position?: string;
   /** A slow decorative pan instead of the hover zoom (decorative layers only). */
   drift?: boolean;
+  /** The page's first, above-the-fold photo: loaded eagerly, with high priority. */
+  priority?: boolean;
   className?: string;
 }) {
   const decorative = alt === "";
@@ -51,8 +54,9 @@ export function LifestylePhoto({
           width={image.width}
           height={image.height}
           alt={alt}
-          loading="lazy"
+          loading={priority ? "eager" : "lazy"}
           decoding="async"
+          fetchPriority={priority ? "high" : "auto"}
           data-lifestyle=""
           className={cx("absolute inset-0 block h-full w-full object-cover", position)}
         />

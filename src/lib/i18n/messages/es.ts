@@ -66,6 +66,8 @@ export const es = {
         title: "Tu centro de control para cada boda que manejas.",
         body: "Coordina invitados, proveedores, pagos, mesas, cronograma y el sitio de cada pareja desde un solo lugar.",
         support: "Pensado para planners que llevan varias bodas a la vez.",
+        photoAlt: "Wedding planner revisando detalles de la boda con una pareja.",
+        shotCaption: "«Mis bodas»: todas tus bodas y lo que necesita atención, en una sola pantalla.",
         cardAlt:
           "La tarjeta de una de esas bodas, «Laura y Martín»: su fecha, su ciudad, los días que faltan, sus dos temas atrasados y el avance de pendientes, invitados y proveedores.",
         shotAlt:
@@ -117,7 +119,12 @@ export const es = {
           { title: "Cada boda, aparte", body: "Quien colabora en una boda solo ve esa boda." },
           { title: "Publicar es de quien organiza", body: "El sitio web sale al público solo cuando esa persona lo publica." },
         ],
-        photoAlt: "Wedding planner revisando detalles de la boda con una pareja.",
+      },
+      weddingDay: {
+        eyebrow: "El día de la boda",
+        title: "Todo coordinado para estar donde más te necesitan.",
+        body: "El cronograma, los proveedores y quién está a cargo de cada cosa ya están en un solo lugar. Así tu atención queda con la pareja y tu equipo cuando llega el momento.",
+        photoAlt: "Una wedding planner acomoda el velo de la novia momentos antes de la ceremonia.",
       },
       sites: {
         eyebrow: "Sitio web de la boda",

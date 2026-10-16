@@ -105,7 +105,7 @@ test.describe("marketing /planners", () => {
     const page = await context.newPage();
     await page.goto("/planners");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(page$.hero.title);
-    for (const title of [page$.guestsSeating.title, page$.money.title, page$.timeline.title, page$.collaboration.title, page$.sites.title]) {
+    for (const title of [page$.guestsSeating.title, page$.money.title, page$.timeline.title, page$.weddingDay.title, page$.collaboration.title, page$.sites.title]) {
       await expect(page.getByRole("heading", { level: 2, name: title })).toBeVisible();
     }
     await expect(page.locator("main").getByRole("link", { name: copy.cta.pilot }).first()).toHaveAttribute("href", MARKETING_LINKS.PILOT);

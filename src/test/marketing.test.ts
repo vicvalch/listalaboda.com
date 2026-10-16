@@ -262,8 +262,8 @@ describe("wedding photography (MKT-5)", () => {
   const photos = (html: string) => [...html.matchAll(/<img [^>]*data-lifestyle=""[^>]*>/g)].map((m) => m[0]);
   const alt = (tag: string) => /alt="([^"]*)"/.exec(tag)?.[1];
 
-  it("stays restrained: one photo for planners, four for couples", () => {
-    expect(photos(pages.planners)).toHaveLength(1);
+  it("stays restrained: two photos for planners, four for couples", () => {
+    expect(photos(pages.planners)).toHaveLength(2);
     expect(photos(pages.couples)).toHaveLength(4);
   });
 
@@ -278,7 +278,8 @@ describe("wedding photography (MKT-5)", () => {
       const decorative = [...html.matchAll(/<div aria-hidden="true" class="mkt-photo[^"]*"><picture><img [^>]*alt=""[^>]*data-lifestyle=""/g)];
       expect(decorative.length).toBe(photos(html).filter((tag) => alt(tag) === "").length);
     }
-    expect(photos(pages.planners).map(alt)).toEqual([copy.marketing.planners.collaboration.photoAlt]);
+    // MKT-6: the planner with the couple leads the hero; the planner with the bride follows the Cronograma.
+    expect(photos(pages.planners).map(alt)).toEqual([copy.marketing.planners.hero.photoAlt, copy.marketing.planners.weddingDay.photoAlt]);
   });
 
   it("never ships the invented-interface photo, and keeps romance away from the money and the day", () => {

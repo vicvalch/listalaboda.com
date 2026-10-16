@@ -754,26 +754,38 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   `/rsvp`, `/api` and leaves the marketing pages and `/boda` crawlable so their `noindex` is read; no `Sitemap:`/`Host:`.
   The sitemap and an OG image are deferred until the domain is connected.
 
-## Password recovery (AUTH-RECOVERY-01)
+## Password recovery (AUTH-RECOVERY-01, scanner-safe since AUTH-RECOVERY-02)
 
-- Supabase Auth's own recovery only: `resetPasswordForEmail` (PKCE, verifier in the httpOnly code-verifier cookie) →
-  emailed link → the SHARED `/auth/callback` exchange (no second callback) → `/reset-password` → `updateUser({ password })`.
-  No app tokens, no stored recovery state, no user id from the browser. Pure rules in `@/lib/auth/recovery`.
+- Supabase Auth's own recovery only: `resetPasswordForEmail` → the Reset Password email links to
+  `{{ .SiteURL }}/auth/recovery/prepare?token_hash={{ .TokenHash }}` (`supabase/templates/recovery.html`, never
+  `{{ .ConfirmationURL }}`) → `/auth/recovery/confirm` → explicit "Continuar" → `verifyOtp({ token_hash, type: "recovery" })`
+  → `/reset-password` → `updateUser({ password })`. No app tokens, no stored recovery state, no user id from the browser.
+  Pure rules in `@/lib/auth/recovery`.
+- GET NEVER CONSUMES THE TOKEN (link scanners, Safe Links, prefetchers). `GET /auth/recovery/prepare` only checks the
+  shape (`isWellFormedRecoveryTokenHash`), moves it into the httpOnly `lb_recovery_token` cookie (`@/lib/auth/recovery-handoff`:
+  SameSite=Lax, Secure in production, path `/auth/recovery`, 15 min) and 303s to the clean confirm URL (`no-store`,
+  `Referrer-Policy: no-referrer`); no Auth call. The confirm page renders no token. Only `confirmRecoveryAction` (no form
+  input; token from the cookie, type fixed) calls `verifyOtp`, once; the cookie is cleared on success and on a definitive
+  refusal (→ `/forgot-password?error=link`), kept on a limit/our failure. Never log the token or the link.
+- The token hash needs no PKCE verifier: the link works in any browser or device (intentional).
+- `/auth/callback` stays for signup confirmation and links sent with the previous template (PKCE `{{ .ConfirmationURL }}`).
 - `/forgot-password` never reveals whether an account exists: success, unknown addresses and every account-dependent
   Auth outcome (resend interval, email-send limit, mailer failure, thrown errors) get the same "Si existe una cuenta…"
   answer (`normalizePasswordResetRequestError`). Only `over_request_rate_limit` (per client, before any lookup) and a
   missing origin say something else. No retries.
-- `redirectTo` = `recoveryRedirectUrl(APP_ORIGIN, next)`; without `APP_ORIGIN` only a LOCAL request may use its own
-  origin, otherwise nothing is sent (`getRecoveryRedirectOrigin`). Never request headers in deployed environments;
-  Supabase's redirect allow-list is the second check. `next` goes through `recoveryNext` (never a recovery page).
+- `redirectTo` = `recoveryRedirectUrl(APP_ORIGIN, next)` (used only by previous-template links); without `APP_ORIGIN`
+  only a LOCAL request may use its own origin, otherwise nothing is sent (`getRecoveryRedirectOrigin`).
 - The form unlocks only for `getRecoveryUser` (`@/lib/auth/recovery-session`): the `auth.getUser()` user whose
-  signature-verified `getClaims()` `amr` has `recovery` within 30 minutes. Never a query parameter or a cookie of ours;
-  the action checks it again. A failed exchange of a recovery continuation → `/forgot-password?error=link`.
+  signature-verified `getClaims()` (same `sub`) `amr` has `recovery` or `otp` (`RECOVERY_AMR_METHODS`) within 30 minutes.
+  Accepted consequence: a fresh magic-link/email-OTP session also passes for those 30 minutes (same proof: fresh control
+  of the email). A password session never does. Never a query parameter or a cookie of ours; the action checks it again.
 - After the update: no type → `/onboarding/account-type`, planner/couple → `/app` (`afterPasswordResetPath`).
-- Local config allows `http://localhost:*/auth/callback**`; CI's E2E job keeps Mailpit for the recovery journey.
+- Local: `site_url` = `http://localhost:3100` (the E2E app; `{{ .SiteURL }}` builds the link), the recovery template in
+  `[auth.email.template.recovery]`, `http://localhost:*/auth/callback**` allowed; CI's E2E job keeps Mailpit.
 - Production (configured outside the repo, 2026-10-15): `APP_ORIGIN` = Site URL = `https://listalaboda.com`, redirect
   allow-list includes `https://listalaboda.com/auth/callback**`, Auth email via Supabase Custom SMTP on Resend (sender
-  `cuenta@listalaboda.com`, verified domain). Project settings change only as an explicit, approved step.
+  `cuenta@listalaboda.com`, verified domain). The Reset Password template is a project setting: switched only as an
+  explicit, approved step, after confirming Resend click tracking / link rewriting is off.
 
 ## Commands
 
@@ -864,4 +876,6 @@ funciona" explains both paths, and every account has one immutable type (`planne
 which shapes `/app` (planner "Mis bodas" vs. the couple's own wedding) and wedding creation (no billing or authorization).
 AUTH-RECOVERY-01 adds real password recovery through Supabase Auth ("Olvidé mi contraseña" → `/forgot-password` →
 the shared `/auth/callback` → `/reset-password`, gated on the session's signed recovery claim; no custom tokens).
+AUTH-RECOVERY-02 makes it scanner-safe: the email links to the app with Supabase's token hash, GETs only move it into
+a short-lived httpOnly cookie, and an explicit "Continuar" POST verifies it (`verifyOtp`); works across devices.
 Don't implement ahead of the current prompt.

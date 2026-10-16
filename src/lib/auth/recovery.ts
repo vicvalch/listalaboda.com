@@ -2,22 +2,60 @@ import { accountTypeOnboardingPath, type AccountType } from "@/lib/accounts/acco
 import { DEFAULT_NEXT_PATH, safeNextPath } from "@/lib/auth/redirect";
 
 /**
- * Password recovery (AUTH-RECOVERY-01) through Supabase Auth's own recovery
- * mechanism: `resetPasswordForEmail` (PKCE) → the emailed link → the shared
- * `/auth/callback` code exchange → `/reset-password` → `updateUser`.
- * No custom tokens, nothing stored by the app. Pure and dependency-free.
+ * Password recovery through Supabase Auth's own recovery mechanism.
+ *
+ * AUTH-RECOVERY-02 (scanner-safe): `resetPasswordForEmail` → the email links
+ * to the app's `/auth/recovery/prepare?token_hash=…` (Supabase's
+ * `{{ .TokenHash }}`), which only moves the token into a short-lived
+ * httpOnly cookie → `/auth/recovery/confirm` → the person presses
+ * "Continuar" → `verifyOtp({ token_hash, type: "recovery" })` (a POST, the
+ * only step that consumes the token) → `/reset-password` → `updateUser`.
+ * A link scanner's GETs change nothing.
+ *
+ * AUTH-RECOVERY-01's path (`{{ .ConfirmationURL }}` → Supabase verify →
+ * the shared `/auth/callback` PKCE exchange) still works for links sent
+ * with the previous email template. No custom tokens, nothing stored by the
+ * app. Pure and dependency-free.
  */
 
 export const FORGOT_PASSWORD_PATH = "/forgot-password";
 export const RESET_PASSWORD_PATH = "/reset-password";
 export const AUTH_CALLBACK_PATH = "/auth/callback";
+/** The emailed link's entry point (a GET that never verifies anything). */
+export const RECOVERY_PREPARE_PATH = "/auth/recovery/prepare";
+/** The explicit confirmation page; its "Continuar" action verifies the token. */
+export const RECOVERY_CONFIRM_PATH = "/auth/recovery/confirm";
 
 /**
- * How long after the recovery link was opened the new password can be set.
+ * How long after the recovery link was verified the new password can be set.
  * The age comes from the session's signed `amr` claim (the moment Supabase
- * verified the recovery link), never from the browser.
+ * verified the link), never from the browser.
  */
 export const RECOVERY_SESSION_MAX_AGE_SECONDS = 30 * 60;
+
+/**
+ * The `amr` methods that prove a fresh recovery. `recovery`: the PKCE link
+ * exchanged through `/auth/callback` (AUTH-RECOVERY-01). `otp`: a token hash
+ * verified with `verifyOtp` (AUTH-RECOVERY-02), which Supabase records as an
+ * email one-time code.
+ *
+ * Accepted consequence (an explicit product decision): a fresh magic-link /
+ * email-OTP sign-in is ALSO `otp`, so such a session satisfies the reset gate
+ * for the same 30 minutes. Both prove fresh control of the account's email,
+ * which is exactly what a recovery link proves. A password sign-in never does.
+ */
+export const RECOVERY_AMR_METHODS: readonly string[] = ["recovery", "otp"];
+
+/**
+ * A Supabase Auth email token hash as the link carries it: lowercase hex,
+ * `pkce_`-prefixed for PKCE requests (56 hex characters today; bounded, not
+ * pinned, so a longer hash keeps working). Anything else is dropped unread.
+ */
+const RECOVERY_TOKEN_HASH = /^(?:pkce_)?[0-9a-f]{40,128}$/;
+
+export function isWellFormedRecoveryTokenHash(value: unknown): value is string {
+  return typeof value === "string" && RECOVERY_TOKEN_HASH.test(value);
+}
 
 // Tolerates a server clock slightly behind the Auth server's.
 const CLOCK_SKEW_SECONDS = 60;
@@ -80,9 +118,10 @@ export function callbackFailurePath(next: string): string {
 }
 
 /**
- * Whether the session's `amr` claim records a recovery-link verification
- * within the allowed age. Only Supabase's detailed format carries the time;
- * anything else (missing, plain strings, malformed) is not a recovery.
+ * Whether the session's `amr` claim records a recovery verification (one of
+ * `RECOVERY_AMR_METHODS`) within the allowed age. Only Supabase's detailed
+ * format carries the time; anything else (missing, plain strings, other
+ * methods such as `password`, malformed) is not a recovery.
  */
 export function hasRecentRecovery(amr: unknown, nowMs: number): boolean {
   if (!Array.isArray(amr)) return false;
@@ -90,7 +129,8 @@ export function hasRecentRecovery(amr: unknown, nowMs: number): boolean {
   return amr.some((entry: unknown) => {
     if (typeof entry !== "object" || entry === null) return false;
     const { method, timestamp } = entry as { method?: unknown; timestamp?: unknown };
-    if (method !== "recovery" || typeof timestamp !== "number" || !Number.isFinite(timestamp)) return false;
+    if (typeof method !== "string" || !RECOVERY_AMR_METHODS.includes(method)) return false;
+    if (typeof timestamp !== "number" || !Number.isFinite(timestamp)) return false;
     const age = nowSeconds - timestamp;
     return age >= -CLOCK_SKEW_SECONDS && age <= RECOVERY_SESSION_MAX_AGE_SECONDS;
   });

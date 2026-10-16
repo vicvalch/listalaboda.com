@@ -4,12 +4,14 @@ import { ACCOUNT_TYPE_ONBOARDING_PATH } from "@/lib/accounts/account-type";
 import {
   normalizePasswordResetRequestError,
   normalizePasswordUpdateError,
+  normalizeRecoveryVerifyError,
 } from "@/lib/auth/errors";
 import {
   afterPasswordResetPath,
   callbackFailurePath,
   forgotPasswordPath,
   hasRecentRecovery,
+  isWellFormedRecoveryTokenHash,
   RECOVERY_SESSION_MAX_AGE_SECONDS,
   recoveryNext,
   recoveryRedirectUrl,
@@ -71,6 +73,21 @@ describe("hasRecentRecovery", () => {
     expect(
       hasRecentRecovery([{ method: "recovery", timestamp: nowSeconds - RECOVERY_SESSION_MAX_AGE_SECONDS }], NOW),
     ).toBe(true);
+  });
+
+  it("accepts a fresh token-hash verification (amr otp, AUTH-RECOVERY-02)", () => {
+    expect(hasRecentRecovery([{ method: "otp", timestamp: nowSeconds - 60 }], NOW)).toBe(true);
+    expect(hasRecentRecovery([{ method: "otp", timestamp: nowSeconds - RECOVERY_SESSION_MAX_AGE_SECONDS }], NOW)).toBe(true);
+  });
+
+  it("refuses a stale otp verification", () => {
+    expect(
+      hasRecentRecovery([{ method: "otp", timestamp: nowSeconds - RECOVERY_SESSION_MAX_AGE_SECONDS - 1 }], NOW),
+    ).toBe(false);
+  });
+
+  it.each(["oauth", "sso/saml", "totp", "anonymous", "Recovery", "OTP", ""])("refuses the method %j", (method) => {
+    expect(hasRecentRecovery([{ method, timestamp: nowSeconds - 5 }], NOW)).toBe(false);
   });
 
   it("refuses an ordinary sign-in session", () => {
@@ -210,5 +227,48 @@ describe("normalizePasswordUpdateError", () => {
       kind: "form",
       message: es.common.unexpectedError,
     });
+  });
+});
+
+describe("isWellFormedRecoveryTokenHash", () => {
+  it.each(["pkce_" + "a1".repeat(28), "0f".repeat(28), "ab".repeat(64)])("accepts a token hash shape (%#)", (value) => {
+    expect(isWellFormedRecoveryTokenHash(value)).toBe(true);
+  });
+
+  it.each([
+    ["missing", null],
+    ["empty", ""],
+    ["whitespace", "   "],
+    ["too short", "ab".repeat(10)],
+    ["too long", "ab".repeat(65)],
+    ["uppercase", "AB".repeat(28)],
+    ["a control character", `${"ab".repeat(28)}\n`],
+    ["a space inside", `${"ab".repeat(14)} ${"ab".repeat(14)}`],
+    ["another prefix", `pkce-${"ab".repeat(28)}`],
+    ["a URL", "https://evil.example/" + "ab".repeat(28)],
+    ["not a string", 42],
+  ])("refuses %s", (_label, value) => {
+    expect(isWellFormedRecoveryTokenHash(value)).toBe(false);
+  });
+});
+
+describe("normalizeRecoveryVerifyError", () => {
+  it.each([
+    [{ code: "otp_expired", status: 403 }],
+    [{ code: "validation_failed", status: 400 }],
+    [{ status: 422 }],
+  ])("a definitive refusal (%j) means a new link is needed", (error) => {
+    expect(normalizeRecoveryVerifyError(error)).toEqual({ kind: "invalid" });
+  });
+
+  it("a limit keeps the token for another try, with friendly copy", () => {
+    expect(normalizeRecoveryVerifyError({ code: "over_request_rate_limit", status: 429 })).toEqual({
+      kind: "retry",
+      message: es.auth.rateLimited,
+    });
+  });
+
+  it.each([[{ status: 500 }], [{ status: 0 }], [{}]])("a failure on our side (%j) keeps the token, no raw error", (error) => {
+    expect(normalizeRecoveryVerifyError(error)).toEqual({ kind: "retry", message: es.auth.recoveryConfirm.retry });
   });
 });

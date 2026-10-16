@@ -345,11 +345,10 @@ export const es = {
       submitting: "Enviando…",
       sentTitle: "Revisa tu correo",
       sentBody:
-        "Si existe una cuenta con ese correo, te enviaremos un enlace para restablecer tu contraseña. Ábrelo desde este mismo navegador.",
+        "Si existe una cuenta con ese correo, te enviaremos un enlace para restablecer tu contraseña.",
       sentHint: "Si no llega en unos minutos, revisa la carpeta de spam o vuelve a intentarlo más tarde.",
       backToLogin: "Volver a entrar",
-      linkInvalid:
-        "El enlace para restablecer tu contraseña no es válido o ya caducó. Pide uno nuevo y ábrelo desde este mismo navegador.",
+      linkInvalid: "El enlace para restablecer tu contraseña no es válido o ya caducó. Pide uno nuevo.",
       sessionExpired: "Pasó demasiado tiempo desde que abriste el enlace. Pide uno nuevo para elegir tu contraseña.",
       unavailable: "No podemos enviar el enlace en este momento. Vuelve a intentarlo más tarde.",
     },
@@ -363,9 +362,18 @@ export const es = {
       submitting: "Guardando…",
       samePassword: "Elige una contraseña distinta de la anterior.",
       invalidTitle: "Este enlace ya no sirve",
-      invalidBody:
-        "El enlace para restablecer tu contraseña no es válido o caducó. Pide uno nuevo y ábrelo desde este mismo navegador.",
+      invalidBody: "El enlace para restablecer tu contraseña no es válido o caducó. Pide uno nuevo.",
       requestNew: "Pedir un enlace nuevo",
+    },
+    recoveryConfirm: {
+      title: "Confirma que quieres restablecer tu contraseña",
+      body: "Por seguridad, abrir el enlace del correo no realiza ningún cambio. Continúa para verificarlo y elegir una contraseña nueva.",
+      submit: "Continuar",
+      submitting: "Verificando…",
+      requestNew: "Solicitar otro enlace",
+      unavailableTitle: "Este enlace ya no está disponible",
+      unavailableBody: "Solicita un nuevo enlace para restablecer tu contraseña.",
+      retry: "No pudimos verificar el enlace en este momento. Vuelve a intentarlo.",
     },
     invitePending:
       "Te invitaron a una boda. Entra o crea tu cuenta y te llevaremos directo a ella.",

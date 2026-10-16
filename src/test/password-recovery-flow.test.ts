@@ -33,7 +33,7 @@ const { GET: callback } = await import("@/app/auth/callback/route");
 const { NextRequest } = await import("next/server");
 const { es } = await import("@/lib/i18n/messages/es");
 
-// AUTH-RECOVERY-01: the actions, the reset page gate and the shared callback,
+// AUTH-RECOVERY-01/-02: the actions, the reset page gate and the shared callback,
 // with Supabase Auth faked at the client boundary (no real Auth or mailer).
 
 const USER = { id: "user-1", email: "persona@example.test" };
@@ -45,8 +45,8 @@ function form(fields: Record<string, string>): FormData {
   return data;
 }
 
-function recoveryClaims(age = 60, sub = USER.id) {
-  return { data: { claims: { sub, amr: [{ method: "recovery", timestamp: nowSeconds() - age }] } }, error: null };
+function recoveryClaims(age = 60, sub = USER.id, method = "recovery") {
+  return { data: { claims: { sub, amr: [{ method, timestamp: nowSeconds() - age }] } }, error: null };
 }
 
 async function redirectOf(promise: Promise<unknown>): Promise<string> {
@@ -143,17 +143,35 @@ describe("requestPasswordResetAction", () => {
 });
 
 describe("getRecoveryUser (the reset gate)", () => {
-  it("is the validated user only for a recent, signed recovery session", async () => {
+  it.each([
+    ["a recent PKCE recovery (amr recovery, AUTH-RECOVERY-01)", "recovery"],
+    ["a recent token-hash recovery (amr otp, AUTH-RECOVERY-02)", "otp"],
+  ])("is the validated user for %s", async (_label, method) => {
     currentUser.value = USER;
-    auth.getClaims.mockResolvedValue(recoveryClaims());
+    auth.getClaims.mockResolvedValue(recoveryClaims(60, USER.id, method));
     expect(await getRecoveryUser()).toEqual(USER);
+  });
+
+  it("INTENTIONALLY accepts a fresh magic-link / email-OTP sign-in (amr otp) for the same 30 minutes", async () => {
+    // Accepted product decision (AUTH-RECOVERY-02): Supabase records a
+    // magic-link sign-in exactly like a token-hash recovery; both prove fresh
+    // control of the account's email.
+    currentUser.value = USER;
+    auth.getClaims.mockResolvedValue(recoveryClaims(29 * 60, USER.id, "otp"));
+    expect(await getRecoveryUser()).toEqual(USER);
+    auth.getClaims.mockResolvedValue(recoveryClaims(31 * 60, USER.id, "otp"));
+    expect(await getRecoveryUser()).toBeNull();
   });
 
   it.each([
     ["no user", null, recoveryClaims()],
     ["an ordinary sign-in", USER, { data: { claims: { sub: USER.id, amr: [{ method: "password", timestamp: nowSeconds() }] } }, error: null }],
     ["an expired recovery", USER, recoveryClaims(31 * 60)],
+    ["an expired otp verification", USER, recoveryClaims(31 * 60, USER.id, "otp")],
+    ["an unknown method", USER, recoveryClaims(60, USER.id, "sso/saml")],
+    ["a missing amr", USER, { data: { claims: { sub: USER.id } }, error: null }],
     ["claims of another user", USER, recoveryClaims(60, "user-2")],
+    ["otp claims of another user", USER, recoveryClaims(60, "user-2", "otp")],
     ["a claims failure", USER, { data: null, error: { code: "bad_jwt" } }],
   ])("refuses %s", async (_label, user, claims) => {
     currentUser.value = user;
@@ -263,6 +281,14 @@ describe("auth callback", () => {
     const denied = await callback(request("?error=access_denied&error_code=otp_expired&next=%2Freset-password"));
     expect(denied.headers.get("location")).toBe("https://bodas.example.com/forgot-password?error=link");
     expect(auth.exchangeCodeForSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("still exchanges a signup confirmation and continues to its own destination (unchanged)", async () => {
+    auth.exchangeCodeForSession.mockResolvedValue({ data: {}, error: null });
+    const response = await callback(request("?code=abc&next=%2Finvite%2Fcontinue"));
+    expect(response.headers.get("location")).toBe("https://bodas.example.com/invite/continue");
+    const open = await callback(request("?code=abc&next=https%3A%2F%2Fevil.example"));
+    expect(open.headers.get("location")).toBe("https://bodas.example.com/app");
   });
 
   it("keeps the login error for other flows", async () => {

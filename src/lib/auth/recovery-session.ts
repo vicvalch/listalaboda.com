@@ -9,16 +9,18 @@ import { getRequestOrigin } from "@/lib/http/origin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
- * Server side of password recovery (AUTH-RECOVERY-01).
+ * Server side of password recovery (AUTH-RECOVERY-01, -02).
  *
  * A recovery session is an ordinary Supabase session whose signed `amr`
- * claim records the recovery-link verification. That claim, read through
- * `getClaims()` (signature-verified) for the user `auth.getUser()` already
- * validated, is the only thing that unlocks the new-password form: never a
- * query parameter, a cookie of ours or anything the browser sends.
+ * claim records a fresh recovery verification (`recovery` or `otp`, see
+ * `RECOVERY_AMR_METHODS`). That claim, read through `getClaims()`
+ * (signature-verified) for the user `auth.getUser()` already validated, is
+ * the only thing that unlocks the new-password form: never a query
+ * parameter, a cookie of ours (the recovery handoff cookie only carries the
+ * token to `verifyOtp`) or anything else the browser sends.
  */
 
-/** The validated user, if their session comes from a recent recovery link; otherwise null. */
+/** The validated user, if their session comes from a recent recovery (or email one-time code) verification; otherwise null. */
 export const getRecoveryUser = cache(async (): Promise<CurrentUser | null> => {
   const user = await getCurrentUser();
   if (!user) return null;

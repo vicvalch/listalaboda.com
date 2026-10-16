@@ -158,7 +158,9 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
-site_url = "http://127.0.0.1:3000"
+# AUTH-RECOVERY-02: the recovery email links to {{ .SiteURL }}/auth/recovery/prepare, so locally the
+# Site URL is the E2E app (Playwright, port 3100), as in production (Site URL = APP_ORIGIN).
+site_url = "http://localhost:3100"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
@@ -249,6 +251,14 @@ otp_expiry = 3600
 # pass = "env(SENDGRID_API_KEY)"
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
+
+# AUTH-RECOVERY-02: scanner-safe recovery. The email links to the app's /auth/recovery/prepare with
+# {{ .TokenHash }} (never {{ .ConfirmationURL }}, which a link scanner's GET would consume); the
+# token is verified only when the person presses "Continuar". Production uses the same template
+# (Supabase dashboard → Authentication → Email Templates → Reset Password), set as a separate step.
+[auth.email.template.recovery]
+subject = "Restablece tu contraseña | ListaLaBoda"
+content_path = "./supabase/templates/recovery.html"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]

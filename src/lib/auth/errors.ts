@@ -79,6 +79,27 @@ export function normalizePasswordUpdateError(error: AuthFailure): PasswordUpdate
   }
 }
 
+/**
+ * The explicit recovery confirmation (`verifyOtp` with the emailed token
+ * hash, AUTH-RECOVERY-02). A definitive refusal (expired, already used,
+ * unknown: Auth answers all of them alike) is `invalid`: the token is gone
+ * and the person needs a new link. A limit or a failure on our side is
+ * `retry`: the token may still be good, so the page keeps it.
+ */
+export type RecoveryVerifyOutcome =
+  | Readonly<{ kind: "invalid" }>
+  | Readonly<{ kind: "retry"; message: string }>;
+
+export function normalizeRecoveryVerifyError(error: AuthFailure): RecoveryVerifyOutcome {
+  if (error.code === "over_request_rate_limit" || error.status === 429) {
+    return { kind: "retry", message: es.auth.rateLimited };
+  }
+  if (!error.status || error.status >= 500) {
+    return { kind: "retry", message: es.auth.recoveryConfirm.retry };
+  }
+  return { kind: "invalid" };
+}
+
 export type SignUpOutcome =
   | Readonly<{ kind: "confirmation_required" }>
   | Readonly<{ kind: "field"; field: "email" | "password"; message: string }>

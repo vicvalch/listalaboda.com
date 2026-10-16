@@ -6,7 +6,7 @@ import { assertLocal } from "./local-supabase";
 
 /**
  * The LOCAL Supabase stack's mail catcher (Mailpit): the local Auth server
- * delivers its emails (e.g. password recovery, AUTH-RECOVERY-01) there
+ * delivers its emails (e.g. password recovery, AUTH-RECOVERY-01/-02) there
  * instead of sending them. Read-only use; refuses anything but localhost.
  * Recovery links are bearer credentials: never log or print them.
  */
@@ -58,9 +58,12 @@ export async function latestEmailTextTo(address: string): Promise<string> {
   return `${body.Text ?? ""}\n${body.HTML ?? ""}`;
 }
 
-/** The Supabase Auth verification link inside an Auth email. */
-export function authLinkIn(text: string): URL {
-  const match = /https?:\/\/[^\s"'<>]+\/auth\/v1\/verify\?[^\s"'<>]+/.exec(text);
-  if (!match) throw new Error("No Auth verification link in the email.");
+/**
+ * The scanner-safe recovery link inside a recovery email (AUTH-RECOVERY-02:
+ * the app's /auth/recovery/prepare with Supabase's token hash).
+ */
+export function recoveryLinkIn(text: string): URL {
+  const match = /https?:\/\/[^\s"'<>]+\/auth\/recovery\/prepare\?[^\s"'<>]+/.exec(text);
+  if (!match) throw new Error("No recovery link in the email.");
   return new URL(match[0].replace(/&amp;/g, "&"));
 }

@@ -143,6 +143,17 @@ Applies to two distinct token kinds:
   application obtained after a user's own credential authorized the send; the scheduler store acts on the deployment
   scheduler's authority; the event store acts on the provider's signature. No generic client. ESLint allows
   `SUPABASE_SERVICE_ROLE_KEY` only in those three files.
+- *Later note (BILLING-01, 2026-10-16):* [ADR-021 §12](ADR-021-stripe-billing-entitlements.md) accepts a
+  **fourth** and **fifth** service-role module, one per authority, bringing the total to five:
+  `src/lib/billing/customer-recorder.ts` (one operation, `record` → `record_billing_customer`: persists/reconciles the
+  Stripe Customer → user mapping from the application's own Stripe result, after the user's session authorized
+  Checkout; a client-writable mapping would let a user attach another person's customer) and
+  `src/lib/billing/webhook-store.ts` (two operations, `applySubscription` / `applyCheckoutPayment`, each one fixed
+  service_role-only SECURITY DEFINER function: verified Stripe webhook persistence — reconcile subscription/purchase
+  state, record the event id, recompute the entitlement — called only after `Stripe-Signature` verified with
+  `STRIPE_WEBHOOK_SECRET`, read only in `src/lib/billing/webhook-auth.ts`). Webhooks carry no session and users must
+  never write paid state, so every billing table denies client (and direct service_role) writes. No generic client;
+  their responsibilities are not to be broadened. ESLint allows `SUPABASE_SERVICE_ROLE_KEY` only in the five files.
 
 ### 7. Public / private boundary
 

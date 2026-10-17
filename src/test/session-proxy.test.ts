@@ -43,13 +43,13 @@ describe("proxy matcher", () => {
   const matches = (path: string) => unstable_doesMiddlewareMatch({ config, url: `http://localhost${path}` });
 
   it("runs on app and guest pages", () => {
-    for (const path of ["/", "/app/weddings/new", "/rsvp", "/boda/ana-y-luis", "/api/webhooks/resend-other", "/api/webhooks/other"]) {
+    for (const path of ["/", "/app/weddings/new", "/rsvp", "/boda/ana-y-luis", "/api/webhooks/resend-other", "/api/webhooks/other", "/app/billing", "/api/stripe/webhook-other"]) {
       expect(matches(path), path).toBe(true);
     }
   });
 
-  it("never runs on the scheduler route (LB-17) or the Resend webhook (LB-18.2)", () => {
-    for (const path of ["/api/cron/rsvp-reminders", "/api/webhooks/resend"]) {
+  it("never runs on the scheduler route (LB-17), the Resend webhook (LB-18.2) or the Stripe webhook (BILLING-01)", () => {
+    for (const path of ["/api/cron/rsvp-reminders", "/api/webhooks/resend", "/api/stripe/webhook"]) {
       expect(matches(path), path).toBe(false);
     }
   });

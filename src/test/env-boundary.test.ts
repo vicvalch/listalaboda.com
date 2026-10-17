@@ -49,6 +49,17 @@ describe("public env", () => {
     expect(JSON.stringify(getPublicEnv())).not.toContain("capability-secret-placeholder");
   });
 
+  it("does not pick up the Stripe secrets (BILLING-01) from process.env", () => {
+    vi.stubEnv(URL_VAR, validSource[URL_VAR]);
+    vi.stubEnv(KEY_VAR, validSource[KEY_VAR]);
+    vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_stripe-secret-placeholder");
+    vi.stubEnv("STRIPE_WEBHOOK_SECRET", "whsec_stripe-webhook-placeholder");
+
+    const env = JSON.stringify(getPublicEnv());
+    expect(env).not.toContain("stripe-secret-placeholder");
+    expect(env).not.toContain("stripe-webhook-placeholder");
+  });
+
   it("does not pick up the scheduler's CRON_SECRET (LB-17) from process.env", () => {
     vi.stubEnv(URL_VAR, validSource[URL_VAR]);
     vi.stubEnv(KEY_VAR, validSource[KEY_VAR]);

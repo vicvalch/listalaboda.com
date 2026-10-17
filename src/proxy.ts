@@ -12,7 +12,8 @@ export const config = {
     // Everything except static assets, image optimization, the scheduler
     // route (LB-17, ADR-010 §4: a cron call has no session to refresh and
     // must never read or set cookies) and the Resend webhook (LB-18.2,
-    // ADR-011 §7: the provider's signature is its only authority).
-    "/((?!api/cron/|api/webhooks/resend$|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    // ADR-011 §7: the provider's signature is its only authority) and the
+    // Stripe webhook (BILLING-01, ADR-021 §6: likewise, signature only).
+    "/((?!api/cron/|api/webhooks/resend$|api/stripe/webhook$|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

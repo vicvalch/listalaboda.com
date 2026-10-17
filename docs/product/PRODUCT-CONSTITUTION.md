@@ -329,6 +329,29 @@ enabled?"; membership answers "may this user access this Wedding?". A planner
 subscription never grants access to any wedding, and a Wedding purchase never
 creates a membership.
 
+**Amendment — BILLING-01 (2026-10-16), [ADR-021](../architecture/ADR-021-stripe-billing-entitlements.md).**
+The "COMMERCIAL MODEL DEFERRED" statement above is kept as history; it no longer
+describes the product. BILLING-01 authorizes:
+
+- a planner **monthly subscription** and a couple **one-time purchase**, sold through
+  hosted **Stripe Checkout** (prices are Stripe configuration; amounts and currencies
+  are not written into the product or the code);
+- **signed Stripe webhooks** as the only authority that grants or revokes paid access
+  (a success page or browser request never does);
+- a **persistent entitlement model** in our database (`planner_pro`, `couple_access`),
+  read server-side in one place, as required above.
+
+No paywall is introduced: no existing feature requires payment until a separate,
+explicit gating decision. Entitlements still never authorize Wedding data.
+
+*V1 exception (dated 2026-10-16):* for BILLING-01 V1 the couple entitlement attaches
+to the **account**, not to a `wedding_id`. This is an intentional, temporary
+exception to the preference above for the Wedding as the B2C billable unit: under
+ACCOUNT-01 a couple account can create at most one Wedding, and the commercial model
+is one purchase per couple account. The Wedding-as-billable-unit principle stands
+for future B2C billing; revisiting this exception is a future product decision.
+Refunds and disputes don't revoke access automatically in V1 (manual handling).
+
 ## 12. AI Boundary
 
 **AI = OPTIONAL FUTURE ENHANCEMENT.**

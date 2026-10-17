@@ -4,9 +4,11 @@ import { containerClass, cx } from "@/components/marketing/classes";
 import { FaqList } from "@/components/marketing/FaqList";
 import { HowItWorks } from "@/components/marketing/HowItWorks";
 import { LifestylePhoto } from "@/components/marketing/LifestylePhoto";
+import { PricingSection } from "@/components/marketing/PricingSection";
 import { ProductShot } from "@/components/marketing/ProductShot";
 import { ThemeShowcase } from "@/components/marketing/ThemeShowcase";
 import { primaryButtonClass, secondaryButtonClass } from "@/components/ui/styles";
+import { displayPrice } from "@/lib/billing/display-prices";
 import { getMessages } from "@/lib/i18n";
 import { MARKETING_LINKS } from "@/lib/marketing/links";
 import { marketingMetadata } from "@/lib/marketing/metadata";
@@ -52,6 +54,9 @@ const copy = marketing.planners;
  * money screens. The pilot band gets warm light, not another photo.
  */
 export const metadata: Metadata = marketingMetadata(copy.metadata);
+
+/** BILLING-02: the price answer quotes the display price (`{price}`), never a second copy of it. */
+const faqItems = copy.faq.items.map((item) => ({ ...item, answer: item.answer.replace("{price}", displayPrice("planner")) }));
 
 const TIMELINE_SHOTS = [timelinePrint1, timelinePrint2, timelinePrint3] as const;
 
@@ -332,6 +337,9 @@ export default function PlannersPage() {
         </div>
       </section>
 
+      {/* BILLING-02 / MKT-7: the price, evergreen (no promotion advertised); its call to action enters billing. */}
+      <PricingSection audience="planner" />
+
       {/* 9. Questions: a quiet block before the last word. */}
       <section id="preguntas" aria-labelledby="preguntas-titulo" className="scroll-mt-20 border-t border-border">
         <div className={cx(containerClass, spacingClass, "grid gap-8 lg:grid-cols-12 lg:gap-10")}>
@@ -339,7 +347,7 @@ export default function PlannersPage() {
             {copy.faq.title}
           </h2>
           <div className="lg:col-span-8">
-            <FaqList items={copy.faq.items} />
+            <FaqList items={faqItems} />
           </div>
         </div>
       </section>

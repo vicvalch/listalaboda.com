@@ -1,4 +1,5 @@
 import type { AccountType } from "@/lib/accounts/account-type";
+import type { PlannerTrial } from "@/lib/billing/campaigns";
 import type { BillingEntitlementKey, BillingSubscriptionStatus, CheckoutMode } from "@/lib/billing/plans";
 
 /**
@@ -38,8 +39,11 @@ export type CheckoutSessionSnapshot = Readonly<{
   paymentStatus: string;
   customerId: string | null;
   subscriptionId: string | null;
+  /** May be null when nothing was paid (a promotion code covering the whole amount, BILLING-02). */
   paymentIntentId: string | null;
   priceId: string | null;
+  /** Minor units after discounts; null when Stripe gives none. */
+  amountTotal: number | null;
   metadata: BillingObjectMetadata;
 }>;
 
@@ -57,6 +61,12 @@ export type CreateCheckoutInput = Readonly<{
   userId: string;
   accountType: AccountType;
   entitlementKey: BillingEntitlementKey;
+  /**
+   * BILLING-02: a server-resolved planner trial (`resolvePlannerTrial`), only
+   * ever with `mode: "subscription"`; null = no trial. Promotion codes are
+   * always allowed: the customer types one in Stripe Checkout, Stripe decides.
+   */
+  trial: PlannerTrial | null;
   successUrl: string;
   cancelUrl: string;
 }>;

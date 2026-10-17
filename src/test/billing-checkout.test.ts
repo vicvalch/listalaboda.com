@@ -17,6 +17,7 @@ vi.mock("@/lib/supabase/server", () => server);
 const runtime = vi.hoisted(() => ({ getBillingRuntime: vi.fn(), isBillingAvailable: vi.fn() }));
 vi.mock("@/lib/billing/runtime", () => runtime);
 
+import { PLANNER_TRIAL_CAMPAIGN_KEYS, type PlannerTrialCampaign } from "@/lib/billing/campaigns";
 import type { BillingCustomerRecorder } from "@/lib/billing/customer-recorder";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -56,9 +57,9 @@ function recorder(store = new Map<string, string>()): BillingCustomerRecorder & 
   };
 }
 
-function runtimeWith(gateway: FakeGateway, rec = recorder()) {
+function runtimeWith(gateway: FakeGateway, rec = recorder(), trialCampaigns: readonly PlannerTrialCampaign[] = []) {
   return {
-    config: { appOrigin: APP_ORIGIN, prices: { planner: PLANNER_PRICE, couple: COUPLE_PRICE } },
+    config: { appOrigin: APP_ORIGIN, prices: { planner: PLANNER_PRICE, couple: COUPLE_PRICE }, trialCampaigns },
     gateway,
     recorder: rec,
   };
@@ -87,6 +88,7 @@ describe("planner checkout", () => {
         userId: USER_ID,
         accountType: "planner",
         entitlementKey: "planner_pro",
+        trial: null,
         successUrl: `${APP_ORIGIN}/app/billing/success`,
         cancelUrl: `${APP_ORIGIN}/app/billing/cancel`,
       },
@@ -255,9 +257,82 @@ describe("billing actions (real account-type guard)", () => {
     accountService.getAccountType.mockResolvedValue(accountType);
     server.createSupabaseServerClient.mockResolvedValue(fakeSupabase(tables).client);
     const gateway = fakeGateway();
-    runtime.getBillingRuntime.mockReturnValue(runtimeWith(gateway));
+    runtime.getBillingRuntime.mockReturnValue(runtimeWith(gateway, recorder(), PLANNER_TRIAL_CAMPAIGN_KEYS));
     return gateway;
   }
+
+  function form(fields: Record<string, string>): FormData {
+    const data = new FormData();
+    for (const [name, value] of Object.entries(fields)) data.set(name, value);
+    return data;
+  }
+
+  it("BILLING-02: the browser can't supply a promotion code, coupon, discount or numeric trial", async () => {
+    const gateway = signedIn("planner");
+    const forged = form({
+      promotion_code: "promo_FORGED100",
+      promotionCode: "FREE100",
+      coupon: "coupon_FORGED100",
+      discounts: "coupon_FORGED100",
+      percent_off: "100",
+      amount_off: "9900",
+      trial: "365",
+      trial_days: "365",
+      trial_period_days: "365",
+      price: "price_FORGEDcheap",
+      mode: "payment",
+    });
+    await expect(startCheckoutAction(forged)).rejects.toThrow(/^NEXT_REDIRECT https:\/\/checkout\.stripe\.com\//);
+    expect(gateway.sessions).toEqual([
+      expect.objectContaining({ mode: "subscription", priceId: PLANNER_PRICE, trial: null }),
+    ]);
+    // The gateway input has no field a discount or a coupon could travel in.
+    expect(Object.keys(gateway.sessions[0]).sort()).toEqual(
+      ["accountType", "cancelUrl", "customerId", "entitlementKey", "mode", "priceId", "successUrl", "trial", "userId"].sort(),
+    );
+  });
+
+  it("BILLING-02: a campaign must be a key, never a number of days", async () => {
+    const gateway = signedIn("planner");
+    for (const campaign of ["14", "30", "planner_trial_365", "PLANNER_TRIAL_14", " planner_trial_14", "planner_trial_14?x"]) {
+      await expect(startCheckoutAction(form({ campaign }))).rejects.toThrow(/^NEXT_REDIRECT https:/);
+    }
+    expect(gateway.sessions.map((s) => s.trial)).toEqual([null, null, null, null, null, null]);
+  });
+
+  it("BILLING-02: a valid campaign key from the form becomes the server-derived trial", async () => {
+    const gateway = signedIn("planner");
+    await expect(startCheckoutAction(form({ campaign: "planner_trial_30", trial_days: "365" }))).rejects.toThrow(
+      /^NEXT_REDIRECT https:/,
+    );
+    expect(gateway.sessions[0]).toMatchObject({ mode: "subscription", trial: { campaign: "planner_trial_30", days: 30 } });
+  });
+
+  it("BILLING-02: a couple never receives a planner trial, and promo fields don't change the payment", async () => {
+    const gateway = signedIn("couple");
+    await expect(
+      startCheckoutAction(form({ campaign: "planner_trial_14", coupon: "coupon_FORGED100", promotion_code: "promo_X" })),
+    ).rejects.toThrow(/^NEXT_REDIRECT https:/);
+    expect(gateway.sessions).toEqual([
+      expect.objectContaining({ mode: "payment", priceId: COUPLE_PRICE, entitlementKey: "couple_access", trial: null }),
+    ]);
+  });
+
+  it("BILLING-02: an untyped account with a campaign goes to the choice (keeping the key), no Checkout", async () => {
+    const gateway = signedIn(null);
+    await expect(startCheckoutAction(form({ campaign: "planner_trial_14" }))).rejects.toThrow(
+      "NEXT_REDIRECT /onboarding/account-type?next=%2Fapp%2Fbilling%3Fcampaign%3Dplanner_trial_14",
+    );
+    expect(gateway.customers).toEqual([]);
+    expect(gateway.sessions).toEqual([]);
+  });
+
+  it("BILLING-02: promotions never bypass the server checks (already active is still refused)", async () => {
+    signedIn("couple", { billing_entitlements: [{ user_id: USER_ID, entitlement_key: "couple_access", status: "active" }] });
+    await expect(startCheckoutAction(form({ promotion_code: "promo_X", campaign: "planner_trial_30" }))).rejects.toThrow(
+      "NEXT_REDIRECT /app/billing?error=already_active",
+    );
+  });
 
   it("an untyped account can't start Checkout: it is sent to the account-type choice", async () => {
     const gateway = signedIn(null);
@@ -289,8 +364,8 @@ describe("billing actions (real account-type guard)", () => {
     })) {
       forged.set(name, value);
     }
-    // The action takes no input at all; a forged form changes nothing.
-    await expect((startCheckoutAction as (form: FormData) => Promise<void>)(forged)).rejects.toThrow(
+    // The action reads no field but the campaign key; a forged form changes nothing.
+    await expect(startCheckoutAction(forged)).rejects.toThrow(
       /^NEXT_REDIRECT https:\/\/checkout\.stripe\.com\//,
     );
     expect(gateway.sessions).toEqual([
@@ -313,5 +388,72 @@ describe("billing actions (real account-type guard)", () => {
     signedIn("planner");
     runtime.getBillingRuntime.mockReturnValue(null);
     await expect(startCheckoutAction()).rejects.toThrow("NEXT_REDIRECT /app/billing?error=not_available");
+  });
+});
+
+describe("planner trial campaigns (BILLING-02)", () => {
+  const ALL = PLANNER_TRIAL_CAMPAIGN_KEYS;
+
+  it.each([
+    ["planner_trial_7", 7],
+    ["planner_trial_14", 14],
+    ["planner_trial_30", 30],
+  ] as const)("%s → a %i-day trial on the planner subscription", async (campaign, days) => {
+    const gateway = fakeGateway();
+    expect((await startBillingCheckout(caller("planner").caller, runtimeWith(gateway, recorder(), ALL), campaign)).ok).toBe(true);
+    expect(gateway.sessions).toEqual([
+      expect.objectContaining({ mode: "subscription", priceId: PLANNER_PRICE, trial: { campaign, days } }),
+    ]);
+  });
+
+  it("no campaign → no trial", async () => {
+    const gateway = fakeGateway();
+    await startBillingCheckout(caller("planner").caller, runtimeWith(gateway, recorder(), ALL));
+    expect(gateway.sessions[0].trial).toBeNull();
+  });
+
+  it.each([["planner_trial_60"], ["14"], [14], [{ days: 14 }], [["planner_trial_14"]], [""]])(
+    "unknown campaign %j → no trial (ignored, the subscription still starts)",
+    async (requested) => {
+      const gateway = fakeGateway();
+      expect((await startBillingCheckout(caller("planner").caller, runtimeWith(gateway, recorder(), ALL), requested)).ok).toBe(true);
+      expect(gateway.sessions[0].trial).toBeNull();
+    },
+  );
+
+  it("a known campaign that isn't enabled by configuration → no trial", async () => {
+    const gateway = fakeGateway();
+    await startBillingCheckout(caller("planner").caller, runtimeWith(gateway, recorder(), ["planner_trial_7"]), "planner_trial_30");
+    expect(gateway.sessions[0].trial).toBeNull();
+  });
+
+  it("a planner who already had a subscription gets no second trial", async () => {
+    const gateway = fakeGateway();
+    const { caller: planner } = caller("planner", { billing_subscriptions: [{ user_id: USER_ID, status: "canceled" }] });
+    expect((await startBillingCheckout(planner, runtimeWith(gateway, recorder(), ALL), "planner_trial_14")).ok).toBe(true);
+    expect(gateway.sessions[0].trial).toBeNull();
+  });
+
+  it("a couple never gets a trial, whatever the campaign", async () => {
+    const gateway = fakeGateway();
+    await startBillingCheckout(caller("couple").caller, runtimeWith(gateway, recorder(), ALL), "planner_trial_14");
+    expect(gateway.sessions[0]).toMatchObject({ mode: "payment", trial: null });
+  });
+
+  it("a campaign never skips the live-subscription or entitlement checks", async () => {
+    const gateway = fakeGateway();
+    const { caller: live } = caller("planner", { billing_subscriptions: [{ user_id: USER_ID, status: "past_due" }] });
+    expect(await startBillingCheckout(live, runtimeWith(gateway, recorder(), ALL), "planner_trial_30")).toEqual({
+      ok: false,
+      reason: "manage_existing",
+    });
+    const { caller: active } = caller("planner", {
+      billing_entitlements: [{ user_id: USER_ID, entitlement_key: "planner_pro", status: "active" }],
+    });
+    expect(await startBillingCheckout(active, runtimeWith(gateway, recorder(), ALL), "planner_trial_30")).toEqual({
+      ok: false,
+      reason: "already_active",
+    });
+    expect(gateway.sessions).toEqual([]);
   });
 });

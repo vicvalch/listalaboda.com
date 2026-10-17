@@ -32,6 +32,9 @@ const { default: PlannersPage, metadata: plannersMetadata } = await import("@/ap
 const { default: CouplesPage, metadata: couplesMetadata } = await import("@/app/(marketing)/parejas/page");
 const { default: nextConfig } = await import("../../next.config");
 const { default: robots } = await import("@/app/robots");
+const { loginPath } = await import("@/lib/auth/redirect");
+const { BILLING_PATH } = await import("@/lib/billing/plans");
+const { PLAN_DISPLAY_PRICES } = await import("@/lib/billing/display-prices");
 
 const render = (element: ReactElement) => renderToStaticMarkup(element);
 const hrefs = (html: string) => [...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1].replaceAll("&amp;", "&"));
@@ -43,6 +46,8 @@ describe("marketing links (MKT-1)", () => {
       PLANNERS: "/planners",
       COUPLES: "/parejas",
       LOGIN: "/login",
+      // BILLING-02 / MKT-7: login, then the billing page (the existing auth → account type → billing flow).
+      START_BILLING: "/login?next=%2Fapp%2Fbilling",
       DEMO: "mailto:vicvalch@onchainfest.xyz?subject=Solicitud%20de%20demo%20-%20listalaboda.com",
       PILOT: "mailto:vicvalch@onchainfest.xyz?subject=Aplicaci%C3%B3n%20al%20pilot%20-%20listalaboda.com",
       ACCESS: "mailto:vicvalch@onchainfest.xyz?subject=Solicitud%20de%20acceso%20-%20listalaboda.com",
@@ -55,6 +60,12 @@ describe("marketing links (MKT-1)", () => {
 
   it("never send anyone to self-signup yet (LB-26)", () => {
     expect(Object.values(MARKETING_LINKS)).not.toContain("/signup");
+    expect(Object.values(MARKETING_LINKS).join(" ")).not.toContain("signup");
+  });
+
+  it("BILLING-02: the pricing entry is exactly loginPath(BILLING_PATH), with no plan, type or campaign in it", () => {
+    expect(MARKETING_LINKS.START_BILLING).toBe(loginPath(BILLING_PATH));
+    expect(MARKETING_LINKS.START_BILLING).not.toMatch(/planner|couple|pareja|campaign|trial|price|coupon|promo/i);
   });
 });
 
@@ -372,9 +383,11 @@ describe("/parejas (MKT-3)", () => {
     expect(html.match(/<div aria-hidden="true" inert=""/g)).toHaveLength(2 + 5);
   });
 
-  it("asks the seven questions, with the approved price answer", () => {
+  it("asks the seven questions; the price answer quotes the couple display price", () => {
     expect(html.match(/<details/g)).toHaveLength(7);
-    expect(page.faq.items.at(-1)?.answer).toBe(copy.marketing.planners.faq.items.at(-1)?.answer);
+    expect(html).toContain("El acceso para tu boda cuesta $149 USD, en un pago único: sin suscripción mensual.");
+    expect(html).not.toContain("{price}");
+    expect(html).not.toContain("todavía no está definido");
   });
 
   it("never shows a screen twice, and never the planners' multi-wedding screens", () => {
@@ -387,6 +400,58 @@ describe("/parejas (MKT-3)", () => {
     const text = JSON.stringify(page);
     expect(page.plan.note).toBe("listalaboda.com registra los pagos; no los procesa.");
     expect(text).not.toMatch(/procesa pagos|paga proveedores|cobra|transfiere|gratis|SMS|Mis bodas|registro abierto para|acomod\w* automátic|recordatorios? automátic/i);
+    // BILLING-02: amounts never live in the copy; they come from the display prices only.
     expect(text).not.toMatch(/[$₡]\s?\d|\d+\s?(USD|CRC)/);
+  });
+});
+
+describe("pricing sections (BILLING-02 / MKT-7)", () => {
+  const pricing = copy.marketing.pricing;
+  const sectionOf = (html: string) => {
+    const start = html.indexOf('<section id="precio"');
+    return html.slice(start, html.indexOf("</section>", start));
+  };
+  const textOf = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  const planners = sectionOf(render(createElement(PlannersPage)));
+  const couples = sectionOf(render(createElement(CouplesPage)));
+
+  it("/planners: $99 USD / mes, the planner plan, its CTA into billing and the evergreen notes", () => {
+    expect(planners).toContain('data-pricing="planner"');
+    expect(textOf(planners)).toContain("$99 USD / mes");
+    expect(planners).toContain(pricing.planner.eyebrow);
+    expect(planners).toContain(pricing.planner.title);
+    expect(planners).toContain(pricing.planner.cadenceLabel);
+    for (const feature of pricing.planner.features) expect(planners).toContain(feature.replaceAll("«", "«"));
+    expect(planners).toContain(`href="${MARKETING_LINKS.START_BILLING}"`);
+    expect(planners).toContain(`>${pricing.planner.cta}</a>`);
+    expect(planners).toContain(pricing.planner.note);
+    expect(planners).toContain(pricing.promoNote);
+  });
+
+  it("/parejas: $149 USD, Pago único, the couple CTA into billing", () => {
+    expect(couples).toContain('data-pricing="couple"');
+    expect(textOf(couples)).toContain("$149 USD");
+    expect(couples).toContain(">Pago único<");
+    expect(couples).not.toContain("/ mes");
+    expect(couples).toContain(pricing.couple.title);
+    expect(couples).toContain(`href="${MARKETING_LINKS.START_BILLING}"`);
+    expect(couples).toContain(`>${pricing.couple.cta}</a>`);
+    expect(couples).toContain(pricing.promoNote);
+  });
+
+  it("matches the frozen commercial model: no other amount, currency or cadence on either page", () => {
+    expect(PLAN_DISPLAY_PRICES.planner).toEqual({ amount: "$99", currency: "USD" });
+    expect(PLAN_DISPLAY_PRICES.couple).toEqual({ amount: "$149", currency: "USD" });
+    const planner = textOf(render(createElement(PlannersPage)));
+    const couple = textOf(render(createElement(CouplesPage)));
+    expect([...planner.matchAll(/\$\s?(\d+)/g)].map((m) => m[1]).every((n) => n === "99")).toBe(true);
+    expect([...couple.matchAll(/\$\s?(\d+)/g)].map((m) => m[1]).every((n) => n === "149")).toBe(true);
+    expect(`${planner} ${couple}`).not.toMatch(/₡|CRC\s?\d|\d\s?CRC|EUR|€/);
+    expect(planner).toContain("El plan para wedding planners cuesta $99 USD al mes");
+  });
+
+  it("advertises no trial, free period, active promotion, lifetime or unlimited claim", () => {
+    const text = JSON.stringify(pricing) + textOf(planners) + textOf(couples);
+    expect(text).not.toMatch(/prueba gratuita|gratis|días gratis|\d+\s?días|de por vida|para siempre|ilimitad|descuento|% de descuento/i);
   });
 });

@@ -15,7 +15,11 @@ const accountService = vi.hoisted(() => ({ getAccountType: vi.fn() }));
 vi.mock("@/lib/accounts/service", () => accountService);
 const server = vi.hoisted(() => ({ createSupabaseServerClient: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => server);
-const runtime = vi.hoisted(() => ({ getBillingRuntime: vi.fn(), isBillingAvailable: vi.fn(() => true) }));
+const runtime = vi.hoisted(() => ({
+  getBillingRuntime: vi.fn(),
+  isBillingAvailable: vi.fn(() => true),
+  getEnabledTrialCampaigns: vi.fn((): readonly string[] => []),
+}));
 vi.mock("@/lib/billing/runtime", () => runtime);
 
 import { getMessages } from "@/lib/i18n";
@@ -46,6 +50,7 @@ const params = (query: Record<string, string> = {}) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   runtime.isBillingAvailable.mockReturnValue(true);
+  runtime.getEnabledTrialCampaigns.mockReturnValue([]);
 });
 
 describe("success page", () => {
@@ -69,6 +74,16 @@ describe("success page", () => {
     expect(html).not.toContain(billing.success.pendingBody);
   });
 
+  it("BILLING-02: a planner trial or a $0 purchase opening the success URL still only sees 'confirming'", async () => {
+    signedIn("planner", {
+      billing_subscriptions: [{ user_id: USER_ID, status: "trialing", current_period_end: null, cancel_at_period_end: false }],
+    });
+    // A trialing row without the webhook-computed entitlement grants nothing.
+    const html = renderToStaticMarkup(await BillingSuccessPage());
+    expect(html).toContain(billing.success.pendingBody);
+    expect(html).not.toContain(billing.success.plannerConfirmed);
+  });
+
   it("an untyped account is sent to the account-type choice", async () => {
     signedIn(null);
     await expect(BillingSuccessPage()).rejects.toThrow("NEXT_REDIRECT /onboarding/account-type?next=%2Fapp%2Fbilling%2Fsuccess");
@@ -76,12 +91,81 @@ describe("success page", () => {
 });
 
 describe("billing page", () => {
-  it("planner without a subscription: the subscribe action and no price", async () => {
+  it("planner without a subscription: the subscribe action, the frozen display price and the promo-code note", async () => {
     signedIn("planner");
     const html = renderToStaticMarkup(await BillingPage(params() as never));
     expect(html).toContain(billing.planner.subscribe);
     expect(html).toContain(billing.priceNote);
-    expect(html).not.toMatch(/\$\s?\d|₡\s?\d|USD|CRC/);
+    expect(html).toContain(billing.promoNote);
+    expect(html).toContain(">$99 USD / mes<");
+    expect(html).not.toContain(billing.planner.trialOffer.replace("{days}", ""));
+    expect(html).not.toContain('name="campaign"');
+  });
+
+  it("couple without access: $149 USD, one-time, and the promo-code note", async () => {
+    signedIn("couple");
+    const html = renderToStaticMarkup(await BillingPage(params() as never));
+    expect(html).toContain(">$149 USD<");
+    expect(html).toContain(billing.couple.cadence);
+    expect(html).toContain(billing.promoNote);
+    expect(html).toContain(billing.couple.buy);
+  });
+
+  describe("BILLING-02 trial campaigns", () => {
+    const trialText = (days: number) => billing.planner.trialOffer.replace("{days}", String(days));
+
+    it.each([7, 14, 30])("a valid, enabled planner_trial_%i shows the trial, then $99 USD/mes, and carries only the key", async (days) => {
+      runtime.getEnabledTrialCampaigns.mockReturnValue(["planner_trial_7", "planner_trial_14", "planner_trial_30"]);
+      signedIn("planner");
+      const html = renderToStaticMarkup(await BillingPage(params({ campaign: `planner_trial_${days}` }) as never));
+      expect(html).toContain(trialText(days));
+      expect(html).toContain("Después, $99 USD/mes.");
+      expect(html).toContain(billing.planner.startTrial);
+      expect(html).toContain(`<input type="hidden" name="campaign" value="planner_trial_${days}"/>`);
+      expect(html).not.toMatch(/name="(trial|trial_days|trial_period_days|coupon|promotion_code)"/);
+    });
+
+    it.each([["unknown", "planner_trial_60"], ["numeric", "14"], ["not enabled", "planner_trial_30"]])(
+      "%s campaign → the normal $99/mes flow, silently",
+      async (_label, campaign) => {
+        runtime.getEnabledTrialCampaigns.mockReturnValue(["planner_trial_14"]);
+        signedIn("planner");
+        const html = renderToStaticMarkup(await BillingPage(params({ campaign }) as never));
+        expect(html).toContain(">$99 USD / mes<");
+        expect(html).toContain(billing.planner.subscribe);
+        expect(html).not.toContain('name="campaign"');
+        expect(html).not.toContain(campaign === "14" ? "Prueba gratuita" : campaign);
+      },
+    );
+
+    it("a planner who already had a subscription is not offered a trial", async () => {
+      runtime.getEnabledTrialCampaigns.mockReturnValue(["planner_trial_14"]);
+      signedIn("planner", {
+        billing_subscriptions: [{ user_id: USER_ID, status: "canceled", current_period_end: null, cancel_at_period_end: false }],
+      });
+      const html = renderToStaticMarkup(await BillingPage(params({ campaign: "planner_trial_14" }) as never));
+      expect(html).not.toContain(trialText(14));
+      expect(html).toContain(billing.planner.subscribe);
+    });
+
+    it("a couple never sees a planner trial", async () => {
+      runtime.getEnabledTrialCampaigns.mockReturnValue(["planner_trial_14"]);
+      signedIn("couple");
+      const html = renderToStaticMarkup(await BillingPage(params({ campaign: "planner_trial_14" }) as never));
+      expect(html).not.toContain("Prueba gratuita");
+      expect(html).not.toContain('name="campaign"');
+      expect(html).toContain(">$149 USD<");
+    });
+
+    it("an untyped account keeps a VALID key through the account-type choice, never an unknown one", async () => {
+      signedIn(null);
+      await expect(BillingPage(params({ campaign: "planner_trial_14" }) as never)).rejects.toThrow(
+        "NEXT_REDIRECT /onboarding/account-type?next=%2Fapp%2Fbilling%3Fcampaign%3Dplanner_trial_14",
+      );
+      await expect(BillingPage(params({ campaign: "<x>" }) as never)).rejects.toThrow(
+        /NEXT_REDIRECT \/onboarding\/account-type\?next=%2Fapp%2Fbilling$/,
+      );
+    });
   });
 
   it("planner with an active entitlement: manage, never subscribe again", async () => {

@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { AccountType } from "@/lib/accounts/account-type";
+import { parseEnabledTrialCampaigns, type PlannerTrialCampaign } from "@/lib/billing/campaigns";
 import { parseAppOrigin } from "@/lib/http/app-origin";
 
 /**
@@ -15,11 +16,18 @@ import { parseAppOrigin } from "@/lib/http/app-origin";
  * webhook secret only by `@/lib/billing/webhook-auth` (ESLint). Missing or
  * malformed values are a uniform "not available": nothing is sold, nothing
  * else breaks. Values are never echoed.
+ *
+ * BILLING-02: `PLANNER_TRIAL_CAMPAIGNS` (optional, not a secret) lists the
+ * planner trial campaigns that are switched ON, e.g. `planner_trial_14`
+ * (comma-separated keys of `@/lib/billing/campaigns`; unknown entries are
+ * dropped). Unset = no trial is ever applied. The lengths stay in code.
  */
 
 export type BillingConfig = Readonly<{
   appOrigin: string;
   prices: Readonly<Record<AccountType, string>>;
+  /** Planner trial campaigns currently enabled (BILLING-02); empty = none. */
+  trialCampaigns: readonly PlannerTrialCampaign[];
 }>;
 
 type EnvSource = Readonly<Record<string, string | undefined>>;
@@ -36,7 +44,7 @@ export function parseBillingConfig(source: EnvSource): BillingConfig | null {
   if (!appOrigin || !STRIPE_PRICE_ID_PATTERN.test(planner) || !STRIPE_PRICE_ID_PATTERN.test(couple)) return null;
   // One price per plan: the same id for both would sell one product as the other.
   if (planner === couple) return null;
-  return { appOrigin, prices: { planner, couple } };
+  return { appOrigin, prices: { planner, couple }, trialCampaigns: parseEnabledTrialCampaigns(source.PLANNER_TRIAL_CAMPAIGNS) };
 }
 
 export function getBillingConfig(): BillingConfig | null {
@@ -44,5 +52,6 @@ export function getBillingConfig(): BillingConfig | null {
     APP_ORIGIN: process.env.APP_ORIGIN,
     STRIPE_PLANNER_MONTHLY_PRICE_ID: process.env.STRIPE_PLANNER_MONTHLY_PRICE_ID,
     STRIPE_COUPLE_ONE_TIME_PRICE_ID: process.env.STRIPE_COUPLE_ONE_TIME_PRICE_ID,
+    PLANNER_TRIAL_CAMPAIGNS: process.env.PLANNER_TRIAL_CAMPAIGNS,
   });
 }

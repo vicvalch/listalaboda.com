@@ -169,8 +169,9 @@ export const es = {
           },
           {
             question: "¿Cuánto cuesta?",
+            /** BILLING-02: `{price}` = the planner display price. */
             answer:
-              "El precio comercial todavía no está definido. Durante el pilot estamos validando qué flujos de trabajo generan suficiente valor para planners y parejas.",
+              "El plan para wedding planners cuesta {price} al mes, con todas tus bodas en la misma cuenta. Puedes cancelar cuando quieras, y si tienes un código promocional, lo aplicas en la página de pago.",
           },
         ],
       },
@@ -282,8 +283,9 @@ export const es = {
           },
           {
             question: "¿Cuánto cuesta?",
+            /** BILLING-02: `{price}` = the couple display price. */
             answer:
-              "El precio comercial todavía no está definido. Durante el pilot estamos validando qué flujos de trabajo generan suficiente valor para planners y parejas.",
+              "El acceso para tu boda cuesta {price}, en un pago único: sin suscripción mensual. Si tienes un código promocional, lo aplicas en la página de pago.",
           },
         ],
       },
@@ -292,6 +294,52 @@ export const es = {
         body: "Escríbenos y te contamos cómo empezar con tu boda.",
         note: "Estamos abriendo el acceso de forma gradual.",
         planners: "Ver para planners",
+      },
+    },
+    /**
+     * BILLING-02 / MKT-7: the pricing sections. Amounts come from
+     * `@/lib/billing/display-prices` (never written here); no active promotion
+     * or trial is advertised (evergreen pricing).
+     */
+    pricing: {
+      promoNote: "¿Tienes un código promocional? Podrás aplicarlo en la página de pago.",
+      planner: {
+        eyebrow: "Plan para wedding planners",
+        title: "Un solo plan para manejar todas tus bodas.",
+        body: "Todo el centro operativo de cada boda en un solo lugar.",
+        cadence: "/ mes",
+        cadenceLabel: "Suscripción mensual",
+        featuresLabel: "Qué incluye el plan para wedding planners",
+        features: [
+          "Varias bodas a la vez, con lo que necesita atención en «Mis bodas»",
+          "Invitados y confirmaciones (RSVP) por grupo",
+          "Proveedores, con lo contratado y lo cotizado",
+          "Presupuesto y pagos a proveedores",
+          "Mesas y plano visual",
+          "Cronograma del día",
+          "Un sitio web para cada pareja",
+          "Colaboración con la pareja y tu equipo",
+        ],
+        cta: "Empezar con Planner",
+        note: "Cancela cuando quieras.",
+      },
+      couple: {
+        eyebrow: "Para tu boda",
+        title: "Todo para organizar tu boda en un solo lugar.",
+        body: "Acceso para organizar la boda sin una suscripción mensual.",
+        cadenceLabel: "Pago único",
+        featuresLabel: "Qué incluye el acceso para tu boda",
+        features: [
+          "Lista de pendientes de la boda",
+          "Invitados y confirmaciones (RSVP)",
+          "Proveedores",
+          "Presupuesto",
+          "Mesas",
+          "Cronograma del día",
+          "El sitio web de tu boda",
+        ],
+        cta: "Organizar mi boda",
+        note: "Sin cargos mensuales.",
       },
     },
     footer: {
@@ -423,11 +471,20 @@ export const es = {
     notAvailable: "Los pagos todavía no están disponibles. Tu cuenta sigue funcionando como siempre.",
     statusUnavailable: "No pudimos leer el estado de tu facturación. Recarga la página en unos minutos.",
     priceNote: "Verás el precio exacto en la página de pago segura de Stripe antes de confirmar.",
+    /** BILLING-02: promotion codes are typed in Stripe Checkout; the app never takes one. */
+    promoNote: "¿Tienes un código promocional? Podrás aplicarlo en la página de pago.",
     processorNote: "Los pagos se procesan con Stripe. listalaboda.com no guarda los datos de tu tarjeta.",
     statusLabel: "Estado",
     planner: {
       planName: "Plan para wedding planners",
       cadence: "Suscripción mensual",
+      /** BILLING-02: `{price}` = the display price (`@/lib/billing/display-prices`). */
+      price: "{price} / mes",
+      trialOffer: "Prueba gratuita de {days} días",
+      trialThen: "Después, {price}/mes.",
+      trialNote:
+        "Stripe te pedirá un método de pago para que la suscripción siga sola al terminar la prueba. Puedes cancelarla antes desde «Administrar suscripción».",
+      startTrial: "Empezar la prueba gratuita",
       status: {
         active: "Activa",
         trialing: "En período de prueba",
@@ -449,6 +506,8 @@ export const es = {
     couple: {
       planName: "Acceso para tu boda",
       cadence: "Pago único",
+      /** BILLING-02: `{price}` = the display price. */
+      price: "{price}",
       status: {
         active: "Activado",
         pending: "Confirmando el pago",
@@ -469,8 +528,8 @@ export const es = {
       failed: "No pudimos abrir la página de pago. Inténtalo de nuevo en unos minutos.",
     },
     success: {
-      pendingTitle: "Estamos confirmando tu pago",
-      pendingBody: "Recibimos tu pago. Estamos confirmando la activación.",
+      pendingTitle: "Estamos activando tu acceso",
+      pendingBody: "Volviste de la página de pago. Estamos esperando la confirmación de Stripe para activar tu acceso.",
       pendingHint: "Esta página se actualiza sola durante unos segundos.",
       slow: "La confirmación está tardando más de lo normal. Vuelve a Facturación en unos minutos; no hace falta pagar otra vez.",
       confirmedTitle: "¡Listo!",

@@ -15,6 +15,8 @@ export type PlannerBillingView = Readonly<{
   periodEnd: string | null;
   cancelAtPeriodEnd: boolean;
   action: "subscribe" | "manage" | null;
+  /** Any subscription row, in any status (BILLING-02: trials are for a first subscription only). */
+  everSubscribed: boolean;
 }>;
 
 export type CoupleBillingView = Readonly<{
@@ -27,6 +29,7 @@ export type CoupleBillingView = Readonly<{
 
 /** `available` = billing is configured (else no action is offered). */
 export function plannerBillingView(status: PlannerBillingStatus, available: boolean): PlannerBillingView {
+  const everSubscribed = status.subscriptions.length > 0;
   const granting = status.subscriptions.find((s) => subscriptionGrantsAccess(s.status)) ?? null;
   if (status.entitlement === "active") {
     return {
@@ -35,14 +38,29 @@ export function plannerBillingView(status: PlannerBillingStatus, available: bool
       periodEnd: granting?.currentPeriodEnd ?? null,
       cancelAtPeriodEnd: granting?.cancelAtPeriodEnd ?? false,
       action: available ? "manage" : null,
+      everSubscribed,
     };
   }
   // Alive in Stripe but not granting (past_due, unpaid, paused, incomplete): fixed in the portal.
   const alive = status.subscriptions.find((s) => !TERMINAL_SUBSCRIPTION_STATUSES.includes(s.status)) ?? null;
   if (alive) {
-    return { kind: "planner", state: "problem", periodEnd: null, cancelAtPeriodEnd: false, action: available ? "manage" : null };
+    return {
+      kind: "planner",
+      state: "problem",
+      periodEnd: null,
+      cancelAtPeriodEnd: false,
+      action: available ? "manage" : null,
+      everSubscribed,
+    };
   }
-  return { kind: "planner", state: "none", periodEnd: null, cancelAtPeriodEnd: false, action: available ? "subscribe" : null };
+  return {
+    kind: "planner",
+    state: "none",
+    periodEnd: null,
+    cancelAtPeriodEnd: false,
+    action: available ? "subscribe" : null,
+    everSubscribed,
+  };
 }
 
 export function coupleBillingView(status: CoupleBillingStatus, available: boolean): CoupleBillingView {

@@ -20,6 +20,15 @@ export const MARKETING_LINKS = {
   /** MKT-3: the page for couples organizing their own wedding. */
   COUPLES: "/parejas",
   LOGIN: "/login",
+  /**
+   * BILLING-02 / MKT-7: the pricing calls to action. Login carrying the
+   * billing page as `next` (= `loginPath(BILLING_PATH)`), so the EXISTING
+   * flow does the rest: signed in → straight to billing; new → "Crea una
+   * aquí" keeps `next` through signup; untyped → the account-type choice,
+   * then billing. Never a direct /signup link (LB-26) and never a plan or
+   * account type in the URL (ADR-020: the type is chosen, never inferred).
+   */
+  START_BILLING: "/login?next=%2Fapp%2Fbilling",
   DEMO: mailto("Solicitud de demo - listalaboda.com"),
   PILOT: mailto("Aplicación al pilot - listalaboda.com"),
   ACCESS: mailto("Solicitud de acceso - listalaboda.com"),

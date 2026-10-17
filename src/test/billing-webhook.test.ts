@@ -188,6 +188,26 @@ describe("processing", () => {
     await expectSafeEmpty(await post(subscriptionEvent()), 200);
   });
 
+  it("BILLING-02: a trial Checkout (nothing paid yet) applies the TRIALING subscription Stripe returns", async () => {
+    gateway.subscriptions.set("sub_TESTONLY1", subscriptionSnapshot({ status: "trialing" }));
+    gateway.checkoutSessions.set(
+      "cs_test_TESTONLYtrial",
+      checkoutSessionSnapshot({
+        id: "cs_test_TESTONLYtrial",
+        mode: "subscription",
+        paymentStatus: "no_payment_required",
+        amountTotal: 0,
+        subscriptionId: "sub_TESTONLY1",
+        paymentIntentId: null,
+        metadata: { userId: USER_ID, entitlementKey: "planner_pro" },
+      }),
+    );
+    const body = stripeEventBody({ id: "evt_TESTONLYtrial", type: "checkout.session.completed", object: { id: "cs_test_TESTONLYtrial" } });
+    await expectSafeEmpty(await post(signStripeEvent(body)), 200);
+    expect(db.applySubscription).toHaveBeenCalledWith(expect.objectContaining({ subscriptionId: "sub_TESTONLY1", status: "trialing" }));
+    expect(db.applyCheckoutPayment).not.toHaveBeenCalled();
+  });
+
   it("checkout.session.completed in subscription mode applies that subscription", async () => {
     gateway.checkoutSessions.set(
       "cs_test_TESTONLYsub",
@@ -243,10 +263,42 @@ describe("one-time payment (couple)", () => {
     expect(db.applyCheckoutPayment).toHaveBeenLastCalledWith(expect.objectContaining({ paymentStatus: "failed" }));
   });
 
-  it("no_payment_required is not a confirmed payment", async () => {
-    gateway.checkoutSessions.set("cs_test_TESTONLY1", checkoutSessionSnapshot({ paymentStatus: "no_payment_required" }));
+  it("BILLING-02: a 100%-off Checkout (complete, nothing to pay, $0, NO PaymentIntent) → applied as paid", async () => {
+    gateway.checkoutSessions.set(
+      "cs_test_TESTONLY1",
+      checkoutSessionSnapshot({ paymentStatus: "no_payment_required", amountTotal: 0, paymentIntentId: null }),
+    );
+    await expectSafeEmpty(await post(sessionEvent("checkout.session.completed")), 200);
+    expect(db.applyCheckoutPayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        checkoutSessionId: "cs_test_TESTONLY1",
+        customerId: "cus_TESTONLY1",
+        metadataUserId: USER_ID,
+        paymentIntentId: null,
+        paymentStatus: "paid",
+      }),
+    );
+  });
+
+  it.each([
+    ["a non-zero total", 14_900],
+    ["an unknown total", null],
+  ])("no_payment_required with %s is not a confirmed payment", async (_label, amountTotal) => {
+    gateway.checkoutSessions.set(
+      "cs_test_TESTONLY1",
+      checkoutSessionSnapshot({ paymentStatus: "no_payment_required", amountTotal, paymentIntentId: null }),
+    );
     await post(sessionEvent("checkout.session.completed"));
     expect(db.applyCheckoutPayment).toHaveBeenCalledWith(expect.objectContaining({ paymentStatus: "pending" }));
+  });
+
+  it("BILLING-02: a $0 session that isn't complete is still ignored", async () => {
+    gateway.checkoutSessions.set(
+      "cs_test_TESTONLY1",
+      checkoutSessionSnapshot({ status: "open", paymentStatus: "no_payment_required", amountTotal: 0, paymentIntentId: null }),
+    );
+    await expectSafeEmpty(await post(sessionEvent("checkout.session.completed")), 200);
+    expect(db.applyCheckoutPayment).not.toHaveBeenCalled();
   });
 
   it("an open/expired session or one without our metadata is ignored", async () => {

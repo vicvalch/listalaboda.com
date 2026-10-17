@@ -158,8 +158,8 @@ async function storedSubscription(sub: string) {
 }
 
 async function purchasesOf(userId: string) {
-  return sql<{ status: PurchaseStatus; purchased_at: Date | null }>(
-    "select status::text as status, purchased_at from public.billing_purchases where user_id = $1 order by created_at",
+  return sql<{ status: PurchaseStatus; purchased_at: Date | null; stripe_payment_intent_id: string | null }>(
+    "select status::text as status, purchased_at, stripe_payment_intent_id from public.billing_purchases where user_id = $1 order by created_at",
     [userId],
   );
 }
@@ -567,6 +567,16 @@ describe("couple one-time purchase → couple_access", () => {
     expect(await entitlement(user.id, "couple_access")).toBe("active");
     const [purchase] = await purchasesOf(user.id);
     expect(purchase.status).toBe("paid");
+    expect(purchase.purchased_at).toBeInstanceOf(Date);
+  });
+
+  it("BILLING-02: a 100%-off purchase (paid, NO payment intent) grants durable couple_access", async () => {
+    const { user, customer } = await coupleWithCustomer();
+    expect(await applyPay(payArgs(user.id, customer, sessionId(), { stripe_payment_intent_id: undefined }))).toBe("applied");
+    expect(await entitlement(user.id, "couple_access")).toBe("active");
+    const [purchase] = await purchasesOf(user.id);
+    expect(purchase.status).toBe("paid");
+    expect(purchase.stripe_payment_intent_id).toBeNull();
     expect(purchase.purchased_at).toBeInstanceOf(Date);
   });
 

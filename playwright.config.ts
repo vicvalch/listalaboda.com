@@ -3,6 +3,14 @@ import { defineConfig, devices } from "@playwright/test";
 import { E2E_CRON_SECRET } from "./e2e/support/cron";
 import { assertLocal, readLocalSupabase } from "./e2e/support/local-supabase";
 import { OUTBOX_DIR } from "./e2e/support/outbox";
+import {
+  E2E_COUPLE_PRICE_ID,
+  E2E_PLANNER_PRICE_ID,
+  E2E_STRIPE_SECRET_KEY,
+  E2E_STRIPE_WEBHOOK_SECRET,
+  STRIPE_STAND_IN_ORIGIN,
+  STRIPE_STAND_IN_PORT,
+} from "./e2e/support/stripe";
 import { E2E_RESEND_WEBHOOK_SECRET } from "./e2e/support/webhook";
 import { TEST_RSVP_CAPABILITY_KEY_ENV } from "./src/test/fixtures/rsvp-capability-key";
 
@@ -56,6 +64,20 @@ function webhookEnv() {
   return { RESEND_WEBHOOK_SECRET: E2E_RESEND_WEBHOOK_SECRET };
 }
 
+// BILLING-01: FAKE, test-only Stripe values. The real Stripe SDK talks to the
+// local stand-in (`e2e/support/stripe-stand-in.mjs`), which the app accepts
+// only with a localhost APP_ORIGIN; the journeys sign webhook events with a
+// test-only secret. Nothing ever reaches Stripe.
+function billingEnv() {
+  return {
+    STRIPE_SECRET_KEY: E2E_STRIPE_SECRET_KEY,
+    STRIPE_WEBHOOK_SECRET: E2E_STRIPE_WEBHOOK_SECRET,
+    STRIPE_PLANNER_MONTHLY_PRICE_ID: E2E_PLANNER_PRICE_ID,
+    STRIPE_COUPLE_ONE_TIME_PRICE_ID: E2E_COUPLE_PRICE_ID,
+    STRIPE_API_BASE: STRIPE_STAND_IN_ORIGIN,
+  };
+}
+
 export default defineConfig({
   testDir: "./e2e",
   // Marketing screenshots are captured on demand (`npm run marketing:capture`).
@@ -70,11 +92,20 @@ export default defineConfig({
   use: { baseURL, trace: "on-first-retry" },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   // Tests the production build, so headers and rendering match deploys.
-  webServer: {
-    command: `npm run build && npm run start -- --port ${PORT}`,
-    url: baseURL,
-    reuseExistingServer: false,
-    timeout: 300_000,
-    env: { ...supabaseEnv(), ...emailEnv(), ...capabilityEnv(), ...cronEnv(), ...webhookEnv() },
-  },
+  webServer: [
+    {
+      command: `npm run build && npm run start -- --port ${PORT}`,
+      url: baseURL,
+      reuseExistingServer: false,
+      timeout: 300_000,
+      env: { ...supabaseEnv(), ...emailEnv(), ...capabilityEnv(), ...cronEnv(), ...webhookEnv(), ...billingEnv() },
+    },
+    {
+      command: "node e2e/support/stripe-stand-in.mjs",
+      url: STRIPE_STAND_IN_ORIGIN,
+      reuseExistingServer: false,
+      timeout: 30_000,
+      env: { STRIPE_STAND_IN_PORT: String(STRIPE_STAND_IN_PORT) },
+    },
+  ],
 });

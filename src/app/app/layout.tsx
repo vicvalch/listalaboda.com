@@ -4,6 +4,8 @@ import Link from "next/link";
 import { secondaryButtonClass } from "@/components/ui/styles";
 import { requireAppEntry } from "@/lib/accounts/session";
 import { safeNextPath } from "@/lib/auth/redirect";
+import { BILLING_PATH } from "@/lib/billing/plans";
+import { isBillingAvailable } from "@/lib/billing/runtime";
 import { getMessages } from "@/lib/i18n";
 import { REQUEST_PATH_HEADER } from "@/lib/supabase/proxy";
 import { MY_WEDDINGS_LIST_PATH } from "@/lib/weddings/entry";
@@ -23,6 +25,8 @@ export const dynamic = "force-dynamic";
  *
  * Planners get "Mis bodas" and "Crear boda"; a couple's account is about
  * their own wedding, so neither is offered (the brand link opens it).
+ * Typed accounts also get "Facturación" (BILLING-01), only once billing is
+ * configured; an invited account without a type never sees it.
  */
 export default async function AppLayout({ children }: LayoutProps<"/app">) {
   // The requested path only shapes the post-login destination.
@@ -50,6 +54,11 @@ export default async function AppLayout({ children }: LayoutProps<"/app">) {
             </nav>
           ) : null}
           <div className="flex flex-wrap items-center gap-3">
+            {accountType !== null && isBillingAvailable() ? (
+              <Link href={BILLING_PATH} className="text-sm font-semibold hover:underline">
+                {app.nav.billing}
+              </Link>
+            ) : null}
             {user.email ? (
               <p className="text-muted max-w-56 truncate text-sm">
                 <span className="sr-only">{app.nav.signedInAs} </span>

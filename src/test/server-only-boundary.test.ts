@@ -46,6 +46,17 @@ describe("server-only boundary", () => {
     // LB-24C
     "@/lib/weddings/my-weddings-page",
     "@/lib/weddings/switcher",
+    // BILLING-01 (ADR-021)
+    "@/lib/billing/config",
+    "@/lib/billing/stripe-gateway",
+    "@/lib/billing/webhook-auth",
+    "@/lib/billing/customer-recorder",
+    "@/lib/billing/webhook-store",
+    "@/lib/billing/service",
+    "@/lib/billing/webhook",
+    "@/lib/billing/entitlements",
+    "@/lib/billing/runtime",
+    "@/lib/billing/billing-page",
   ])("refuses to load %s outside a server runtime", async (specifier) => {
     await expect(import(/* @vite-ignore */ specifier)).rejects.toThrow(
       /cannot be imported from a Client Component/,

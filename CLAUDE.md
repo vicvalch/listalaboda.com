@@ -29,6 +29,8 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - `docs/architecture/ADR-019-wedding-site-design-and-themes.md` (wedding site themes: presentation-only design)
 - `docs/architecture/ADR-020-immutable-account-type.md` (one immutable planner/couple account type per user; amends
   ADR-017 §4, §7)
+- `docs/architecture/ADR-021-stripe-billing-entitlements.md` (Stripe Checkout, signed webhooks, persistent entitlements;
+  amends Constitution §11 and ADR-002 §6; the fourth and fifth service-role modules)
 
 ## Product rules
 
@@ -49,13 +51,18 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   (ADR-008), and since LB-18.1 its `email_deliveries` ledger row (ADR-011); neither is a new privileged operation.
   The SECOND and only other use is the ADR-010 scheduler store (`src/lib/scheduler/rsvp-reminder-store.ts`: five
   named operations — claim, prepare, begin, record, finish — each one fixed service_role-only RPC; LB-17 below).
-  The THIRD and last is the ADR-011 delivery event store (`src/lib/email/delivery-event-store.ts`: one operation,
-  `ingest`, one fixed service_role-only RPC, called only after the webhook signature verified; LB-18.2 below). Three
-  separate authorities, never merged: app-authorized provider result / system scheduler / provider signature. No
-  generic privileged client anywhere. Any other use needs its own `server-only` module plus a written justification
-  (ADR-002 §6). ESLint blocks `process.env.SUPABASE_SERVICE_ROLE_KEY` everywhere else, `process.env.CRON_SECRET`
-  everywhere but `src/lib/scheduler/cron-auth.ts`, and `process.env.RESEND_WEBHOOK_SECRET` everywhere but
-  `src/lib/email/webhook-auth.ts`.
+  The THIRD is the ADR-011 delivery event store (`src/lib/email/delivery-event-store.ts`: one operation,
+  `ingest`, one fixed service_role-only RPC, called only after the webhook signature verified; LB-18.2 below). The
+  FOURTH and FIFTH (BILLING-01, ADR-021 §12) are the billing customer recorder (`src/lib/billing/customer-recorder.ts`:
+  `record` → `record_billing_customer`, the Stripe Customer → user mapping) and the billing webhook store
+  (`src/lib/billing/webhook-store.ts`: `applySubscription` / `applyCheckoutPayment`, called only after the
+  Stripe-Signature verified). Five modules, separate authorities, never merged: app-authorized provider result /
+  system scheduler / provider signature / app's own Stripe result / Stripe signature. No generic privileged client
+  anywhere. Any other use needs its own `server-only` module plus a written justification (ADR-002 §6). ESLint blocks
+  `process.env.SUPABASE_SERVICE_ROLE_KEY` everywhere else, `process.env.CRON_SECRET` everywhere but
+  `src/lib/scheduler/cron-auth.ts`, `process.env.RESEND_WEBHOOK_SECRET` everywhere but `src/lib/email/webhook-auth.ts`,
+  `process.env.STRIPE_SECRET_KEY` everywhere but `src/lib/billing/stripe-gateway.ts` and
+  `process.env.STRIPE_WEBHOOK_SECRET` everywhere but `src/lib/billing/webhook-auth.ts`.
 - Browser code reads env only through `src/lib/env/public.ts` (`NEXT_PUBLIC_*` only).
 - Modules that touch cookies or secrets start with `import "server-only"`.
 - Migrations live in `supabase/migrations/`, named `YYYYMMDDHHMMSS_lb_<slug>.sql`; applied
@@ -787,6 +794,36 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   `cuenta@listalaboda.com`, verified domain). The Reset Password template is a project setting: switched only as an
   explicit, approved step, after confirming Resend click tracking / link rewriting is off.
 
+## Billing (BILLING-01, ADR-021)
+
+- Planner = monthly subscription (`planner_pro`, Checkout `mode=subscription`); couple = one-time payment
+  (`couple_access`, `mode=payment`). `BILLING_PLANS` (`@/lib/billing/plans`) is the only mapping; untyped accounts can't
+  buy (`requireAccountType` → onboarding; `record_billing_customer` refuses them). SIT-01 is unchanged.
+- Never trust the client: no price id, amount, currency, product, mode, entitlement, customer or user id from the browser
+  (the Server Actions take no input). The account type is loaded server-side; the price comes from
+  `STRIPE_PLANNER_MONTHLY_PRICE_ID` / `STRIPE_COUPLE_ONE_TIME_PRICE_ID` (`@/lib/billing/config`). No price, amount or
+  currency is ever hardcoded. Hosted Checkout and the Portal are server-created: no publishable key.
+- Application code uses entitlement keys, never Stripe ids. Paid access = `billing_entitlements` read from the DB
+  (`getBillingEntitlement` / `hasEntitlement`, fail-closed), never a Stripe call per request. Entitlements never
+  authorize Wedding data; no feature is gated yet (gating is a separate explicit decision; no pilot/admin/email bypass).
+- The success URL (`/app/billing/success`) NEVER grants access: it reads the DB and only says "confirming" until the
+  webhook activated it. Cancel changes nothing.
+- The verified Stripe webhook (`POST /api/stripe/webhook`, `Stripe-Signature` over the RAW body, `@/lib/billing/webhook-auth`)
+  is the ONLY payment authority. It reconciles the RETRIEVED object (never the payload), handles exactly
+  `customer.subscription.created/updated/deleted` and `checkout.session.completed/async_payment_succeeded/async_payment_failed`,
+  and dedupes by `stripe_webhook_events.stripe_event_id` in the same transaction (advisory lock; failure writes nothing).
+  Older observations are `stale`; `canceled`/`incomplete_expired` never revive; `paid` purchases are final.
+- Planner policy (frozen): only `active` and `trialing` grant; `past_due` (no grace), `unpaid`, `canceled`, `incomplete`,
+  `incomplete_expired`, `paused` don't (`private.billing_subscription_grants` ↔ `SUBSCRIPTION_GRANTING_STATUSES`).
+- Couple: granted when the session is `complete` + `paid`; account-level in V1 (dated Constitution exception, not
+  permanent policy). Refunds/disputes never revoke automatically in V1 (manual); don't add those events.
+- Users can't mutate billing state: every billing table has RLS, SELECT-own column grants only, and no write privilege
+  for any client role (nor direct service_role writes). Writes only via `record_billing_customer` (customer recorder) and
+  `apply_stripe_*_event` (webhook store), service_role-only SECURITY DEFINER. Don't broaden either module.
+- Automated tests never call Stripe (fake gateway; E2E uses the localhost-only `STRIPE_API_BASE` stand-in and a test-only
+  webhook secret). Manual checks use Stripe TEST mode only. Production billing changes (migration, live products/prices,
+  webhook endpoint, Vercel secrets, gating) each require explicit approval.
+
 ## Commands
 
 - `npm run verify`: lint, typecheck, unit tests, build (same as CI)
@@ -878,4 +915,8 @@ AUTH-RECOVERY-01 adds real password recovery through Supabase Auth ("Olvidé mi 
 the shared `/auth/callback` → `/reset-password`, gated on the session's signed recovery claim; no custom tokens).
 AUTH-RECOVERY-02 makes it scanner-safe: the email links to the app with Supabase's token hash, GETs only move it into
 a short-lived httpOnly cookie, and an explicit "Continuar" POST verifies it (`verifyOtp`); works across devices.
+BILLING-01 (ADR-021) makes the product payment-ready: planner monthly subscription and couple one-time purchase through
+hosted Stripe Checkout, the signed Stripe webhook as the only payment authority, a customer mapping, subscription/purchase
+reconciliation, an idempotent event ledger and persistent entitlements, `/app/billing` with success/cancel pages and the
+planner Customer Portal (no gating, no prices in code, production inert until configured).
 Don't implement ahead of the current prompt.

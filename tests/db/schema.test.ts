@@ -149,7 +149,8 @@ describe("schema guarantees", () => {
                                 'prepare_automatic_rsvp_reminder', 'begin_automatic_rsvp_reminder_send',
                                 'record_automatic_rsvp_reminder_email', 'finish_automatic_rsvp_reminder',
                                 'ingest_email_delivery_event', 'get_guest_invitation_email_block',
-                                'select_account_type'))
+                                'select_account_type', 'record_billing_customer',
+                                'apply_stripe_subscription_event', 'apply_stripe_checkout_payment_event'))
        order by 1`,
     );
 
@@ -159,6 +160,8 @@ describe("schema guarantees", () => {
       "private.automatic_rsvp_reminder_due_at",
       "private.automatic_rsvp_reminder_ineligibility",
       "private.automatic_rsvp_reminder_party_due_at",
+      // BILLING-01 (ADR-021): the planner policy, the guards and the entitlement recomputation.
+      "private.billing_subscription_grants",
       "private.email_comparison_form",
       "private.email_delivery_status_rank",
       "private.email_recipient_block",
@@ -170,10 +173,13 @@ describe("schema guarantees", () => {
       "private.enforce_vendor_payment_schedule_item",
       "private.enforce_wedding_has_owner",
       "private.enforce_wedding_vendor_finance",
+      "private.guard_billing_customers",
+      "private.guard_billing_identity",
       "private.guard_email_deliveries",
       "private.guard_email_delivery_events",
       "private.guard_guest_invitation_link",
       "private.guard_membership_invite_state",
+      "private.guard_stripe_webhook_events",
       "private.guard_user_accounts",
       "private.guard_wedding_activity",
       "private.guest_invitation_expires_at",
@@ -181,12 +187,15 @@ describe("schema guarantees", () => {
       "private.is_wedding_member",
       "private.record_email_delivery",
       "private.record_guest_invitation_contact_email_change",
+      "private.refresh_billing_entitlement",
       "private.require_wedding_site_owner",
       "private.set_updated_at",
       "private.stamp_checklist_item_completion",
       "private.validate_wedding_time_zone",
       "private.wedding_site_customization_is_valid",
       "public.accept_membership_invite",
+      "public.apply_stripe_checkout_payment_event",
+      "public.apply_stripe_subscription_event",
       "public.begin_automatic_rsvp_reminder_send",
       "public.claim_automatic_rsvp_reminders",
       "public.create_guest_invitation",
@@ -205,6 +214,7 @@ describe("schema guarantees", () => {
       "public.prepare_automatic_rsvp_reminder",
       "public.publish_wedding_site",
       "public.record_automatic_rsvp_reminder_email",
+      "public.record_billing_customer",
       "public.record_guest_invitation_email",
       "public.record_rsvp_confirmation_email",
       "public.record_rsvp_reminder_email",
@@ -297,6 +307,15 @@ describe("schema guarantees", () => {
     expect(definer).not.toContain("public.get_wedding_activity");
     // LB-17 (ADR-010): the policy writer checks the owner role itself; the
     // five scheduler functions are service_role-only state transitions.
+    // BILLING-01 (ADR-021 §12): service_role-only; the customer recorder's and
+    // the Stripe webhook store's one door each (none is client-executable, above).
+    for (const fn of [
+      "public.record_billing_customer",
+      "public.apply_stripe_subscription_event",
+      "public.apply_stripe_checkout_payment_event",
+    ]) {
+      expect(definer).toContain(fn);
+    }
     for (const fn of [
       "public.set_rsvp_reminder_policy",
       "public.claim_automatic_rsvp_reminders",
@@ -416,8 +435,16 @@ describe("schema guarantees", () => {
        order by 1`,
     );
     expect(userIdTakers).toEqual([
+      // BILLING-01 (ADR-021 §5–§6): service_role-only. The webhook functions take
+      // the user named in OUR Stripe metadata only to compare it with the local
+      // customer mapping; the recorder takes the server's own session user id;
+      // the private recomputation is called only from those functions.
+      { name: "apply_stripe_checkout_payment_event", anon: false, authenticated: false },
+      { name: "apply_stripe_subscription_event", anon: false, authenticated: false },
+      { name: "record_billing_customer", anon: false, authenticated: false },
       { name: "record_guest_invitation_email", anon: false, authenticated: false },
       { name: "record_rsvp_reminder_email", anon: false, authenticated: false },
+      { name: "refresh_billing_entitlement", anon: false, authenticated: false },
     ]);
   });
 

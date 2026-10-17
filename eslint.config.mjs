@@ -14,11 +14,19 @@ const CRON_SECRET_MESSAGE =
 const RESEND_WEBHOOK_SECRET_MESSAGE =
   "RESEND_WEBHOOK_SECRET is read only in src/lib/email/webhook-auth.ts (ADR-011 §7).";
 
+const STRIPE_SECRET_KEY_MESSAGE =
+  "STRIPE_SECRET_KEY is read only in src/lib/billing/stripe-gateway.ts (ADR-021).";
+
+const STRIPE_WEBHOOK_SECRET_MESSAGE =
+  "STRIPE_WEBHOOK_SECRET is read only in src/lib/billing/webhook-auth.ts (ADR-021 §6).";
+
 const restrictedEnvKeys = [
   ["SUPABASE_SERVICE_ROLE_KEY", SERVICE_ROLE_MESSAGE],
   ["RSVP_CAPABILITY_ENCRYPTION_KEY", CAPABILITY_KEY_MESSAGE],
   ["CRON_SECRET", CRON_SECRET_MESSAGE],
   ["RESEND_WEBHOOK_SECRET", RESEND_WEBHOOK_SECRET_MESSAGE],
+  ["STRIPE_SECRET_KEY", STRIPE_SECRET_KEY_MESSAGE],
+  ["STRIPE_WEBHOOK_SECRET", STRIPE_WEBHOOK_SECRET_MESSAGE],
 ];
 
 /** `process.env.NAME` and `process.env["NAME"]`, except where `allowed` lists the name. */
@@ -60,10 +68,27 @@ const eslintConfig = defineConfig([
     rules: { "no-restricted-syntax": ["error", ...envKeyRestrictions(["SUPABASE_SERVICE_ROLE_KEY"])] },
   },
   {
-    // ADR-011 §7, ADR-002 §6: the provider delivery event store, the third and
-    // last sanctioned service-role use (signature-authenticated webhooks). Nowhere else.
+    // ADR-011 §7, ADR-002 §6: the provider delivery event store, the third
+    // sanctioned service-role use (signature-authenticated webhooks).
     files: ["src/lib/email/delivery-event-store.ts"],
     rules: { "no-restricted-syntax": ["error", ...envKeyRestrictions(["SUPABASE_SERVICE_ROLE_KEY"])] },
+  },
+  {
+    // ADR-021 §5–§6, ADR-002 §6: billing's two sanctioned service-role uses, one per
+    // authority — the Stripe Customer mapping (the app's own Stripe result after the
+    // user's session authorized Checkout) and the Stripe webhook (Stripe's signature).
+    files: ["src/lib/billing/customer-recorder.ts", "src/lib/billing/webhook-store.ts"],
+    rules: { "no-restricted-syntax": ["error", ...envKeyRestrictions(["SUPABASE_SERVICE_ROLE_KEY"])] },
+  },
+  {
+    // ADR-021: the one module that reads the Stripe secret key.
+    files: ["src/lib/billing/stripe-gateway.ts"],
+    rules: { "no-restricted-syntax": ["error", ...envKeyRestrictions(["STRIPE_SECRET_KEY"])] },
+  },
+  {
+    // ADR-021 §6: the one module that reads the Stripe webhook signing secret.
+    files: ["src/lib/billing/webhook-auth.ts"],
+    rules: { "no-restricted-syntax": ["error", ...envKeyRestrictions(["STRIPE_WEBHOOK_SECRET"])] },
   },
   {
     // ADR-011 §7: the one module that reads the Resend webhook signing secret.

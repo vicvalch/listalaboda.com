@@ -5,10 +5,12 @@ import { CtaBand } from "@/components/marketing/CtaBand";
 import { FaqList } from "@/components/marketing/FaqList";
 import { HowItWorks } from "@/components/marketing/HowItWorks";
 import { LifestylePhoto } from "@/components/marketing/LifestylePhoto";
+import { PricingSection } from "@/components/marketing/PricingSection";
 import { ProductShot } from "@/components/marketing/ProductShot";
 import { SiteRender } from "@/components/marketing/SiteRender";
 import { ThemeShowcase } from "@/components/marketing/ThemeShowcase";
 import { primaryButtonClass, secondaryButtonClass, textLinkClass } from "@/components/ui/styles";
+import { displayPrice } from "@/lib/billing/display-prices";
 import { getMessages } from "@/lib/i18n";
 import { MARKETING_LINKS } from "@/lib/marketing/links";
 import { marketingMetadata } from "@/lib/marketing/metadata";
@@ -51,6 +53,9 @@ const copy = marketing.couples;
  * sunset in the closing band. None next to money or the day's logistics.
  */
 export const metadata: Metadata = marketingMetadata(copy.metadata);
+
+/** BILLING-02: the price answer quotes the display price (`{price}`), never a second copy of it. */
+const faqItems = copy.faq.items.map((item) => ({ ...item, answer: item.answer.replace("{price}", displayPrice("couple")) }));
 
 const eyebrowClass = "text-accent text-sm font-semibold tracking-[0.16em] uppercase";
 const h2Class = "font-serif text-3xl leading-tight tracking-tight text-balance sm:text-4xl lg:text-5xl";
@@ -289,6 +294,9 @@ export default function CouplesPage() {
         </figure>
       </div>
 
+      {/* BILLING-02 / MKT-7: the price, evergreen (no promotion advertised); its call to action enters billing. */}
+      <PricingSection audience="couple" />
+
       {/* 9. Questions. */}
       <section id="preguntas" aria-labelledby="preguntas-titulo" className="scroll-mt-20 border-t border-border">
         <div className={cx(containerClass, "grid gap-8 py-14 sm:py-20 lg:grid-cols-12 lg:gap-10")}>
@@ -296,7 +304,7 @@ export default function CouplesPage() {
             {copy.faq.title}
           </h2>
           <div className="lg:col-span-8">
-            <FaqList items={copy.faq.items} />
+            <FaqList items={faqItems} />
           </div>
         </div>
       </section>

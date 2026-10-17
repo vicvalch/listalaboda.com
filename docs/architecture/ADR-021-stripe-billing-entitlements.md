@@ -6,6 +6,8 @@ Related: [Product Constitution §11](../product/PRODUCT-CONSTITUTION.md), [ADR-0
 [ADR-011 §7](ADR-011-email-delivery-observability.md) (the webhook pattern this follows)
 Amends: Product Constitution §11 ("COMMERCIAL MODEL DEFERRED", dated amendment there); ADR-002 §6 (two more
 service-role modules, dated note there). Everything else stands.
+Amended: 2026-10-17 by BILLING-02 (§15: display prices, Stripe promotion codes, planner trial campaigns, zero-total
+Checkout). No migration, no new webhook event, no new secret.
 
 ## Context
 
@@ -40,7 +42,8 @@ code reads the database (`@/lib/billing/entitlements`), never Stripe on a reques
 
 `BILLING_PLANS` (`@/lib/billing/plans`) is the only mapping. The account type is loaded on the server from
 `user_accounts` (immutable, ADR-020). The browser sends **nothing**: no price id, amount, currency, product, mode,
-entitlement, customer or user id (the two Server Actions take no input). An invited untyped collaborator keeps
+entitlement, customer or user id (the two Server Actions take no input; since BILLING-02, §15, the Checkout action reads
+one optional closed campaign key and nothing else). An invited untyped collaborator keeps
 collaborating under SIT-01, unchanged, but can't buy until they choose a type.
 
 ### 3. Checkout
@@ -154,8 +157,8 @@ inside the two apply functions, after locking the user's customer row. No row = 
 **Entitlements never authorize Wedding data** (Constitution §11, ADR-017 §10): memberships and RLS are unchanged.
 
 `/app/billing/success` is NOT payment authority: anyone can open it. It reads no query parameter, writes nothing, and
-shows what the database says: "Recibimos tu pago. Estamos confirmando la activación." until the webhook activated the
-entitlement, then the confirmed state. A client component re-renders it at most 8 times every 4 s and then stops.
+shows what the database says: "Estamos esperando la confirmación de Stripe para activar tu acceso." (BILLING-02 wording,
+also right for a trial or a $0 purchase) until the webhook activated the entitlement, then the confirmed state. A client component re-renders it at most 8 times every 4 s and then stops.
 `/app/billing/cancel` changes nothing.
 
 ### 11. Gating (proposal only; nothing is gated)
@@ -199,6 +202,66 @@ are localhost) and signs events with a test-only secret. Manual qualification us
 5. Set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, both price ids in Vercel Production; redeploy.
 6. Live smoke with an internal account; verify the event ledger and entitlement; refund manually (§9).
 7. Gating: only after an explicit product decision on the matrix.
+
+### 15. BILLING-02 amendment (2026-10-17): prices shown, promotion codes, planner trials, zero-total Checkout
+
+**Display prices.** The commercial model is now frozen: planner **USD 99 / month** (live price
+`price_1URPNmGxb8jjp6WHSVcGgdjZ`), couple **USD 149 one-time** (`price_1URPOVGxb8jjp6WH4hPJYpmY`). The amounts SHOWN
+(marketing pricing sections, `/app/billing`, the FAQ price answers) come from ONE display constant,
+`PLAN_DISPLAY_PRICES` (`@/lib/billing/display-prices`); copy carries a `{price}` placeholder, never an amount. It is
+display copy only: never sent to Stripe, compared or used in a calculation. What is CHARGED is still the configured
+Price (§2); Stripe Checkout shows the exact amount, discount and trial before the customer confirms. Changing a Stripe
+price means changing the display constant in the same release. The rule "no price is hardcoded" (§2) now reads: no
+price id, amount or currency is hardcoded in any billing logic; the display constant is the one sanctioned copy.
+
+**Promotion codes (Stripe is the discount authority).** Every Checkout Session (planner and couple) is created with
+`allow_promotion_codes: true`. The customer types a code in Stripe's hosted page; Stripe validates it (coupon, product
+restrictions, first-time-only, customer restriction, expiry, redemption limits) and computes the discount. The app
+never receives, sends or stores a coupon id, promotion code id, code text, percentage or amount, never passes
+`discounts`, and has no discount engine. Operators create promotions in the Stripe Dashboard without code changes
+(`docs/operations/BILLING-PROMOTIONS.md`).
+
+**Planner trial campaigns.** A closed allowlist in code (`PLANNER_TRIAL_CAMPAIGNS`, `@/lib/billing/campaigns`):
+`planner_trial_7` → 7 days, `planner_trial_14` → 14, `planner_trial_30` → 30. The browser may only NAME a campaign
+(`/app/billing?campaign=planner_trial_14`; the Checkout form carries the key back as its one hidden field). The server
+(`resolvePlannerTrial`, in the service at Checkout time and, for display only, on the billing page) grants
+`subscription_data.trial_period_days` only when: the account is a planner; the key is in the allowlist exactly; the key
+is ENABLED by the optional, non-secret `PLANNER_TRIAL_CAMPAIGNS` setting (comma-separated keys; unset = no trial ever,
+so a deploy alone never turns a campaign on); and the planner has no subscription row in any status (no repeat trials).
+Otherwise the key is ignored silently and a normal subscription starts. No numeric trial length is ever read from a
+request (`?trial=14`, `trial_days`, `trial_period_days` are ignored); a couple's payment Checkout never has a trial
+(the gateway drops one even if asked). The key is written as `lb_campaign` metadata (informational, never read back).
+
+**Trial payment method.** Trial sessions use Stripe's standard subscription trial with
+`payment_method_collection: "always"` (Stripe's default, set explicitly): Checkout collects a payment method up front
+and the subscription bills automatically when the trial ends. "Trial without a payment method" (`if_required`) is
+NOT used. Entitlement policy is unchanged (§7): `trialing` and `active` grant `planner_pro`; at the trial's end a
+successful charge keeps it `active`; `past_due`, `unpaid`, `canceled` (and the rest) deny. The `trialing → active /
+past_due` transitions arrive as `customer.subscription.updated`, already handled; **no event was added**.
+
+**Trial + promotion code.** Both may apply to the same session: Stripe attaches the promotion code's coupon to the
+subscription when Checkout completes, i.e. at the START of the trial, and the coupon's duration clock starts there.
+Consequences (Stripe behavior, not app logic): `forever` discounts every invoice after the trial; `repeating` (N
+months) loses the trial days from its N months; `once` applies to the first invoice, and a trial subscription's first
+invoice is the $0 trial invoice, so a `once` code combined with a trial may be consumed with no effect. The app adds no
+combination logic. Operational rule: for planner promotions that should reduce the first PAID month, use a
+`repeating` coupon that outlasts the trial, or don't share codes with trial campaigns; verify any new combination in
+Stripe TEST mode before announcing it. A "free for X days" planner offer is a trial campaign, never a 100%-off coupon.
+
+**Zero-total Checkout (couple 100% off).** A promotion code may reduce a couple's one-time Checkout to 0. Stripe then
+completes the session with `payment_status = no_payment_required`, `amount_total = 0` and NO PaymentIntent. The
+webhook (`paymentStatusOf`) treats `status = complete` AND (`paid` OR (`no_payment_required` AND `amount_total = 0`))
+as a confirmed purchase; `no_payment_required` with a non-zero or unknown total stays `pending`. The PaymentIntent was
+already optional in `apply_stripe_checkout_payment_event` (nullable `stripe_payment_intent_id`), so the purchase is
+recorded `paid` with no payment intent and `couple_access` is granted durably, through the same verified event.
+**No migration.** The success URL still grants nothing for a trial or a $0 purchase.
+
+**Marketing entry.** `/planners` and `/parejas` show an evergreen pricing section (no promotion or trial advertised;
+only "¿Tienes un código promocional? Podrás aplicarlo en la página de pago."). Their call to action is
+`MARKETING_LINKS.START_BILLING` = `/login?next=%2Fapp%2Fbilling`: signed in → billing; new → the login page's own signup
+link keeps `next`; untyped → the account-type choice, then billing. Never a direct `/signup` link (LB-26) and never a
+plan or type in the URL: the account type is still chosen explicitly (ADR-020), so a person arriving from `/parejas`
+who chooses planner sees the planner plan.
 
 ## Consequences
 

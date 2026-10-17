@@ -87,6 +87,7 @@ export function checkoutSessionSnapshot(overrides: Partial<CheckoutSessionSnapsh
     subscriptionId: null,
     paymentIntentId: "pi_TESTONLY1",
     priceId: COUPLE_PRICE,
+    amountTotal: 14_900,
     metadata: { userId: USER_ID, entitlementKey: "couple_access" },
     ...overrides,
   };

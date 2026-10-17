@@ -747,8 +747,8 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   `src/proxy.ts` are untouched by marketing work.
 - Copy is in `es.marketing` (tú, brand `listalaboda.com`, no claims, metrics, logos or testimonials). Every call to action
   comes from `@/lib/marketing/links` (`MARKETING_LINKS`); never a literal URL or address in a component. Demo, pilot and
-  access requests go to the contact address by `mailto:`; never link to `/signup` until LB-26 is resolved, and never
-  link a marketing route before it exists.
+  access requests go to the contact address by `mailto:` (pricing CTAs: `START_BILLING`, BILLING-02); never link to
+  `/signup` until LB-26 is resolved, and never link a marketing route before it exists.
 - Product visuals are REAL screens captured from a fictional LOCAL fixture: `npm run marketing:capture`
   (`e2e/marketing/`, outside the default E2E run) writes `public/marketing/*.webp` after a privacy guard (no email,
   phone, guest link or token; only the page's main content, never the app header). Never capture production; review
@@ -823,6 +823,23 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - Automated tests never call Stripe (fake gateway; E2E uses the localhost-only `STRIPE_API_BASE` stand-in and a test-only
   webhook secret). Manual checks use Stripe TEST mode only. Production billing changes (migration, live products/prices,
   webhook endpoint, Vercel secrets, gating) each require explicit approval.
+
+## Pricing, promotion codes and trials (BILLING-02, ADR-021 §15)
+
+- Display prices (planner $99 USD / mes, couple $149 USD pago único) live ONLY in `PLAN_DISPLAY_PRICES`
+  (`@/lib/billing/display-prices`): copy uses `{price}`, never an amount. Display only: never sent to Stripe or used in
+  logic; the charge is the configured Price. Change both in the same release.
+- Every Checkout Session has `allow_promotion_codes: true`; Stripe is the discount authority. Never accept or pass a
+  coupon, promotion code, `discounts`, percentage or amount; no discount engine. Promotions are created in the Stripe
+  Dashboard (`docs/operations/BILLING-PROMOTIONS.md`).
+- Planner trials only through `PLANNER_TRIAL_CAMPAIGNS` keys (`@/lib/billing/campaigns`: 7/14/30 days). The browser
+  names a key (`?campaign=`, one hidden form field); `resolvePlannerTrial` grants it only for a planner, an exact key
+  ENABLED by the optional `PLANNER_TRIAL_CAMPAIGNS` env (unset = none) and no prior subscription row. Never a numeric
+  trial from input; never a trial on the couple payment. `payment_method_collection: "always"`.
+- Zero-total Checkout: `complete` + `no_payment_required` + `amount_total = 0` (no PaymentIntent) is a paid purchase;
+  `no_payment_required` with any other total stays pending. Event set unchanged; no migration.
+- Marketing pricing CTAs use `MARKETING_LINKS.START_BILLING` (`/login?next=%2Fapp%2Fbilling`); never a direct `/signup`
+  link, plan or account type in the URL. Marketing pricing stays evergreen (no trial or promotion advertised).
 
 ## Commands
 
@@ -919,4 +936,8 @@ BILLING-01 (ADR-021) makes the product payment-ready: planner monthly subscripti
 hosted Stripe Checkout, the signed Stripe webhook as the only payment authority, a customer mapping, subscription/purchase
 reconciliation, an idempotent event ledger and persistent entitlements, `/app/billing` with success/cancel pages and the
 planner Customer Portal (no gating, no prices in code, production inert until configured).
+BILLING-02 + MKT-7 (ADR-021 §15) make it promotion-ready: the frozen display prices on `/planners`, `/parejas` and
+`/app/billing`, pricing CTAs into the existing login → account type → billing flow, Stripe promotion codes on every
+Checkout, allowlisted planner trial campaigns, and zero-total (100% off) couple purchases (no migration, no new event,
+no gating).
 Don't implement ahead of the current prompt.

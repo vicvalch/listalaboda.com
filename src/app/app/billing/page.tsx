@@ -5,9 +5,11 @@ import { SubmitButton } from "@/components/ui/SubmitButton";
 import { cardClass } from "@/components/ui/styles";
 import { requireAccountType } from "@/lib/accounts/session";
 import { loadBillingView } from "@/lib/billing/billing-page";
-import { BILLING_PATH, parseBillingError } from "@/lib/billing/plans";
+import { BILLING_CAMPAIGN_PARAM, billingPathWithCampaign, resolvePlannerTrial } from "@/lib/billing/campaigns";
+import { displayPrice } from "@/lib/billing/display-prices";
+import { parseBillingError } from "@/lib/billing/plans";
 import type { CoupleBillingView, PlannerBillingView } from "@/lib/billing/presentation";
-import { isBillingAvailable } from "@/lib/billing/runtime";
+import { getEnabledTrialCampaigns, isBillingAvailable } from "@/lib/billing/runtime";
 import { formatDate, getMessages } from "@/lib/i18n";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -56,15 +58,33 @@ function CoupleDetails({ view }: { view: CoupleBillingView }) {
  * subscription, couples their one-time access. Everything shown comes from
  * the database (kept current by the verified Stripe webhook); the page
  * never calls Stripe and never grants anything. Untyped accounts never get
- * here (`requireAccountType` → the account-type choice).
+ * here (`requireAccountType` → the account-type choice, keeping a valid
+ * `?campaign=` key).
+ *
+ * BILLING-02: the frozen display price; promotion codes are typed in Stripe
+ * Checkout (the page only says so). A planner trial is SHOWN only when the
+ * same rule the Checkout action applies would grant it
+ * (`resolvePlannerTrial`); the action re-resolves it, so this display is
+ * never the authority. An unknown or disabled campaign is silently ignored.
  */
 export default async function BillingPage({ searchParams }: PageProps<"/app/billing">) {
-  const { user, accountType } = await requireAccountType(BILLING_PATH);
+  const query = await searchParams;
+  const { user, accountType } = await requireAccountType(billingPathWithCampaign(query[BILLING_CAMPAIGN_PARAM]));
   const { billing } = getMessages();
   const available = isBillingAvailable();
   const supabase = await createSupabaseServerClient();
   const view = await loadBillingView(supabase, user.id, accountType, available);
-  const error = parseBillingError((await searchParams).error);
+  const error = parseBillingError(query.error);
+  const price = displayPrice(accountType);
+  const trial =
+    view?.kind === "planner" && view.action === "subscribe"
+      ? resolvePlannerTrial({
+          accountType,
+          requested: query[BILLING_CAMPAIGN_PARAM],
+          enabled: getEnabledTrialCampaigns(),
+          hasSubscriptionHistory: view.everSubscribed,
+        })
+      : null;
 
   const plan = accountType === "planner" ? billing.planner : billing.couple;
   const statusLabel = view
@@ -84,6 +104,16 @@ export default async function BillingPage({ searchParams }: PageProps<"/app/bill
           <h2 className="text-lg font-semibold">{plan.planName}</h2>
           <p className="text-muted text-sm">{plan.cadence}</p>
         </div>
+        {trial ? (
+          <div className="space-y-1" data-testid="billing-trial">
+            <p className="text-xl font-semibold">{billing.planner.trialOffer.replace("{days}", String(trial.days))}</p>
+            <p data-testid="billing-price">{billing.planner.trialThen.replace("{price}", price)}</p>
+          </div>
+        ) : (
+          <p className="text-xl font-semibold" data-testid="billing-price">
+            {plan.price.replace("{price}", price)}
+          </p>
+        )}
 
         {view ? (
           <>
@@ -99,7 +129,14 @@ export default async function BillingPage({ searchParams }: PageProps<"/app/bill
 
         {view?.kind === "planner" && view.action === "subscribe" ? (
           <form action={startCheckoutAction} className="space-y-2">
-            <SubmitButton label={billing.planner.subscribe} pendingLabel={billing.planner.subscribing} />
+            {/* A closed campaign key only; the action resolves it again (never a number of days). */}
+            {trial ? <input type="hidden" name={BILLING_CAMPAIGN_PARAM} value={trial.campaign} /> : null}
+            <SubmitButton
+              label={trial ? billing.planner.startTrial : billing.planner.subscribe}
+              pendingLabel={billing.planner.subscribing}
+            />
+            {trial ? <p className="text-muted text-sm">{billing.planner.trialNote}</p> : null}
+            <p className="text-muted text-sm">{billing.promoNote}</p>
             <p className="text-muted text-sm">{billing.priceNote}</p>
           </form>
         ) : null}
@@ -115,6 +152,7 @@ export default async function BillingPage({ searchParams }: PageProps<"/app/bill
         {view?.kind === "couple" && view.action === "buy" ? (
           <form action={startCheckoutAction} className="space-y-2">
             <SubmitButton label={billing.couple.buy} pendingLabel={billing.couple.buying} />
+            <p className="text-muted text-sm">{billing.promoNote}</p>
             <p className="text-muted text-sm">{billing.priceNote}</p>
           </form>
         ) : null}

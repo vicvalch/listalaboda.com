@@ -89,9 +89,18 @@ async function applySubscription(
   );
 }
 
-/** Confirmed only when Stripe says the session is complete AND paid. */
+/**
+ * Confirmed only when Stripe says the session is complete AND paid, or
+ * complete with nothing to pay (BILLING-02): a promotion code covering the
+ * whole amount completes Checkout with `no_payment_required`, a zero
+ * `amount_total` and NO PaymentIntent. That is a valid purchase; the
+ * PaymentIntent is never required.
+ */
 function paymentStatusOf(event: VerifiedStripeEvent, session: CheckoutSessionSnapshot): "paid" | "pending" | "failed" {
   if (session.status === "complete" && session.paymentStatus === "paid") return "paid";
+  if (session.status === "complete" && session.paymentStatus === "no_payment_required" && session.amountTotal === 0) {
+    return "paid";
+  }
   if (event.type === "checkout.session.async_payment_failed") return "failed";
   return "pending";
 }

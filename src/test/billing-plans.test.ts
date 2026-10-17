@@ -77,7 +77,7 @@ describe("billing page view", () => {
         { kind: "planner", entitlement: "active", subscriptions: [sub("active", { currentPeriodEnd: "2027-01-01T00:00:00Z", cancelAtPeriodEnd: true })] },
         true,
       ),
-    ).toEqual({ kind: "planner", state: "active", periodEnd: "2027-01-01T00:00:00Z", cancelAtPeriodEnd: true, action: "manage" });
+    ).toEqual({ kind: "planner", state: "active", periodEnd: "2027-01-01T00:00:00Z", cancelAtPeriodEnd: true, action: "manage", everSubscribed: true });
     expect(
       plannerBillingView({ kind: "planner", entitlement: "active", subscriptions: [sub("trialing")] }, true).state,
     ).toBe("trialing");
@@ -91,7 +91,10 @@ describe("billing page view", () => {
     expect(plannerBillingView({ kind: "planner", entitlement: "inactive", subscriptions: [sub("canceled")] }, true)).toMatchObject({
       state: "none",
       action: "subscribe",
+      // BILLING-02: a canceled subscription still counts as history (no second trial).
+      everSubscribed: true,
     });
+    expect(plannerBillingView({ kind: "planner", entitlement: "inactive", subscriptions: [] }, true).everSubscribed).toBe(false);
     expect(plannerBillingView({ kind: "planner", entitlement: "inactive", subscriptions: [] }, false).action).toBeNull();
   });
 
@@ -127,7 +130,19 @@ describe("billing configuration", () => {
     expect(parseBillingConfig(valid)).toEqual({
       appOrigin: "https://listalaboda.example",
       prices: { planner: "price_TESTONLYplanner", couple: "price_TESTONLYcouple" },
+      trialCampaigns: [],
     });
+  });
+
+  it("BILLING-02: trial campaigns are OFF unless listed; only known keys count", () => {
+    expect(parseBillingConfig({ ...valid, PLANNER_TRIAL_CAMPAIGNS: "planner_trial_14" })?.trialCampaigns).toEqual([
+      "planner_trial_14",
+    ]);
+    expect(
+      parseBillingConfig({ ...valid, PLANNER_TRIAL_CAMPAIGNS: " planner_trial_7, planner_trial_365,14,planner_trial_7 " })
+        ?.trialCampaigns,
+    ).toEqual(["planner_trial_7"]);
+    expect(parseBillingConfig({ ...valid, PLANNER_TRIAL_CAMPAIGNS: "" })?.trialCampaigns).toEqual([]);
   });
 
   it.each([

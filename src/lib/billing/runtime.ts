@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { PlannerTrialCampaign } from "@/lib/billing/campaigns";
 import { getBillingConfig } from "@/lib/billing/config";
 import { getBillingCustomerRecorder } from "@/lib/billing/customer-recorder";
 import type { BillingRuntime } from "@/lib/billing/service";
@@ -19,4 +20,9 @@ export function getBillingRuntime(): BillingRuntime | null {
 
 export function isBillingAvailable(): boolean {
   return getBillingRuntime() !== null;
+}
+
+/** The planner trial campaigns switched on (BILLING-02); none when billing isn't configured. */
+export function getEnabledTrialCampaigns(): readonly PlannerTrialCampaign[] {
+  return getBillingRuntime()?.config.trialCampaigns ?? [];
 }

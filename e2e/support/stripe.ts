@@ -11,6 +11,8 @@ export const E2E_STRIPE_SECRET_KEY = "sk_test_TESTONLYe2eStandInNotAStripeKey";
 export const E2E_STRIPE_WEBHOOK_SECRET = TEST_STRIPE_WEBHOOK_SECRET;
 export const E2E_PLANNER_PRICE_ID = "price_TESTONLYe2ePlannerMonthly";
 export const E2E_COUPLE_PRICE_ID = "price_TESTONLYe2eCoupleOneTime";
+/** BILLING-02: the trial campaigns switched on for the E2E app (planner_trial_30 stays OFF on purpose). */
+export const E2E_PLANNER_TRIAL_CAMPAIGNS = "planner_trial_7,planner_trial_14";
 
 export type StandInSession = {
   id: string;
@@ -22,6 +24,13 @@ export type StandInSession = {
   success_url: string;
   cancel_url: string;
   metadata: Record<string, string>;
+  /** BILLING-02: Stripe's form encoding, as received ("true"), or null when not sent. */
+  allow_promotion_codes: string | null;
+  payment_method_collection: string | null;
+  trial_period_days: number | null;
+  discounts: unknown;
+  amount_total: number | null;
+  payment_intent: string | null;
   subscriptionMetadata: Record<string, string> | null;
   paymentIntentMetadata: Record<string, string> | null;
   subscription: string | null;
@@ -37,10 +46,10 @@ async function control<T>(path: string, init?: RequestInit): Promise<T> {
 export const standIn = {
   sessions: () => control<StandInSession[]>("/__e2e/sessions"),
   session: async (id: string) => (await standIn.sessions()).find((s) => s.id === id) ?? null,
-  complete: (id: string, paymentStatus = "paid") =>
+  complete: (id: string, paymentStatus = "paid", amountTotal: number | null = null) =>
     control<StandInSession>(`/__e2e/sessions/${id}/complete`, {
       method: "POST",
-      body: JSON.stringify({ paymentStatus }),
+      body: JSON.stringify({ paymentStatus, amountTotal }),
     }),
   setSubscription: (id: string, fields: Record<string, unknown>) =>
     control(`/__e2e/subscriptions/${id}`, { method: "POST", body: JSON.stringify(fields) }),

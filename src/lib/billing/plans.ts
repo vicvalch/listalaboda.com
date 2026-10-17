@@ -90,6 +90,8 @@ export const BILLING_METADATA = {
   userId: "lb_user_id",
   accountType: "lb_account_type",
   entitlement: "lb_entitlement",
+  /** BILLING-02: the trial campaign key, when one applied (informational; never read back). */
+  campaign: "lb_campaign",
 } as const;
 
 export const BILLING_PATH = "/app/billing";

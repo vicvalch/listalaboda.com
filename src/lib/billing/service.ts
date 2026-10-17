@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { AccountType } from "@/lib/accounts/account-type";
+import { resolvePlannerTrial, type PlannerTrial } from "@/lib/billing/campaigns";
 import type { BillingConfig } from "@/lib/billing/config";
 import type { BillingCustomerRecorder } from "@/lib/billing/customer-recorder";
 import { getBillingEntitlement } from "@/lib/billing/entitlements";
@@ -24,8 +25,15 @@ import type { Database } from "@/lib/supabase/database.types";
  * The caller is ALWAYS the authenticated, typed user from the server
  * session (`requireAccountType` in the action): the user id and account
  * type are never taken from the browser, and neither is any price, amount,
- * currency, product, mode, entitlement or customer. The plan follows from
- * the account type (`BILLING_PLANS`), the price from configuration.
+ * currency, product, mode, entitlement, customer, coupon, promotion code,
+ * discount or trial length. The plan follows from the account type
+ * (`BILLING_PLANS`), the price from configuration.
+ *
+ * BILLING-02: every session allows Stripe promotion codes (typed by the
+ * customer in Checkout; Stripe validates and applies them). A planner's
+ * trial comes only from a campaign KEY the caller passes through, resolved
+ * here against the allowlist and the enabled campaigns
+ * (`resolvePlannerTrial`); a couple never gets one.
  *
  * Order (start): configuration → already entitled / live subscription →
  * customer (reuse, else create with a per-user idempotency key, then the
@@ -88,8 +96,15 @@ export async function ensureBillingCustomer(caller: BillingCaller, runtime: Bill
   return runtime.recorder.record({ userId: caller.userId, stripeCustomerId: created.id });
 }
 
-/** Whether a planner already has a subscription alive in Stripe (undefined = read failed). */
-async function hasLiveSubscription(supabase: Client, userId: string): Promise<boolean | undefined> {
+type SubscriptionHistory = Readonly<{
+  /** A subscription is still alive in Stripe (fix it in the portal). */
+  live: boolean;
+  /** Any subscription row at all, in any status (no repeat trials). */
+  any: boolean;
+}>;
+
+/** The planner's own subscriptions as far as they matter here (undefined = read failed). */
+async function readSubscriptionHistory(supabase: Client, userId: string): Promise<SubscriptionHistory | undefined> {
   try {
     const { data, error } = await supabase.from("billing_subscriptions").select("status").eq("user_id", userId);
     if (error) return undefined;
@@ -97,23 +112,39 @@ async function hasLiveSubscription(supabase: Client, userId: string): Promise<bo
       const status = parseSubscriptionStatus(row.status);
       return status ? [status] : [];
     });
-    return !canStartSubscription(statuses);
+    return { live: !canStartSubscription(statuses), any: data.length > 0 };
   } catch {
     return undefined;
   }
 }
 
-export async function startBillingCheckout(caller: BillingCaller, runtime: BillingRuntime | null): Promise<BillingRedirect> {
+/**
+ * `requestedCampaign` is whatever the browser named (unvalidated): only a
+ * known, enabled campaign key, for a planner with no subscription history,
+ * becomes a trial. Anything else is ignored.
+ */
+export async function startBillingCheckout(
+  caller: BillingCaller,
+  runtime: BillingRuntime | null,
+  requestedCampaign: unknown = null,
+): Promise<BillingRedirect> {
   if (!runtime) return { ok: false, reason: "not_available" };
   const plan = BILLING_PLANS[caller.accountType];
 
   const entitlement = await getBillingEntitlement(caller.supabase, caller.userId, plan.entitlementKey);
   if (entitlement === null) return { ok: false, reason: "failed" };
   if (entitlement === "active") return { ok: false, reason: "already_active" };
+  let trial: PlannerTrial | null = null;
   if (plan.mode === "subscription") {
-    const live = await hasLiveSubscription(caller.supabase, caller.userId);
-    if (live === undefined) return { ok: false, reason: "failed" };
-    if (live) return { ok: false, reason: "manage_existing" };
+    const history = await readSubscriptionHistory(caller.supabase, caller.userId);
+    if (history === undefined) return { ok: false, reason: "failed" };
+    if (history.live) return { ok: false, reason: "manage_existing" };
+    trial = resolvePlannerTrial({
+      accountType: caller.accountType,
+      requested: requestedCampaign,
+      enabled: runtime.config.trialCampaigns,
+      hasSubscriptionHistory: history.any,
+    });
   }
 
   const customerId = await ensureBillingCustomer(caller, runtime);
@@ -126,6 +157,7 @@ export async function startBillingCheckout(caller: BillingCaller, runtime: Billi
     userId: caller.userId,
     accountType: caller.accountType,
     entitlementKey: plan.entitlementKey,
+    trial,
     successUrl: `${runtime.config.appOrigin}${BILLING_SUCCESS_PATH}`,
     cancelUrl: `${runtime.config.appOrigin}${BILLING_CANCEL_PATH}`,
   });

@@ -120,6 +120,8 @@ export function toCheckoutSessionSnapshot(session: unknown): CheckoutSessionSnap
     subscriptionId: idOf(session.subscription),
     paymentIntentId: idOf(session.payment_intent),
     priceId: idOf(firstItem(session.line_items)?.price),
+    amountTotal:
+      typeof session.amount_total === "number" && Number.isSafeInteger(session.amount_total) ? session.amount_total : null,
     metadata: metadataOf(session.metadata),
   };
 }
@@ -163,10 +165,13 @@ export function createStripeGateway(settings: StripeGatewaySettings): BillingGat
     },
 
     async createCheckoutSession(input) {
+      // A trial exists only on a subscription (the service never asks otherwise; this keeps it so).
+      const trial = input.mode === "subscription" ? input.trial : null;
       const metadata = {
         [BILLING_METADATA.userId]: input.userId,
         [BILLING_METADATA.accountType]: input.accountType,
         [BILLING_METADATA.entitlement]: input.entitlementKey,
+        ...(trial ? { [BILLING_METADATA.campaign]: trial.campaign } : {}),
       };
       try {
         const session = await stripe.checkout.sessions.create({
@@ -178,8 +183,15 @@ export function createStripeGateway(settings: StripeGatewaySettings): BillingGat
           cancel_url: input.cancelUrl,
           locale: "es",
           metadata,
+          // BILLING-02: the customer may type a Stripe promotion code; Stripe validates and applies it.
+          allow_promotion_codes: true,
           ...(input.mode === "subscription"
-            ? { subscription_data: { metadata } }
+            ? {
+                // Always collect a payment method, even for a trial or a $0 first invoice,
+                // so the subscription bills automatically afterwards.
+                payment_method_collection: "always" as const,
+                subscription_data: { metadata, ...(trial ? { trial_period_days: trial.days } : {}) },
+              }
             : { payment_intent_data: { metadata } }),
         });
         const id = idOf(session.id);

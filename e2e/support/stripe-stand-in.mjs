@@ -3,7 +3,7 @@
 // SDK with STRIPE_API_BASE (accepted only with a localhost APP_ORIGIN), so
 // production code paths are unchanged and no test ever calls Stripe.
 //
-// Models only what BILLING-01 needs, in memory:
+// Models only what BILLING-01/02 need, in memory:
 //   POST /v1/customers                       (Idempotency-Key → same customer)
 //   POST /v1/checkout/sessions               (hosted URL served below)
 //   GET  /v1/checkout/sessions/:id           (expand[]=line_items)
@@ -100,14 +100,18 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && complete) {
       const session = sessions.get(complete[1]);
       if (!session) return missing(res, "checkout session");
-      const { paymentStatus = "paid" } = body ? JSON.parse(body) : {};
+      // BILLING-02: `amountTotal` (after a promotion code) and `no_payment_required` model a
+      // 100%-off Checkout, which completes WITHOUT a PaymentIntent, like Stripe.
+      const { paymentStatus = "paid", amountTotal = null } = body ? JSON.parse(body) : {};
       session.status = "complete";
       session.payment_status = paymentStatus;
+      session.amount_total = amountTotal;
       if (session.mode === "subscription" && !session.subscription) {
         const sub = {
           id: id("sub"),
           customer: session.customer,
-          status: "active",
+          // A trial Checkout starts the subscription in trialing, like Stripe.
+          status: session.trial_period_days ? "trialing" : "active",
           cancel_at_period_end: false,
           metadata: session.subscriptionMetadata ?? {},
           price: session.lineItems[0]?.price.id ?? null,
@@ -116,7 +120,9 @@ const server = createServer(async (req, res) => {
         subscriptions.set(sub.id, sub);
         session.subscription = sub.id;
       }
-      if (session.mode === "payment") session.payment_intent = session.payment_intent ?? id("pi");
+      if (session.mode === "payment" && paymentStatus !== "no_payment_required") {
+        session.payment_intent = session.payment_intent ?? id("pi");
+      }
       return json(res, 200, sessionObject(session, true));
     }
     const setSub = /^\/__e2e\/subscriptions\/([^/]+)$/.exec(path);
@@ -160,6 +166,12 @@ const server = createServer(async (req, res) => {
       cancel_url: params.cancel_url,
       locale: params.locale ?? null,
       metadata: params.metadata ?? {},
+      // BILLING-02: what the app asked for, as Stripe would receive it.
+      allow_promotion_codes: params.allow_promotion_codes ?? null,
+      payment_method_collection: params.payment_method_collection ?? null,
+      trial_period_days: params.subscription_data?.trial_period_days ? Number(params.subscription_data.trial_period_days) : null,
+      discounts: params.discounts ?? null,
+      amount_total: null,
       subscriptionMetadata: params.subscription_data?.metadata ?? null,
       paymentIntentMetadata: params.payment_intent_data?.metadata ?? null,
       subscription: null,

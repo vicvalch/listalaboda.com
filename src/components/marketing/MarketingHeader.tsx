@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { BrandSignature } from "@/components/brand/BrandLogo";
 import { containerClass } from "@/components/marketing/classes";
 import { primaryButtonClass } from "@/components/ui/styles";
 import { getMessages } from "@/lib/i18n";
@@ -25,8 +26,8 @@ export function MarketingHeader() {
   return (
     <header className="relative border-b border-border/70">
       <div className={`${containerClass} flex min-h-16 items-center justify-between gap-6`}>
-        <Link href={MARKETING_LINKS.PLANNERS} className="py-2 text-lg font-semibold tracking-tight">
-          {marketing.brand}
+        <Link href={MARKETING_LINKS.PLANNERS} className="shrink-0 rounded-md py-2">
+          <BrandSignature alt={marketing.brand} className="h-9 sm:h-10" />
         </Link>
         <nav aria-label={marketing.nav.label}>
           <ul className="hidden items-center gap-6 lg:flex">

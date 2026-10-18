@@ -745,7 +745,7 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   `HowItWorks` (`#como-funciona`, both account paths, the page's audience first). They are static: no cookies, session, Supabase or
   database reads, and no client components (the phone menu is a native `<details>`). `/app`, auth, `/rsvp`, `/boda` and
   `src/proxy.ts` are untouched by marketing work.
-- Copy is in `es.marketing` (tú, brand `listalaboda.com`, no claims, metrics, logos or testimonials). Every call to action
+- Copy is in `es.marketing` (tú, brand `ListaLaBoda` in prose (`listalaboda.com` only for the domain), no claims, metrics, logos or testimonials). Every call to action
   comes from `@/lib/marketing/links` (`MARKETING_LINKS`); never a literal URL or address in a component. Demo, pilot and
   access requests go to the contact address by `mailto:` (pricing CTAs: `START_BILLING`, BILLING-02); never link to
   `/signup` until LB-26 is resolved, and never link a marketing route before it exists.
@@ -840,6 +840,23 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   `no_payment_required` with any other total stays pending. Event set unchanged; no migration.
 - Marketing pricing CTAs use `MARKETING_LINKS.START_BILLING` (`/login?next=%2Fapp%2Fbilling`); never a direct `/signup`
   link, plan or account type in the URL. Marketing pricing stays evergreen (no trial or promotion advertised).
+
+## Legal pages, support address and unpaid state (Batch 1, ADR-021 §16)
+
+- Support/contact = `SUPPORT_EMAIL` (`soporte@listalaboda.com`) and `LEGAL_LINKS` in `@/lib/legal/links`; never a
+  literal address or legal URL in a component. `MARKETING_CONTACT_EMAIL` reuses it.
+- `/terminos` (refunds and cancellations at `#reembolsos-y-cancelaciones`) and `/privacidad` are static marketing pages:
+  copy in `es.legal`, rendered as text by `LegalDocument`, prices only through `displayPrice()`, `noindex`. V1 product
+  policy PENDING LEGAL REVIEW: never add a jurisdiction, governing law, liability clause or postal address unless the
+  owner provides it; never promise lifetime access, a refund window, or automatic revocation/retention after a refund.
+  The operator is named only as "listalaboda.com es operado por OnChainFest LLC."; visible brand copy says ListaLaBoda.
+- Linked from the marketing footer, signup (consent sentence) and `/app/billing` (consent next to every pay button).
+- Unpaid accounts stay fully usable (no gating). "Never charged" = `isNeverCharged` (no subscription row ever / no paid
+  or pending purchase); only then may copy say "no se te ha cobrado nada". The `/app` shell note uses `loadBillingView`
+  and is hidden on billing pages, for untyped accounts, when billing isn't configured and whenever the read fails.
+- Checkout's `custom_text.submit.message` is fixed catalog copy per account type, never a price, amount or currency.
+  Stripe product text, business name, descriptor, presentment currency and Portal cancellation mode are Dashboard
+  settings (`docs/operations/BILLING-STRIPE-DASHBOARD.md`).
 
 ## Commands
 
@@ -940,4 +957,8 @@ BILLING-02 + MKT-7 (ADR-021 §15) make it promotion-ready: the frozen display pr
 `/app/billing`, pricing CTAs into the existing login → account type → billing flow, Stripe promotion codes on every
 Checkout, allowlisted planner trial campaigns, and zero-total (100% off) couple purchases (no migration, no new event,
 no gating).
+Launch remediation Batch 1 (ADR-021 §16) adds the payment/brand trust and legal surface: `soporte@listalaboda.com` as the
+support address, `/terminos` (with refunds and cancellations) and `/privacidad` linked from the footer, signup and
+billing, truthful unpaid-state copy on `/app/billing` plus a never-charged note in the `/app` shell, and a fixed Checkout
+message per plan (no gating, no migration, no billing-logic change; Stripe Dashboard changes are a manual checklist).
 Don't implement ahead of the current prompt.

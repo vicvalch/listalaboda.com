@@ -35,6 +35,7 @@ const { default: robots } = await import("@/app/robots");
 const { loginPath } = await import("@/lib/auth/redirect");
 const { BILLING_PATH } = await import("@/lib/billing/plans");
 const { PLAN_DISPLAY_PRICES } = await import("@/lib/billing/display-prices");
+const { LEGAL_LINKS, SUPPORT_EMAIL } = await import("@/lib/legal/links");
 
 const render = (element: ReactElement) => renderToStaticMarkup(element);
 const hrefs = (html: string) => [...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1].replaceAll("&amp;", "&"));
@@ -48,14 +49,16 @@ describe("marketing links (MKT-1)", () => {
       LOGIN: "/login",
       // BILLING-02 / MKT-7: login, then the billing page (the existing auth → account type → billing flow).
       START_BILLING: "/login?next=%2Fapp%2Fbilling",
-      DEMO: "mailto:vicvalch@onchainfest.xyz?subject=Solicitud%20de%20demo%20-%20listalaboda.com",
-      PILOT: "mailto:vicvalch@onchainfest.xyz?subject=Aplicaci%C3%B3n%20al%20pilot%20-%20listalaboda.com",
-      ACCESS: "mailto:vicvalch@onchainfest.xyz?subject=Solicitud%20de%20acceso%20-%20listalaboda.com",
-      CONTACT: "mailto:vicvalch@onchainfest.xyz",
+      DEMO: "mailto:soporte@listalaboda.com?subject=Solicitud%20de%20demo%20-%20listalaboda.com",
+      PILOT: "mailto:soporte@listalaboda.com?subject=Aplicaci%C3%B3n%20al%20pilot%20-%20listalaboda.com",
+      ACCESS: "mailto:soporte@listalaboda.com?subject=Solicitud%20de%20acceso%20-%20listalaboda.com",
+      CONTACT: "mailto:soporte@listalaboda.com",
       // ACCOUNT-01: the section of the current page; both landings have it.
       HOW_IT_WORKS: "#como-funciona",
     });
-    expect(MARKETING_CONTACT_EMAIL).toBe("vicvalch@onchainfest.xyz");
+    // Batch 1: the support address on the brand's own domain, from one place.
+    expect(MARKETING_CONTACT_EMAIL).toBe(SUPPORT_EMAIL);
+    expect(MARKETING_CONTACT_EMAIL).toBe("soporte@listalaboda.com");
   });
 
   it("never send anyone to self-signup yet (LB-26)", () => {
@@ -70,7 +73,13 @@ describe("marketing links (MKT-1)", () => {
 });
 
 describe("marketing shell", () => {
-  const allowed = new Set<string>(Object.values(MARKETING_LINKS));
+  const allowed = new Set<string>([
+    ...Object.values(MARKETING_LINKS),
+    // Batch 1: the legal pages (the support address is MARKETING_LINKS.CONTACT).
+    LEGAL_LINKS.TERMS,
+    LEGAL_LINKS.REFUNDS,
+    LEGAL_LINKS.PRIVACY,
+  ]);
 
   it("the header links only to existing destinations, with a labelled nav and a native phone menu", () => {
     const html = render(createElement(MarketingHeader));
@@ -106,10 +115,14 @@ describe("marketing shell", () => {
       MARKETING_LINKS.LOGIN,
       MARKETING_LINKS.DEMO,
       MARKETING_LINKS.ACCESS,
+      LEGAL_LINKS.TERMS,
+      LEGAL_LINKS.REFUNDS,
+      LEGAL_LINKS.PRIVACY,
     ]) {
       expect(hrefs(html)).toContain(href);
     }
     expect(html).not.toContain("/signup");
+    expect(html).not.toMatch(/onchainfest/i);
   });
 });
 
@@ -230,7 +243,7 @@ describe("/planners (MKT-2)", () => {
 
   it("is not indexed yet and names the page for planners", () => {
     expect(plannersMetadata.robots).toEqual({ index: false, follow: false });
-    expect(plannersMetadata.title).toBe("Software para wedding planners · listalaboda.com");
+    expect(plannersMetadata.title).toBe("Software para wedding planners · ListaLaBoda");
     expect(plannersMetadata.alternates).toBeUndefined();
   });
 
@@ -250,7 +263,13 @@ describe("/planners (MKT-2)", () => {
     const links = hrefs(html);
     expect(links[0]).toBe(MARKETING_LINKS.PILOT);
     expect(links[1]).toBe(MARKETING_LINKS.DEMO);
-    const allowed = new Set<string>(Object.values(MARKETING_LINKS));
+    const allowed = new Set<string>([
+    ...Object.values(MARKETING_LINKS),
+    // Batch 1: the legal pages (the support address is MARKETING_LINKS.CONTACT).
+    LEGAL_LINKS.TERMS,
+    LEGAL_LINKS.REFUNDS,
+    LEGAL_LINKS.PRIVACY,
+  ]);
     for (const href of links) expect(allowed.has(href), href).toBe(true);
     expect(html).not.toContain("/signup");
   });
@@ -264,7 +283,7 @@ describe("/planners (MKT-2)", () => {
   it("never claims to move money: payments are recorded, not processed", () => {
     const text = JSON.stringify(page);
     expect(text).not.toMatch(/procesa pagos|paga proveedores|cobra|transfiere/i);
-    expect(page.money.note).toBe("listalaboda.com registra los pagos; no los procesa.");
+    expect(page.money.note).toBe("ListaLaBoda registra los pagos; no los procesa.");
   });
 });
 
@@ -313,8 +332,8 @@ describe("wedding photography (MKT-5)", () => {
 
 describe("marketing metadata and robots (MKT-3)", () => {
   const pages = [
-    { metadata: plannersMetadata, title: "Software para wedding planners · listalaboda.com" },
-    { metadata: couplesMetadata, title: "Organiza tu boda en un solo lugar · listalaboda.com" },
+    { metadata: plannersMetadata, title: "Software para wedding planners · ListaLaBoda" },
+    { metadata: couplesMetadata, title: "Organiza tu boda en un solo lugar · ListaLaBoda" },
   ];
 
   it("keeps every marketing page out of search, with no canonical, base URL or image", () => {
@@ -327,7 +346,7 @@ describe("marketing metadata and robots (MKT-3)", () => {
       expect(metadata.openGraph).toEqual({
         title,
         description: metadata.description,
-        siteName: "listalaboda.com",
+        siteName: "ListaLaBoda",
         locale: "es",
         type: "website",
       });
@@ -371,7 +390,13 @@ describe("/parejas (MKT-3)", () => {
     const links = hrefs(html);
     expect(links.slice(0, 3)).toEqual([MARKETING_LINKS.ACCESS, MARKETING_LINKS.HOW_IT_WORKS, MARKETING_LINKS.PLANNERS]);
     expect(html).toContain('id="como-funciona"');
-    const allowed = new Set<string>(Object.values(MARKETING_LINKS));
+    const allowed = new Set<string>([
+    ...Object.values(MARKETING_LINKS),
+    // Batch 1: the legal pages (the support address is MARKETING_LINKS.CONTACT).
+    LEGAL_LINKS.TERMS,
+    LEGAL_LINKS.REFUNDS,
+    LEGAL_LINKS.PRIVACY,
+  ]);
     for (const href of links) expect(allowed.has(href), href).toBe(true);
     // The closing band: access again, and the planner page.
     expect(links.slice(-2)).toEqual([MARKETING_LINKS.ACCESS, MARKETING_LINKS.PLANNERS]);
@@ -398,7 +423,7 @@ describe("/parejas (MKT-3)", () => {
 
   it("stays truthful: payments recorded, not processed; no open RSVP, automatic seating or pricing", () => {
     const text = JSON.stringify(page);
-    expect(page.plan.note).toBe("listalaboda.com registra los pagos; no los procesa.");
+    expect(page.plan.note).toBe("ListaLaBoda registra los pagos; no los procesa.");
     expect(text).not.toMatch(/procesa pagos|paga proveedores|cobra|transfiere|gratis|SMS|Mis bodas|registro abierto para|acomod\w* automátic|recordatorios? automátic/i);
     // BILLING-02: amounts never live in the copy; they come from the display prices only.
     expect(text).not.toMatch(/[$₡]\s?\d|\d+\s?(USD|CRC)/);

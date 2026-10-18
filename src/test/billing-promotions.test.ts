@@ -34,6 +34,7 @@ import {
 import { PLAN_DISPLAY_PRICES, displayPrice } from "@/lib/billing/display-prices";
 import type { CreateCheckoutInput } from "@/lib/billing/gateway";
 import { BILLING_PLANS, SUBSCRIPTION_GRANTING_STATUSES, subscriptionGrantsAccess } from "@/lib/billing/plans";
+import { getMessages } from "@/lib/i18n";
 
 import { APP_ORIGIN, COUPLE_PRICE, PLANNER_PRICE, USER_ID } from "./fixtures/billing";
 
@@ -131,6 +132,35 @@ describe("Checkout Session parameters (the real gateway)", () => {
     expect(params).not.toHaveProperty("payment_method_collection");
     expect(JSON.stringify(params)).not.toMatch(/trial|lb_campaign/);
     expectNoAppliedDiscount(params);
+  });
+});
+
+describe("Batch 1: Checkout says what is being bought", () => {
+  const { checkoutMessage } = getMessages().billing;
+
+  it.each([
+    ["planner", plannerInput],
+    ["couple", coupleInput],
+  ] as const)("%s: a fixed message above the pay button, from the catalog", async (accountType, input) => {
+    await gateway.createCheckoutSession(input());
+    const [params] = stripeSdk.created;
+    expect(params.custom_text).toEqual({ submit: { message: checkoutMessage[accountType] } });
+  });
+
+  it("the couple message is about a one-time payment for the couple's wedding, never a planner product", () => {
+    expect(checkoutMessage.couple).toBe("Pago único para organizar tu boda en ListaLaBoda. Sin suscripción ni cobros mensuales.");
+    expect(checkoutMessage.couple).not.toMatch(/planner|suscripción mensual/i);
+    expect(checkoutMessage.planner).toBe(
+      "Suscripción mensual con renovación automática. Puedes cancelarla desde Facturación; sigue activa hasta el final del período pagado.",
+    );
+  });
+
+  it("never carries a price, amount or currency (the display prices are never sent to Stripe)", () => {
+    for (const message of Object.values(checkoutMessage)) {
+      expect(message).not.toMatch(/\$|\d|USD|CRC|₡/);
+      expect(message).not.toContain(PLAN_DISPLAY_PRICES.planner.amount);
+      expect(message).not.toContain(PLAN_DISPLAY_PRICES.couple.amount);
+    }
   });
 });
 

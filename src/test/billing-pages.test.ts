@@ -23,6 +23,7 @@ const runtime = vi.hoisted(() => ({
 vi.mock("@/lib/billing/runtime", () => runtime);
 
 import { getMessages } from "@/lib/i18n";
+import { LEGAL_LINKS } from "@/lib/legal/links";
 
 import { USER_ID, fakeSupabase } from "./fixtures/billing";
 
@@ -187,6 +188,57 @@ describe("billing page", () => {
     const html = renderToStaticMarkup(await BillingPage(params() as never));
     expect(html).toContain(billing.couple.activeBody);
     expect(html).not.toContain(billing.couple.buy);
+  });
+
+  describe("Batch 1: unpaid state and legal links", () => {
+    const legalHrefs = [LEGAL_LINKS.TERMS, LEGAL_LINKS.REFUNDS, LEGAL_LINKS.PRIVACY];
+
+    it("planner never subscribed: nothing was charged, payment only through Facturación, data isn't lost, consent next to the button", async () => {
+      signedIn("planner");
+      const html = renderToStaticMarkup(await BillingPage(params() as never));
+      expect(html).toContain(billing.planner.noneBody);
+      expect(billing.planner.noneBody).toContain("no se te ha cobrado nada");
+      expect(billing.planner.noneBody).toContain("«Suscribirme»");
+      expect(html).toContain(billing.unpaidDataNote);
+      expect(html).toContain('data-testid="billing-legal-consent"');
+      for (const href of legalHrefs) expect(html).toContain(`href="${href}"`);
+    });
+
+    it("planner whose subscription ended: never claims 'nothing was charged'", async () => {
+      signedIn("planner", {
+        billing_subscriptions: [{ user_id: USER_ID, status: "canceled", current_period_end: null, cancel_at_period_end: false }],
+      });
+      const html = renderToStaticMarkup(await BillingPage(params() as never));
+      expect(html).toContain(billing.planner.noneBodyPrevious);
+      expect(html).not.toContain("no se te ha cobrado nada");
+      expect(html).not.toContain(billing.unpaidDataNote);
+    });
+
+    it("couple never paid: different wording from the planner, no automatic charges, consent next to the button", async () => {
+      signedIn("couple");
+      const html = renderToStaticMarkup(await BillingPage(params() as never));
+      expect(html).toContain(billing.couple.noneBody);
+      expect(billing.couple.noneBody).not.toBe(billing.planner.noneBody);
+      expect(billing.couple.noneBody).toContain("No hay cobros automáticos.");
+      expect(html).toContain(billing.unpaidDataNote);
+      expect(html).toContain('data-testid="billing-legal-consent"');
+    });
+
+    it("paid or pending accounts never see the unpaid copy, but still find the legal links", async () => {
+      signedIn("couple", { billing_purchases: [{ user_id: USER_ID, status: "pending", purchased_at: null }] });
+      const pending = renderToStaticMarkup(await BillingPage(params() as never));
+      signedIn("planner", {
+        billing_entitlements: [{ user_id: USER_ID, entitlement_key: "planner_pro", status: "active" }],
+        billing_subscriptions: [{ user_id: USER_ID, status: "active", current_period_end: null, cancel_at_period_end: true }],
+      });
+      const active = renderToStaticMarkup(await BillingPage(params() as never));
+      for (const html of [pending, active]) {
+        expect(html).not.toContain("no se te ha cobrado nada");
+        expect(html).not.toContain(billing.unpaidDataNote);
+        expect(html).not.toContain('data-testid="billing-legal-consent"');
+        for (const href of legalHrefs) expect(html).toContain(`href="${href}"`);
+      }
+    });
   });
 
   it("not configured: says so and offers no action", async () => {

@@ -11,6 +11,7 @@ import type {
 } from "@/lib/billing/gateway";
 import { BILLING_METADATA, parseEntitlementKey, parseSubscriptionStatus } from "@/lib/billing/plans";
 import { getAppOrigin, isLocalOrigin } from "@/lib/http/app-origin";
+import { getMessages } from "@/lib/i18n";
 
 /**
  * The Stripe implementation of `BillingGateway` (BILLING-01, ADR-021). The
@@ -185,6 +186,9 @@ export function createStripeGateway(settings: StripeGatewaySettings): BillingGat
           metadata,
           // BILLING-02: the customer may type a Stripe promotion code; Stripe validates and applies it.
           allow_promotion_codes: true,
+          // Batch 1: what is being bought, in words, above the pay button. Fixed catalog copy per
+          // account type: never a price, amount or currency (Stripe shows the exact total itself).
+          custom_text: { submit: { message: getMessages().billing.checkoutMessage[input.accountType] } },
           ...(input.mode === "subscription"
             ? {
                 // Always collect a payment method, even for a trial or a $0 first invoice,

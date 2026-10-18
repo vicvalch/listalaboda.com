@@ -9,6 +9,7 @@ import { chooseAccountTypeInBrowser, createAccount, es, fillCredentials, logIn }
 import { uniqueEmail } from "./support/identities";
 import { readLocalSupabase } from "./support/local-supabase";
 import { E2E_COUPLE_PRICE_ID, E2E_PLANNER_PRICE_ID, STRIPE_STAND_IN_ORIGIN, standIn } from "./support/stripe";
+import { LEGAL_LINKS } from "../src/lib/legal/links";
 
 // BILLING-01 (ADR-021) against the production build. The real Stripe SDK in
 // the app talks to the LOCAL stand-in (never Stripe); the journeys "pay" in
@@ -18,6 +19,7 @@ import { E2E_COUPLE_PRICE_ID, E2E_PLANNER_PRICE_ID, STRIPE_STAND_IN_ORIGIN, stan
 // action under test.
 
 const billing = es.billing;
+const { app, legal } = es;
 const WEBHOOK = "/api/stripe/webhook";
 const RUN = randomUUID().replace(/-/g, "").slice(0, 10);
 let eventCounter = 0;
@@ -88,6 +90,13 @@ test.describe("billing", () => {
     await expect(page.getByTestId("billing-price")).toHaveText("$99 USD / mes");
     await expect(page.getByTestId("billing-trial")).toHaveCount(0);
     await expect(page.getByText(billing.promoNote)).toBeVisible();
+    // Batch 1: never charged → says so, and the documents are linked next to the button.
+    await expect(page.getByText(billing.planner.noneBody)).toBeVisible();
+    await expect(page.getByTestId("billing-legal-consent").getByRole("link", { name: legal.links.terms })).toHaveAttribute("href", LEGAL_LINKS.TERMS);
+    await page.goto("/app");
+    await expect(page.getByTestId("unpaid-note")).toContainText(app.unpaidNote.planner);
+    await page.goto("/app/billing");
+    await expect(page.getByTestId("unpaid-note")).toHaveCount(0);
 
     const session = await checkout(page, billing.planner.subscribe);
     expect(session).toMatchObject({
@@ -101,6 +110,8 @@ test.describe("billing", () => {
       cancel_url: `${baseURL}/app/billing/cancel`,
       metadata: { lb_user_id: userId, lb_account_type: "planner", lb_entitlement: "planner_pro" },
       subscriptionMetadata: { lb_user_id: userId, lb_account_type: "planner", lb_entitlement: "planner_pro" },
+      // Batch 1: Checkout says what is being bought.
+      custom_text: { submit: { message: billing.checkoutMessage.planner } },
     });
     expect(session.lineItems).toEqual([expect.objectContaining({ price: { id: E2E_PLANNER_PRICE_ID }, quantity: 1 })]);
     expect(session.customer).toMatch(/^cus_/);
@@ -139,6 +150,10 @@ test.describe("billing", () => {
 
     await page.goto("/app/billing");
     await expect(page.getByTestId("billing-status")).toHaveText(billing.planner.status.active);
+    // Batch 1: a paying planner never sees the unpaid note.
+    await page.goto("/app");
+    await expect(page.getByTestId("unpaid-note")).toHaveCount(0);
+    await page.goto("/app/billing");
     await expect(page.getByRole("button", { name: billing.planner.subscribe })).toHaveCount(0);
 
     // The portal opens for THIS user's customer only.
@@ -158,6 +173,10 @@ test.describe("billing", () => {
     expect(await entitlementOf(userId, "planner_pro")).toBe("inactive");
     await page.goto("/app/billing");
     await expect(page.getByTestId("billing-status")).toHaveText(billing.planner.status.none);
+    // Batch 1: charged before, so never "no se te ha cobrado nada", and no unpaid note in the shell.
+    await expect(page.getByText(billing.planner.noneBodyPrevious)).toBeVisible();
+    await page.goto("/app");
+    await expect(page.getByTestId("unpaid-note")).toHaveCount(0);
   });
 
   test("couple: one-time payment Checkout → signed webhook → access activated", async ({ page, request }) => {
@@ -168,6 +187,9 @@ test.describe("billing", () => {
     await expect(page.getByTestId("billing-price")).toHaveText("$149 USD");
     await expect(page.getByText(billing.couple.cadence, { exact: true })).toBeVisible();
     await expect(page.getByText(billing.promoNote)).toBeVisible();
+    await expect(page.getByText(billing.couple.noneBody)).toBeVisible();
+    await page.goto("/app");
+    await expect(page.getByTestId("unpaid-note")).toContainText(app.unpaidNote.couple);
 
     const session = await checkout(page, billing.couple.buy);
     expect(session).toMatchObject({
@@ -179,6 +201,7 @@ test.describe("billing", () => {
       metadata: { lb_user_id: userId, lb_account_type: "couple", lb_entitlement: "couple_access" },
       paymentIntentMetadata: { lb_user_id: userId, lb_account_type: "couple", lb_entitlement: "couple_access" },
       subscriptionMetadata: null,
+      custom_text: { submit: { message: billing.checkoutMessage.couple } },
     });
     expect(session.lineItems).toEqual([expect.objectContaining({ price: { id: E2E_COUPLE_PRICE_ID }, quantity: 1 })]);
 

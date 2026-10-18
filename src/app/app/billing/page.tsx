@@ -1,16 +1,18 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { Notice } from "@/components/ui/Notice";
 import { SubmitButton } from "@/components/ui/SubmitButton";
-import { cardClass } from "@/components/ui/styles";
+import { cardClass, textLinkClass } from "@/components/ui/styles";
 import { requireAccountType } from "@/lib/accounts/session";
 import { loadBillingView } from "@/lib/billing/billing-page";
 import { BILLING_CAMPAIGN_PARAM, billingPathWithCampaign, resolvePlannerTrial } from "@/lib/billing/campaigns";
 import { displayPrice } from "@/lib/billing/display-prices";
 import { parseBillingError } from "@/lib/billing/plans";
-import type { CoupleBillingView, PlannerBillingView } from "@/lib/billing/presentation";
+import { isNeverCharged, type CoupleBillingView, type PlannerBillingView } from "@/lib/billing/presentation";
 import { getEnabledTrialCampaigns, isBillingAvailable } from "@/lib/billing/runtime";
 import { formatDate, getMessages } from "@/lib/i18n";
+import { LEGAL_LINKS } from "@/lib/legal/links";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { openPortalAction, startCheckoutAction } from "./actions";
@@ -22,17 +24,45 @@ function billingDate(iso: string): string {
   return formatDate(new Date(iso), { dateStyle: "long", timeZone: "UTC" });
 }
 
+function UnpaidDataNote({ view }: { view: PlannerBillingView | CoupleBillingView }) {
+  return isNeverCharged(view) ? <p className="text-muted text-sm">{getMessages().billing.unpaidDataNote}</p> : null;
+}
+
+/** Batch 1: next to every pay button; the documents are linked inside the sentence. */
+function PaymentConsent() {
+  const { billing, legal } = getMessages();
+  return (
+    <p className="text-muted text-sm" data-testid="billing-legal-consent">
+      {billing.legalConsent.before}
+      <Link href={LEGAL_LINKS.TERMS} className={textLinkClass}>
+        {legal.links.terms}
+      </Link>
+      {billing.legalConsent.refundsBefore}
+      <Link href={LEGAL_LINKS.REFUNDS} className={textLinkClass}>
+        {billing.legalConsent.refunds}
+      </Link>
+      {billing.legalConsent.privacyBefore}
+      <Link href={LEGAL_LINKS.PRIVACY} className={textLinkClass}>
+        {legal.links.privacy}
+      </Link>
+      {billing.legalConsent.after}
+    </p>
+  );
+}
+
 function PlannerDetails({ view }: { view: PlannerBillingView }) {
   const copy = getMessages().billing.planner;
   const body = {
     active: copy.activeBody,
     trialing: copy.trialingBody,
     problem: copy.problemBody,
-    none: copy.noneBody,
+    // Batch 1: "never charged" only when no subscription ever existed; no button named when none is offered.
+    none: view.action === null ? getMessages().billing.noneUnavailableBody : view.everSubscribed ? copy.noneBodyPrevious : copy.noneBody,
   }[view.state];
   return (
     <>
       <p>{body}</p>
+      <UnpaidDataNote view={view} />
       {view.periodEnd ? (
         <p className="text-muted text-sm">
           {(view.cancelAtPeriodEnd ? copy.endsOn : copy.renewsOn).replace("{date}", billingDate(view.periodEnd))}
@@ -44,10 +74,15 @@ function PlannerDetails({ view }: { view: PlannerBillingView }) {
 
 function CoupleDetails({ view }: { view: CoupleBillingView }) {
   const copy = getMessages().billing.couple;
-  const body = { active: copy.activeBody, pending: copy.pendingBody, none: copy.noneBody }[view.state];
+  const body = {
+    active: copy.activeBody,
+    pending: copy.pendingBody,
+    none: view.action === null ? getMessages().billing.noneUnavailableBody : copy.noneBody,
+  }[view.state];
   return (
     <>
       <p>{body}</p>
+      <UnpaidDataNote view={view} />
       {view.paidAt ? <p className="text-muted text-sm">{copy.paidOn.replace("{date}", billingDate(view.paidAt))}</p> : null}
     </>
   );
@@ -70,7 +105,7 @@ function CoupleDetails({ view }: { view: CoupleBillingView }) {
 export default async function BillingPage({ searchParams }: PageProps<"/app/billing">) {
   const query = await searchParams;
   const { user, accountType } = await requireAccountType(billingPathWithCampaign(query[BILLING_CAMPAIGN_PARAM]));
-  const { billing } = getMessages();
+  const { billing, legal } = getMessages();
   const available = isBillingAvailable();
   const supabase = await createSupabaseServerClient();
   const view = await loadBillingView(supabase, user.id, accountType, available);
@@ -138,6 +173,7 @@ export default async function BillingPage({ searchParams }: PageProps<"/app/bill
             {trial ? <p className="text-muted text-sm">{billing.planner.trialNote}</p> : null}
             <p className="text-muted text-sm">{billing.promoNote}</p>
             <p className="text-muted text-sm">{billing.priceNote}</p>
+            <PaymentConsent />
           </form>
         ) : null}
         {view?.kind === "planner" && view.action === "manage" ? (
@@ -154,11 +190,30 @@ export default async function BillingPage({ searchParams }: PageProps<"/app/bill
             <SubmitButton label={billing.couple.buy} pendingLabel={billing.couple.buying} />
             <p className="text-muted text-sm">{billing.promoNote}</p>
             <p className="text-muted text-sm">{billing.priceNote}</p>
+            <PaymentConsent />
           </form>
         ) : null}
       </div>
 
       <p className="text-muted text-sm">{billing.processorNote}</p>
+      {/* Batch 1: the documents, whatever the state (subscribed people look for cancellation terms too). */}
+      <ul className="flex flex-wrap gap-x-5 gap-y-2 text-sm" data-testid="billing-legal-links">
+        <li>
+          <Link href={LEGAL_LINKS.TERMS} className={textLinkClass}>
+            {legal.links.terms}
+          </Link>
+        </li>
+        <li>
+          <Link href={LEGAL_LINKS.REFUNDS} className={textLinkClass}>
+            {legal.links.refunds}
+          </Link>
+        </li>
+        <li>
+          <Link href={LEGAL_LINKS.PRIVACY} className={textLinkClass}>
+            {legal.links.privacy}
+          </Link>
+        </li>
+      </ul>
     </section>
   );
 }

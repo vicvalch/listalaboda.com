@@ -63,6 +63,15 @@ export function plannerBillingView(status: PlannerBillingStatus, available: bool
   };
 }
 
+/**
+ * Batch 1: the account has never been charged, so "no se te ha cobrado
+ * nada" is true: a planner with no subscription row ever (a canceled or
+ * expired one doesn't count), a couple with no paid or pending purchase.
+ */
+export function isNeverCharged(view: PlannerBillingView | CoupleBillingView): boolean {
+  return view.kind === "planner" ? view.state === "none" && !view.everSubscribed : view.state === "none";
+}
+
 export function coupleBillingView(status: CoupleBillingStatus, available: boolean): CoupleBillingView {
   if (status.entitlement === "active") {
     const paid = status.purchases.find((p) => p.status === "paid") ?? null;

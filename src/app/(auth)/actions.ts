@@ -12,6 +12,7 @@ import {
 import { afterPasswordResetPath, forgotPasswordPath, recoveryNext, recoveryRedirectUrl } from "@/lib/auth/recovery";
 import { getRecoveryRedirectOrigin, getRecoveryUser } from "@/lib/auth/recovery-session";
 import { safeNextPath } from "@/lib/auth/redirect";
+import { signupRedirectUrl } from "@/lib/auth/signup-confirmation";
 import {
   parseCredentials,
   parseEmail,
@@ -20,7 +21,6 @@ import {
   type NewPasswordField,
 } from "@/lib/auth/validation";
 import { formText, type FormState } from "@/lib/forms/result";
-import { getRequestOrigin } from "@/lib/http/origin";
 import { es } from "@/lib/i18n/messages/es";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -67,12 +67,12 @@ export async function signupAction(_prev: SignupState, formData: FormData): Prom
   let hasSession = false;
   try {
     const supabase = await createSupabaseServerClient();
-    const origin = await getRequestOrigin();
-    // If Supabase Auth requires email confirmation, the emailed link lands on
-    // /auth/callback, which exchanges the code and continues to `next`.
-    const emailRedirectTo = origin
-      ? `${origin}/auth/callback?${new URLSearchParams({ next }).toString()}`
-      : undefined;
+    // Batch 3: the trusted APP_ORIGIN (never request headers), like every
+    // emailed link. The confirmation email reads the continuation back out of
+    // it (`{{ .RedirectTo }}` → /auth/confirm/prepare); a link sent with the
+    // previous template returns through /auth/callback, as before.
+    const origin = await getRecoveryRedirectOrigin();
+    const emailRedirectTo = origin ? signupRedirectUrl(origin, next) : undefined;
 
     const { data, error } = await supabase.auth.signUp({
       ...parsed.credentials,

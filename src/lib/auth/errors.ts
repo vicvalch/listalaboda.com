@@ -100,6 +100,25 @@ export function normalizeRecoveryVerifyError(error: AuthFailure): RecoveryVerify
   return { kind: "invalid" };
 }
 
+/**
+ * The explicit signup confirmation (`verifyOtp` with the emailed token hash,
+ * Batch 3), on the same rule as the recovery one: a definitive refusal
+ * (expired, already used, replaced by a newer email, unknown: Auth answers
+ * all of them alike) is `invalid`; a limit or a failure on our side is
+ * `retry`, so the page keeps the token.
+ */
+export type SignupVerifyOutcome = RecoveryVerifyOutcome;
+
+export function normalizeSignupVerifyError(error: AuthFailure): SignupVerifyOutcome {
+  if (error.code === "over_request_rate_limit" || error.status === 429) {
+    return { kind: "retry", message: es.auth.rateLimited };
+  }
+  if (!error.status || error.status >= 500) {
+    return { kind: "retry", message: es.auth.signupConfirm.retry };
+  }
+  return { kind: "invalid" };
+}
+
 export type SignUpOutcome =
   | Readonly<{ kind: "confirmation_required" }>
   | Readonly<{ kind: "field"; field: "email" | "password"; message: string }>
@@ -111,14 +130,19 @@ export function normalizeSignUpError(error: AuthFailure): SignUpOutcome {
     // your email" outcome a new one gets when confirmation is required.
     case "user_already_exists":
     case "email_exists":
+    // Batch 3: the per-address resend interval only applies to an address
+    // with a pending sign-up, so reporting it would reveal that. It means an
+    // email went out moments ago: same neutral "check your email" (whose
+    // copy says to use the newest one), like the recovery request.
+    case "over_email_send_rate_limit":
       return { kind: "confirmation_required" };
     case "weak_password":
       return { kind: "field", field: "password", message: es.auth.signup.weakPassword };
     case "email_address_invalid":
       return { kind: "field", field: "email", message: es.auth.validation.emailInvalid };
+    // Per client, before any lookup: says nothing about the address.
     case "over_request_rate_limit":
-    case "over_email_send_rate_limit":
-      return { kind: "form", message: es.auth.rateLimited };
+      return { kind: "form", message: es.auth.signup.rateLimited };
     default:
       return { kind: "form", message: es.common.unexpectedError };
   }

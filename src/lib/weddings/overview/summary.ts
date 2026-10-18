@@ -1,7 +1,7 @@
 import { summarizeBudget, type BudgetSummary, type ScheduleItemFacts } from "@/lib/budget/summary";
-import { isOverdue } from "@/lib/checklist/overdue";
+import { isOverdue, overdueReferenceDate, type PlanningDateContext } from "@/lib/checklist/overdue";
 import { summarizeProgress } from "@/lib/checklist/progress";
-import { daysBetweenIsoDates, effectiveDueDate } from "@/lib/checklist/timing";
+import { daysBetweenIsoDates } from "@/lib/checklist/timing";
 import { summarizeGuests } from "@/lib/guests/summary";
 import { summarizeSeatingGuests } from "@/lib/seating/plan";
 import { timelineOverview, type TimelineSlot } from "@/lib/timeline/summary";
@@ -62,14 +62,15 @@ export function weddingCountdown(weddingDate: string | null, today: string | nul
 
 export function checklistOverview(
   items: readonly ChecklistFacts[],
-  context: Readonly<{ weddingDate: string | null; today: string | null }>,
+  context: PlanningDateContext,
 ): ChecklistOverview {
   let oldestOverdueOn: string | null = null;
   let overdueCount = 0;
   for (const item of items) {
     if (!isOverdue(item, context)) continue;
     overdueCount += 1;
-    const due = effectiveDueDate(item.timing, context.weddingDate);
+    // "desde el …" = when it became due for overdue purposes (Batch 2), never before its seed day.
+    const due = overdueReferenceDate(item, context);
     if (due !== null && (oldestOverdueOn === null || due < oldestOverdueOn)) oldestOverdueOn = due;
   }
   return { progress: summarizeProgress(items), overdueCount, oldestOverdueOn };
@@ -145,7 +146,7 @@ function buildWedding(input: OverviewWeddingInput, now: Date): BuiltWedding {
   const countdown = weddingCountdown(wedding.weddingDate, today);
 
   const checklist = map(input.checklist, (items) =>
-    checklistOverview(items, { weddingDate: wedding.weddingDate, today }),
+    checklistOverview(items, { weddingDate: wedding.weddingDate, today, timeZone: wedding.timeZone }),
   );
   const guests = map(input.guests, guestsOverview);
   const budgetSummary = map(input.budget, (facts) => summarizeBudget({ ...facts, today }));

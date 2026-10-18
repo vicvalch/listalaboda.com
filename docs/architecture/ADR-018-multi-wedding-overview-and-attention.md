@@ -173,6 +173,27 @@ on the server (`formatMoney`) before anything reaches a client component, adds t
 - Every row's href is `attentionPath` (collaborator setup → home, with copy saying only the organizer can define it).
   Money is formatted per currency on the server (`formatMoney`); no `bigint` reaches a client component.
 
+### 14. Batch 2/2b amendment (2026-10-17): seeded checklists don't start overdue
+
+Production smoke: a wedding seeded 119 days out opened with 20 of 38 items "Atrasado" (49 days: 26; 240 days: 9), and
+Mis bodas flagged every brand-new wedding. The template's offsets (e.g. "365 days before") predate the day the couple
+or planner started.
+
+**Rule:** for template-seeded checklist items, the derived due date used for overdue classification cannot precede the
+item's creation/seed date. No effective due date is persisted. `overdueReferenceDate(item, { weddingDate, timeZone })`
+(`@/lib/checklist/overdue`), for a template copy (`seededAt` = its `created_at`, set only when
+`source_template_item_id` is not null) with relative timing: if its effective due date is BEFORE the seed day (an
+inherited past-offset item), the reference is seed day + `INHERITED_ITEM_GRACE_DAYS` (14, Batch 2b); otherwise its own
+due date (an item due on the seed day itself is not inherited-past and gets no grace). Overdue stays strict
+(reference < today): inherited items are not overdue from the seed day through day 14 and are overdue from day 15 if
+still pending. The seed day and the 14 days are WEDDING-LOCAL calendar dates (`weddingLocalToday`, never UTC). This is
+a **launch-phase catch-up grace policy, not a permanent re-baselining of template schedules**. `isOverdue` and the overview's
+`checklistOverview` (count and "desde el …" date) use it, so the wedding home and Mis bodas agree. Absolute dates
+(always explicit) and custom items keep their plain due date; completed items are never overdue; no time zone still
+means nothing is overdue. The template, its versions, `relative_days` and the displayed due date are unchanged; no
+migration (both columns already existed and are member-readable). The grace date is never stored either; an overdue
+inherited item's "desde el …" is the end of its grace (seed day + 14).
+
 ## Consequences
 
 - Measured locally (WSL Docker, 50 weddings × 100 checklist items, 300 guests, 15 vendors with 5 items and 5

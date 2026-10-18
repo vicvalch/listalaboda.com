@@ -250,6 +250,36 @@ describe("checklist ↔ guest work reads", () => {
     expect(select).not.toMatch(/guest_invitations|label|contact|token|rsvp/);
   });
 
+  it("Batch 2: a template copy carries its seed moment (created_at); an item someone added doesn't", async () => {
+    const row = (id: string, sourceTemplateItemId: string | null) => ({
+      id,
+      title: id,
+      description: null,
+      category: null,
+      status: "pending",
+      timing_mode: "relative_to_wedding",
+      relative_days: -180,
+      due_date: null,
+      sort_order: 10,
+      assignee_membership_id: null,
+      guest_invitation_id: null,
+      source_template_item_id: sourceTemplateItemId,
+      created_at: "2026-10-17T15:00:00+00:00",
+    });
+    const { supabase, requests } = clientFor({
+      get: {
+        checklist_items: {
+          status: 200,
+          body: [row(ITEM_ID, "66666666-6666-4666-8666-666666666666"), row("custom", null)],
+        },
+      },
+    });
+    const checklist = await getWeddingChecklist(supabase, access);
+    expect(checklist?.items.map((item) => item.seededAt)).toEqual(["2026-10-17T15:00:00+00:00", null]);
+    const select = requests.find((r) => r.url.pathname === "/rest/v1/checklist_items")?.url.searchParams.get("select");
+    expect(select?.split(",")).toEqual(expect.arrayContaining(["source_template_item_id", "created_at"]));
+  });
+
   it("party options are id + current label only, in ONE query for the wedding", async () => {
     const { supabase, requests } = clientFor({
       get: {

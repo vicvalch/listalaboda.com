@@ -128,6 +128,13 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - Overdue = `pending` + effective due date strictly before the wedding-local today (`@/lib/weddings/timezone`
   `weddingLocalToday`, from one server clock read per request). Due today is not overdue; no time zone means
   nothing is overdue. Overdue is derived (`@/lib/checklist/overdue`), never a status or a stored column.
+- Batch 2/2b (ADR-018 §14): for template-seeded checklist items, the derived due date used for overdue classification
+  cannot precede the item's creation/seed date. No effective due date is persisted. An inherited item whose date was
+  already past on the seed day gets a launch-phase catch-up grace: reference = seed day + `INHERITED_ITEM_GRACE_DAYS`
+  (14), so it is overdue from day 15 if still pending; items due on/after the seed day keep their own date. One
+  helper, `overdueReferenceDate` (wedding home and Mis bodas); `seededAt` = `created_at` of a template copy
+  (`source_template_item_id`); wedding-local calendar days; relative timing only (absolute dates and custom items keep
+  their plain date). Not a re-baselining of the template's schedule.
 - `weddings.city` is optional plain text (trimmed, blank = null); not a venue, address or geocode.
 - Removing a member deletes one `WeddingMembership` (owner-only, `removeWeddingMember`), never the auth user,
   their other memberships or checklist items. Assigned items become unassigned via the FK. The generic removal
@@ -961,4 +968,7 @@ Launch remediation Batch 1 (ADR-021 §16) adds the payment/brand trust and legal
 support address, `/terminos` (with refunds and cancellations) and `/privacidad` linked from the footer, signup and
 billing, truthful unpaid-state copy on `/app/billing` plus a never-charged note in the `/app` shell, and a fixed Checkout
 message per plan (no gating, no migration, no billing-logic change; Stripe Dashboard changes are a manual checklist).
+Launch remediation Batch 2/2b (ADR-018 §14): template items already past on their wedding-local seed day get a 14-day
+catch-up grace before counting as overdue, so new weddings don't start "Atrasado" (derived only; no migration or
+template change).
 Don't implement ahead of the current prompt.

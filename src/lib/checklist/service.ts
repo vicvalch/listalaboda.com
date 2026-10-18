@@ -31,7 +31,7 @@ export type ChecklistDenial = "unauthenticated" | "not_found" | "forbidden" | "e
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const ITEM_COLUMNS =
-  "id, title, description, category, status, timing_mode, relative_days, due_date, sort_order, assignee_membership_id, guest_invitation_id";
+  "id, title, description, category, status, timing_mode, relative_days, due_date, sort_order, assignee_membership_id, guest_invitation_id, source_template_item_id, created_at";
 
 // -------------------------------------------------------------------- read
 
@@ -80,6 +80,8 @@ export async function getWeddingChecklist(
         sortOrder: row.sort_order,
         assigneeMembershipId: row.assignee_membership_id,
         guestInvitationId: row.guest_invitation_id,
+        // Batch 2: only template copies carry a seed moment (provenance, never authority).
+        seededAt: row.source_template_item_id ? row.created_at : null,
       })),
     };
   } catch {

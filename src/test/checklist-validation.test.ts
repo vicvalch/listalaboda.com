@@ -149,6 +149,7 @@ describe("itemFormValues", () => {
     sortOrder: 10,
     assigneeMembershipId: null,
     guestInvitationId: null,
+    seededAt: null,
   };
 
   it("turns a stored offset back into friendly fields", () => {

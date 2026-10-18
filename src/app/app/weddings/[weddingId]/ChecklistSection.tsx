@@ -34,6 +34,8 @@ type Props = {
    * when the wedding has no time zone: then nothing is overdue.
    */
   today: string | null;
+  /** The wedding's IANA time zone (where `today` came from); the seed-day rule needs it. */
+  timeZone: string | null;
   role: WeddingRole;
   /** null when it couldn't be loaded. */
   checklist: WeddingChecklist | null;
@@ -94,6 +96,7 @@ function ChecklistBody({
   weddingId,
   weddingDate,
   today,
+  timeZone,
   role,
   checklist,
   view,
@@ -157,7 +160,7 @@ function ChecklistBody({
   const hasRelativeItems = items.some((item) => item.timing.mode === "relative_to_wedding");
   // One date context for every derived view; "today" was computed once on
   // the server for this request.
-  const dates: PlanningDateContext = { weddingDate, today };
+  const dates: PlanningDateContext = { weddingDate, today, timeZone };
   // Mentioned once, only when it matters: some pending item has a date that
   // could become overdue.
   const showNoTimeZone =

@@ -29,6 +29,7 @@ function item(
     sortOrder,
     assigneeMembershipId: null,
     guestInvitationId: null,
+    seededAt: null,
   };
 }
 

@@ -1,6 +1,7 @@
 import { NEXT_ITEMS_LIMIT, sortByPlanning } from "@/lib/checklist/planning";
 import { effectiveDueDate } from "@/lib/checklist/timing";
 import type { ChecklistItem } from "@/lib/checklist/types";
+import { weddingLocalToday } from "@/lib/weddings/timezone";
 
 /**
  * "Atrasado": derived on read, never stored, never a status. Pure functions
@@ -9,9 +10,9 @@ import type { ChecklistItem } from "@/lib/checklist/types";
  *
  * An item is overdue iff ALL hold:
  *   1. status is `pending`;
- *   2. it has an effective due date (absolute, or relative with a wedding date);
+ *   2. it has an overdue reference date (`overdueReferenceDate`);
  *   3. the wedding has a time zone, so `today` is known;
- *   4. effective due date < today (strictly: due today is NOT overdue).
+ *   4. reference date < today (strictly: due today is NOT overdue).
  *
  * Dates are `YYYY-MM-DD`, so string comparison is calendar comparison.
  */
@@ -20,15 +21,36 @@ export type PlanningDateContext = Readonly<{
   weddingDate: string | null;
   /** The wedding-local calendar date, or null when the wedding has no time zone. */
   today: string | null;
+  /** The wedding's IANA time zone (the one `today` came from), or null. */
+  timeZone: string | null;
 }>;
 
-export function isOverdue(
-  item: Pick<ChecklistItem, "status" | "timing">,
-  { weddingDate, today }: PlanningDateContext,
-): boolean {
-  if (item.status !== "pending" || today === null) return false;
+/**
+ * The date an item's overdue classification is measured against: its
+ * effective due date, except that a template-seeded relative item can't be
+ * due before the wedding-local day it was seeded (Batch 2). A wedding created
+ * four months out must not start with every "a year before" item already
+ * late: on the seed day those items are due now, and they become overdue
+ * only from the next day if still pending. Never stored; the template's
+ * offset and the displayed due date are unchanged. Absolute dates (always
+ * explicit) and custom items (`seededAt` null) keep their plain due date.
+ */
+export function overdueReferenceDate(
+  item: Pick<ChecklistItem, "timing" | "seededAt">,
+  { weddingDate, timeZone }: Pick<PlanningDateContext, "weddingDate" | "timeZone">,
+): string | null {
   const due = effectiveDueDate(item.timing, weddingDate);
-  return due !== null && due < today;
+  if (due === null || item.seededAt === null || item.timing.mode !== "relative_to_wedding" || timeZone === null) {
+    return due;
+  }
+  const seededOn = weddingLocalToday(timeZone, new Date(item.seededAt));
+  return seededOn !== null && due < seededOn ? seededOn : due;
+}
+
+export function isOverdue(item: Pick<ChecklistItem, "status" | "timing" | "seededAt">, context: PlanningDateContext): boolean {
+  if (item.status !== "pending" || context.today === null) return false;
+  const reference = overdueReferenceDate(item, context);
+  return reference !== null && reference < context.today;
 }
 
 /** Overdue items in planning order (earliest effective date first). */

@@ -306,7 +306,8 @@ describe("minimal projections", () => {
 
   it("the exact select strings", () => {
     expect(OVERVIEW_SELECT).toEqual({
-      checklist: "id, checklist_items(status, timing_mode, relative_days, due_date), checklist_item_count:checklist_items(count)",
+      checklist:
+        "id, checklist_items(status, timing_mode, relative_days, due_date, source_template_item_id, created_at), checklist_item_count:checklist_items(count)",
       guests:
         "id, guest_invitations(id, guests(id, rsvps(attending), seating_assignments(seating_table_id)), guest_count:guests(count))",
       budget:

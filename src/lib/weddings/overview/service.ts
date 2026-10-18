@@ -57,7 +57,8 @@ export const OVERVIEW_WEDDING_LIMIT = 100;
  * truncation proof and the privacy tests.
  */
 export const OVERVIEW_SELECT = {
-  checklist: "id, checklist_items(status, timing_mode, relative_days, due_date), checklist_item_count:checklist_items(count)",
+  checklist:
+    "id, checklist_items(status, timing_mode, relative_days, due_date, source_template_item_id, created_at), checklist_item_count:checklist_items(count)",
   guests:
     "id, guest_invitations(id, guests(id, rsvps(attending), seating_assignments(seating_table_id)), guest_count:guests(count))",
   // Totals and allocations are bounded by their unique keys ((wedding,
@@ -113,6 +114,8 @@ function loadChecklist(supabase: Client, ids: readonly string[]) {
             status: item.status,
             // The table's CHECK makes inconsistent timing impossible.
             timing: timingFromColumns(item) ?? { mode: "none" },
+            // Batch 2: template copies carry their seed moment for the overdue rule.
+            seededAt: item.source_template_item_id ? item.created_at : null,
           }))
         : null,
     );

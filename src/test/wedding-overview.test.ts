@@ -52,6 +52,7 @@ function vendor(id: string, fields: Partial<Vendor> = {}): Vendor {
 const absolute = (dueDate: string, status: ChecklistFacts["status"] = "pending"): ChecklistFacts => ({
   status,
   timing: { mode: "absolute", dueDate },
+  seededAt: null,
 });
 
 const guest = (attending: boolean | null, seated = false) => ({ attending, seated });
@@ -379,7 +380,7 @@ describe("missing wedding date and time zone", () => {
       [
         input(wedding(A, { weddingDate: null }), {
           checklist: ok([
-            { status: "pending", timing: { mode: "relative_to_wedding", relativeDays: -400 } },
+            { status: "pending", timing: { mode: "relative_to_wedding", relativeDays: -400 }, seededAt: null },
             absolute("2026-10-01"),
           ]),
         }),
@@ -759,5 +760,67 @@ describe("one request clock, each wedding's own time zone", () => {
       if (previous === undefined) delete process.env.TZ;
       else process.env.TZ = previous;
     }
+  });
+});
+
+// ------------------------------------------------- Batch 2: seeded weddings
+
+describe("newly seeded weddings don't start overdue (Batch 2)", () => {
+  // The shipped template's offsets (es v1: 38 items, one without a date).
+  const TEMPLATE_OFFSETS = [
+    -365, -360, -350, null, -330, -300, -300, -180, -270, -250, -240, -240, -150, -90, -60, -240, -120, -90, -60, -240,
+    -180, -150, -90, -30, -270, -120, -60, -30, -120, -30, -30, -14, -14, -7, -3, -2, 3, 30,
+  ] as const;
+  const seededTemplate = (seededAt: string): ChecklistFacts[] =>
+    TEMPLATE_OFFSETS.map((days) => ({
+      status: "pending",
+      timing: days === null ? { mode: "none" } : { mode: "relative_to_wedding", relativeDays: days },
+      seededAt,
+    }));
+  const SEEDED_NOW = NOW.toISOString(); // seeded today (2026-10-10 in Costa Rica)
+  const DAY = 24 * 60 * 60 * 1000;
+  const fresh = [
+    input(wedding(A, { weddingDate: "2026-11-28" }), { checklist: ok(seededTemplate(SEEDED_NOW)) }), // 49 days
+    input(wedding(B, { weddingDate: "2027-02-06" }), { checklist: ok(seededTemplate(SEEDED_NOW)) }), // 119 days
+    input(wedding(C, { weddingDate: "2027-06-07" }), { checklist: ok(seededTemplate(SEEDED_NOW)) }), // 240 days
+  ];
+
+  it("49, 119 and 240 days out: zero overdue and no 'Pendientes atrasados' right after seeding", () => {
+    const result = buildWeddingsOverview(fresh, NOW);
+    expect(result.weddings.map((w) => w.countdown)).toEqual([
+      { state: "before", days: 49 },
+      { state: "before", days: 119 },
+      { state: "before", days: 240 },
+    ]);
+    for (const built of result.weddings) {
+      expect(built.checklist).toMatchObject(ok({ overdueCount: 0, oldestOverdueOn: null }));
+    }
+    expect(kinds(result.attention).filter((id) => id.endsWith(":checklist_overdue"))).toEqual([]);
+  });
+
+  it("the next day, still-pending inherited items are overdue, dated from the seed day", () => {
+    const result = buildWeddingsOverview(fresh, new Date(NOW.getTime() + DAY));
+    const [a, b, c] = result.weddings;
+    // Inherited items due on or before the seed day (2026-10-10); the raw-date
+    // counts (26 / 20 / 9) are what the production smoke saw on the seed day itself.
+    expect(a.checklist).toMatchObject(ok({ overdueCount: 26, oldestOverdueOn: "2026-10-10" }));
+    expect(b.checklist).toMatchObject(ok({ overdueCount: 20, oldestOverdueOn: "2026-10-10" }));
+    // 240 days: those 9, plus the four "-240" items that were due exactly on the seed day.
+    expect(c.checklist).toMatchObject(ok({ overdueCount: 13, oldestOverdueOn: "2026-10-10" }));
+  });
+
+  it("regression: an older wedding with genuinely late items still shows overdue attention", () => {
+    // Seeded a year ago, wedding 2026-12-12: "-90" (2026-09-13) and "-60" (2026-10-13 → not yet) etc.
+    const old = input(wedding(D, { weddingDate: "2026-12-12" }), {
+      checklist: ok([
+        { status: "pending", timing: { mode: "relative_to_wedding", relativeDays: -90 }, seededAt: "2025-10-01T15:00:00Z" },
+        { status: "pending", timing: { mode: "relative_to_wedding", relativeDays: -60 }, seededAt: "2025-10-01T15:00:00Z" },
+        { status: "done", timing: { mode: "relative_to_wedding", relativeDays: -120 }, seededAt: "2025-10-01T15:00:00Z" },
+        absolute("2026-09-30"),
+      ]),
+    });
+    const result = buildWeddingsOverview([old], NOW);
+    expect(result.weddings[0].checklist).toMatchObject(ok({ overdueCount: 2, oldestOverdueOn: "2026-09-13" }));
+    expect(kinds(result.attention)).toContain(`${D}:checklist_overdue`);
   });
 });

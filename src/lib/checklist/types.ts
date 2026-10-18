@@ -63,4 +63,10 @@ export type ChecklistItem = Readonly<{
    * authorization, and nothing about the party is copied onto the item.
    */
   guestInvitationId: string | null;
+  /**
+   * Batch 2: when a TEMPLATE copy was seeded (its `created_at`, set by the
+   * database), or null for an item someone added. Only overdue
+   * classification reads it (`overdueReferenceDate`); never displayed.
+   */
+  seededAt: string | null;
 }>;

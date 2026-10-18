@@ -33,7 +33,8 @@ export type DomainResult<T> = Readonly<{ status: "ok"; value: T }> | Readonly<{ 
 
 // ------------------------------------------------- pure builder input (rows)
 
-export type ChecklistFacts = Readonly<{ status: ChecklistStatus; timing: ChecklistTiming }>;
+/** `seededAt`: a template copy's seed moment, else null (Batch 2, `overdueReferenceDate`). */
+export type ChecklistFacts = Readonly<{ status: ChecklistStatus; timing: ChecklistTiming; seededAt: string | null }>;
 
 export type GuestFacts = Readonly<{ attending: boolean | null; seated: boolean }>;
 export type PartyFacts = Readonly<{ guests: readonly GuestFacts[] }>;
@@ -68,7 +69,7 @@ export type WeddingCountdown =
 export type ChecklistOverview = Readonly<{
   progress: ChecklistProgress;
   overdueCount: number;
-  /** Earliest effective due date among overdue items, `YYYY-MM-DD`. */
+  /** Earliest overdue reference date (`overdueReferenceDate`) among overdue items, `YYYY-MM-DD`. */
   oldestOverdueOn: string | null;
 }>;
 

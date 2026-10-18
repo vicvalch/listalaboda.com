@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   isOverdue,
   nextUpcomingItems,
+  overdueReferenceDate,
   overdueItems,
   planSections,
   upcomingItems,
@@ -29,6 +30,7 @@ function item(
     sortOrder,
     assigneeMembershipId: null,
     guestInvitationId: null,
+    seededAt: null,
   };
 }
 
@@ -37,8 +39,8 @@ const relative = (relativeDays: number) => ({ mode: "relative_to_wedding", relat
 const none = { mode: "none" } as const;
 
 const TODAY = "2027-03-10";
-const withZone: PlanningDateContext = { weddingDate: "2027-08-14", today: TODAY };
-const noZone: PlanningDateContext = { weddingDate: "2027-08-14", today: null };
+const withZone: PlanningDateContext = { weddingDate: "2027-08-14", today: TODAY, timeZone: "America/Costa_Rica" };
+const noZone: PlanningDateContext = { weddingDate: "2027-08-14", today: null, timeZone: null };
 
 describe("isOverdue", () => {
   it.each([
@@ -58,12 +60,12 @@ describe("isOverdue", () => {
 
   it("a relative item is never overdue while the wedding has no date (its rule is kept)", () => {
     const value = item("a", relative(-400));
-    expect(isOverdue(value, { weddingDate: null, today: TODAY })).toBe(false);
+    expect(isOverdue(value, { weddingDate: null, today: TODAY, timeZone: "America/Costa_Rica" })).toBe(false);
     expect(value.timing).toEqual(relative(-400));
   });
 
   it("an absolute date can be overdue even without a wedding date", () => {
-    expect(isOverdue(item("a", absolute("2027-01-01")), { weddingDate: null, today: TODAY })).toBe(true);
+    expect(isOverdue(item("a", absolute("2027-01-01")), { weddingDate: null, today: TODAY, timeZone: "America/Costa_Rica" })).toBe(true);
   });
 
   it("nothing is overdue without a time zone, however old", () => {
@@ -86,8 +88,8 @@ describe("isOverdue", () => {
     const instant = new Date("2027-01-02T02:00:00Z");
     const cr = weddingLocalToday("America/Costa_Rica", instant);
     const madrid = weddingLocalToday("Europe/Madrid", instant);
-    expect(isOverdue(value, { weddingDate: null, today: cr })).toBe(false);
-    expect(isOverdue(value, { weddingDate: null, today: madrid })).toBe(true);
+    expect(isOverdue(value, { weddingDate: null, today: cr, timeZone: "America/Costa_Rica" })).toBe(false);
+    expect(isOverdue(value, { weddingDate: null, today: madrid, timeZone: "Europe/Madrid" })).toBe(true);
   });
 });
 
@@ -178,5 +180,92 @@ describe("progress is unaffected by overdue", () => {
       applicable: 3,
       percent: 33,
     });
+  });
+});
+
+// Batch 2: a template-seeded relative item can't be overdue before the
+// wedding-local day it was seeded. Wedding 119 days after a seed on
+// 2026-10-17 (Costa Rica); no effective date is ever stored.
+describe("seed-day baseline for template items", () => {
+  const SEED_DAY = "2026-10-17";
+  const SEEDED_AT = "2026-10-17T15:00:00Z"; // 09:00 in Costa Rica
+  const WEDDING = "2027-02-13"; // 119 days after the seed day
+  const on = (today: string): PlanningDateContext => ({ weddingDate: WEDDING, today, timeZone: "America/Costa_Rica" });
+  const seeded = (timing: ChecklistTiming, status: ChecklistStatus = "pending", seededAt = SEEDED_AT): ChecklistItem => ({
+    ...item("t", timing, status),
+    seededAt,
+  });
+
+  it("a template item whose raw date is before the seed day is NOT overdue on the seed day", () => {
+    const value = seeded(relative(-180)); // raw 2026-08-17, 61 days before the seed
+    expect(overdueReferenceDate(value, on(SEED_DAY))).toBe(SEED_DAY);
+    expect(isOverdue(value, on(SEED_DAY))).toBe(false);
+  });
+
+  it("the same item IS overdue the following day if still pending", () => {
+    expect(isOverdue(seeded(relative(-180)), on("2026-10-18"))).toBe(true);
+  });
+
+  it("raw date exactly on the seed day: due today, not overdue that day", () => {
+    const value = seeded(relative(-119)); // raw 2026-10-17
+    expect(overdueReferenceDate(value, on(SEED_DAY))).toBe(SEED_DAY);
+    expect(isOverdue(value, on(SEED_DAY))).toBe(false);
+    expect(isOverdue(value, on("2026-10-18"))).toBe(true);
+  });
+
+  it("raw date one day after the seed: not overdue until the day after it", () => {
+    const value = seeded(relative(-118)); // raw 2026-10-18
+    expect(isOverdue(value, on(SEED_DAY))).toBe(false);
+    expect(isOverdue(value, on("2026-10-18"))).toBe(false); // due today
+    expect(isOverdue(value, on("2026-10-19"))).toBe(true);
+  });
+
+  it("a future template item keeps its own date, exactly as before", () => {
+    const value = seeded(relative(-90)); // raw 2026-11-15
+    expect(overdueReferenceDate(value, on(SEED_DAY))).toBe("2026-11-15");
+    expect(isOverdue(value, on("2026-11-15"))).toBe(false);
+    expect(isOverdue(value, on("2026-11-16"))).toBe(true);
+  });
+
+  it("a completed or not-applicable item is never overdue", () => {
+    for (const status of ["done", "not_applicable"] as const) {
+      expect(isOverdue(seeded(relative(-180), status), on("2027-01-01"))).toBe(false);
+    }
+  });
+
+  it("an item someone added keeps the plain rule: an explicit past date is overdue right away", () => {
+    const custom = (timing: ChecklistTiming): ChecklistItem => item("c", timing); // seededAt null
+    expect(isOverdue(custom(relative(-180)), on(SEED_DAY))).toBe(true);
+    expect(isOverdue(custom(absolute("2026-09-01")), on(SEED_DAY))).toBe(true);
+  });
+
+  it("a template item changed to an explicit absolute date keeps that date (no baseline)", () => {
+    const value = seeded(absolute("2026-09-01"));
+    expect(overdueReferenceDate(value, on(SEED_DAY))).toBe("2026-09-01");
+    expect(isOverdue(value, on(SEED_DAY))).toBe(true);
+  });
+
+  it("the seed day is the WEDDING-LOCAL date, never the UTC date", () => {
+    // 2026-10-18T03:30Z is 21:30 on 2026-10-17 in Costa Rica: the seed day is the 17th there.
+    const lateEvening = seeded(relative(-180), "pending", "2026-10-18T03:30:00Z");
+    expect(overdueReferenceDate(lateEvening, on("2026-10-18"))).toBe("2026-10-17");
+    expect(isOverdue(lateEvening, on("2026-10-17"))).toBe(false);
+    expect(isOverdue(lateEvening, on("2026-10-18"))).toBe(true); // UTC slicing would wrongly say false
+    // The same instant in Madrid is already the 18th.
+    const madrid: PlanningDateContext = { weddingDate: WEDDING, today: "2026-10-18", timeZone: "Europe/Madrid" };
+    expect(overdueReferenceDate(lateEvening, madrid)).toBe("2026-10-18");
+    expect(isOverdue(lateEvening, madrid)).toBe(false);
+  });
+
+  it("no time zone: nothing is overdue, as before; no wedding date: no relative due date", () => {
+    expect(isOverdue(seeded(relative(-180)), { weddingDate: WEDDING, today: null, timeZone: null })).toBe(false);
+    expect(overdueReferenceDate(seeded(relative(-180)), { weddingDate: null, timeZone: "America/Costa_Rica" })).toBeNull();
+  });
+
+  it("never changes the item: the stored rule and the shown date stay the template's", () => {
+    const value = seeded(relative(-180));
+    const copy = structuredClone(value);
+    isOverdue(value, on(SEED_DAY));
+    expect(value).toEqual(copy);
   });
 });

@@ -173,6 +173,23 @@ on the server (`formatMoney`) before anything reaches a client component, adds t
 - Every row's href is `attentionPath` (collaborator setup → home, with copy saying only the organizer can define it).
   Money is formatted per currency on the server (`formatMoney`); no `bigint` reaches a client component.
 
+### 14. Batch 2 amendment (2026-10-17): seeded checklists don't start overdue
+
+Production smoke: a wedding seeded 119 days out opened with 20 of 38 items "Atrasado" (49 days: 26; 240 days: 9), and
+Mis bodas flagged every brand-new wedding. The template's offsets (e.g. "365 days before") predate the day the couple
+or planner started.
+
+**Rule:** for template-seeded checklist items, the derived due date used for overdue classification cannot precede the
+item's creation/seed date. No effective due date is persisted. `overdueReferenceDate(item, { weddingDate, timeZone })`
+(`@/lib/checklist/overdue`) = `max(effectiveDueDate, seed day)` when the item is a template copy
+(`seededAt` = its `created_at`, set only when `source_template_item_id` is not null) with relative timing; the seed day
+is the WEDDING-LOCAL date of `created_at` (`weddingLocalToday`, never UTC). `isOverdue` and the overview's
+`checklistOverview` (count and "desde el …" date) use it, so the wedding home and Mis bodas agree. Absolute dates
+(always explicit) and custom items keep their plain due date; completed items are never overdue; no time zone still
+means nothing is overdue. The template, its versions, `relative_days` and the displayed due date are unchanged; no
+migration (both columns already existed and are member-readable). Consequence, by design: an inherited item is
+protected on the seed day only; from the next day, if still pending, it is overdue, dated from the seed day.
+
 ## Consequences
 
 - Measured locally (WSL Docker, 50 weddings × 100 checklist items, 300 guests, 15 vendors with 5 items and 5

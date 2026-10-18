@@ -128,6 +128,10 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - Overdue = `pending` + effective due date strictly before the wedding-local today (`@/lib/weddings/timezone`
   `weddingLocalToday`, from one server clock read per request). Due today is not overdue; no time zone means
   nothing is overdue. Overdue is derived (`@/lib/checklist/overdue`), never a status or a stored column.
+- Batch 2 (ADR-018 §14): for template-seeded checklist items, the derived due date used for overdue classification
+  cannot precede the item's creation/seed date. No effective due date is persisted. `overdueReferenceDate` is the one
+  helper (wedding home and Mis bodas); `seededAt` = `created_at` of a template copy (`source_template_item_id`), the
+  seed day is wedding-local; relative timing only (absolute dates and custom items keep their plain date).
 - `weddings.city` is optional plain text (trimmed, blank = null); not a venue, address or geocode.
 - Removing a member deletes one `WeddingMembership` (owner-only, `removeWeddingMember`), never the auth user,
   their other memberships or checklist items. Assigned items become unassigned via the FK. The generic removal
@@ -940,4 +944,6 @@ BILLING-02 + MKT-7 (ADR-021 §15) make it promotion-ready: the frozen display pr
 `/app/billing`, pricing CTAs into the existing login → account type → billing flow, Stripe promotion codes on every
 Checkout, allowlisted planner trial campaigns, and zero-total (100% off) couple purchases (no migration, no new event,
 no gating).
+Launch remediation Batch 2 (ADR-018 §14): a template-seeded checklist item's overdue reference date can't precede its
+wedding-local seed day, so new weddings don't start "Atrasado" (derived only; no migration or template change).
 Don't implement ahead of the current prompt.

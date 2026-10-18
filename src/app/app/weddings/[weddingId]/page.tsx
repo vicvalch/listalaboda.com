@@ -145,6 +145,7 @@ export default async function WeddingPage({
         weddingId={wedding.id}
         weddingDate={wedding.weddingDate}
         today={today}
+        timeZone={wedding.timeZone}
         role={access.access.role}
         checklist={checklist}
         view={parseChecklistView(view)}

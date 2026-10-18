@@ -171,6 +171,8 @@ const server = createServer(async (req, res) => {
       payment_method_collection: params.payment_method_collection ?? null,
       trial_period_days: params.subscription_data?.trial_period_days ? Number(params.subscription_data.trial_period_days) : null,
       discounts: params.discounts ?? null,
+      // Batch 1: the fixed message shown above Checkout's pay button.
+      custom_text: params.custom_text ?? null,
       amount_total: null,
       subscriptionMetadata: params.subscription_data?.metadata ?? null,
       paymentIntentMetadata: params.payment_intent_data?.metadata ?? null,

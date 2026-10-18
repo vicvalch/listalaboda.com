@@ -2,19 +2,38 @@ import { headers } from "next/headers";
 import Link from "next/link";
 
 import { BrandMonogram, BrandSignature } from "@/components/brand/BrandLogo";
-import { secondaryButtonClass } from "@/components/ui/styles";
+import { secondaryButtonClass, textLinkClass } from "@/components/ui/styles";
+import type { AccountType } from "@/lib/accounts/account-type";
 import { requireAppEntry } from "@/lib/accounts/session";
 import { safeNextPath } from "@/lib/auth/redirect";
+import { loadBillingView } from "@/lib/billing/billing-page";
 import { BILLING_PATH } from "@/lib/billing/plans";
+import { isNeverCharged } from "@/lib/billing/presentation";
 import { isBillingAvailable } from "@/lib/billing/runtime";
 import { getMessages } from "@/lib/i18n";
 import { REQUEST_PATH_HEADER } from "@/lib/supabase/proxy";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { MY_WEDDINGS_LIST_PATH } from "@/lib/weddings/entry";
 
 import { logoutAction } from "./actions";
 
 // Everything under /app is per-user: never prerender or cache it.
 export const dynamic = "force-dynamic";
+
+/**
+ * Batch 1: the shell's one-line note for a typed account that has NEVER been
+ * charged (no gating: the product stays usable unpaid). Only once billing is
+ * configured, never on the billing pages themselves (they say it already),
+ * never for an untyped invited account (SIT-01), and hidden whenever the
+ * read fails: a database hiccup must never label a paying account unpaid.
+ * Reads the same two own-row queries as the billing page; never Stripe.
+ */
+async function unpaidNoteFor(userId: string, accountType: AccountType | null, requestedPath: string): Promise<string | null> {
+  if (accountType === null || !isBillingAvailable() || requestedPath.startsWith(BILLING_PATH)) return null;
+  const view = await loadBillingView(await createSupabaseServerClient(), userId, accountType, true);
+  if (!view || !isNeverCharged(view)) return null;
+  return getMessages().app.unpaidNote[accountType];
+}
 
 /**
  * Protected shell. Validates the user on every request (pages and actions
@@ -34,6 +53,7 @@ export default async function AppLayout({ children }: LayoutProps<"/app">) {
   const requestedPath = safeNextPath((await headers()).get(REQUEST_PATH_HEADER));
   const { user, accountType } = await requireAppEntry(requestedPath);
   const { app, common } = getMessages();
+  const unpaidNote = await unpaidNoteFor(user.id, accountType, requestedPath);
 
   return (
     <div className="flex flex-1 flex-col">
@@ -76,6 +96,16 @@ export default async function AppLayout({ children }: LayoutProps<"/app">) {
           </div>
         </div>
       </header>
+      {unpaidNote ? (
+        <div className="border-b border-border bg-accent-soft print:hidden" data-testid="unpaid-note">
+          <p className="mx-auto max-w-4xl px-4 py-2 text-sm">
+            {unpaidNote}{" "}
+            <Link href={BILLING_PATH} className={textLinkClass}>
+              {app.unpaidNote.link}
+            </Link>
+          </p>
+        </div>
+      ) : null}
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:py-12">{children}</main>
     </div>
   );

@@ -6,12 +6,12 @@
  */
 export const es = {
   metadata: {
-    title: "listalaboda.com",
+    title: "ListaLaBoda",
     description: "Organiza tu boda, un pendiente a la vez.",
   },
   /** Marketing pages (Marketing Landing V1): planner-first, tú, real product only, no claims. */
   marketing: {
-    brand: "listalaboda.com",
+    brand: "ListaLaBoda",
     skipToContent: "Saltar al contenido",
     nav: {
       label: "Navegación principal",
@@ -57,7 +57,7 @@ export const es = {
     /** MKT-2: `/planners`, the deeper page for wedding planners. Short copy: the real screens carry the story. */
     planners: {
       metadata: {
-        title: "Software para wedding planners · listalaboda.com",
+        title: "Software para wedding planners · ListaLaBoda",
         description:
           "Gestiona varias bodas, invitados, RSVP, mesas, proveedores, presupuesto, pagos, cronograma y sitios web desde un solo lugar.",
       },
@@ -71,14 +71,14 @@ export const es = {
         cardAlt:
           "La tarjeta de una de esas bodas, «Laura y Martín»: su fecha, su ciudad, los días que faltan, sus dos temas atrasados y el avance de pendientes, invitados y proveedores.",
         shotAlt:
-          "Pantalla «Mis bodas» de listalaboda.com con lo que necesita atención en varias bodas de ejemplo: cuotas vencidas, pendientes atrasados, cuotas próximas y personas sentadas que no asistirán.",
+          "Pantalla «Mis bodas» de ListaLaBoda con lo que necesita atención en varias bodas de ejemplo: cuotas vencidas, pendientes atrasados, cuotas próximas y personas sentadas que no asistirán.",
       },
       problem: {
         eyebrow: "El día a día de hoy",
         title: "Menos herramientas sueltas. Más claridad.",
         toolsLabel: "Dónde suele vivir hoy la información de una boda",
         tools: ["WhatsApp", "hojas de cálculo", "notas", "calendarios", "recordatorios", "memoria"],
-        body: "No falta esfuerzo: falta un lugar. listalaboda.com le da a cada boda uno solo.",
+        body: "No falta esfuerzo: falta un lugar. ListaLaBoda le da a cada boda uno solo.",
       },
       guestsSeating: {
         eyebrow: "Invitados, RSVP y mesas",
@@ -94,7 +94,7 @@ export const es = {
         eyebrow: "Proveedores, presupuesto y pagos",
         title: "Proveedores, presupuesto y pagos conectados.",
         body: "Lo contratado, sus cuotas y lo pagado, con lo vencido y lo próximo a la vista. Colones y dólares, siempre por separado.",
-        note: "listalaboda.com registra los pagos; no los procesa.",
+        note: "ListaLaBoda registra los pagos; no los procesa.",
         budgetAlt:
           "Presupuesto de una boda de ejemplo en colones: presupuesto total, contratado, pagado, pendiente, sin programar y disponible.",
         paymentsAlt:
@@ -134,7 +134,7 @@ export const es = {
       },
       pilot: {
         eyebrow: "Programa piloto",
-        title: "Prueba listalaboda.com en una operación real.",
+        title: "Prueba ListaLaBoda en una operación real.",
         body: "Estamos abriendo un programa piloto con wedding planners para entender qué flujos de trabajo aportan más en el día a día.",
         steps: ["Usas el producto actual con tus bodas.", "Conversamos sobre lo que te sirve y lo que no."],
         note: "Programa piloto con cupos limitados.",
@@ -143,7 +143,7 @@ export const es = {
         title: "Preguntas frecuentes",
         items: [
           {
-            question: "¿Para quién está pensado listalaboda.com?",
+            question: "¿Para quién está pensado ListaLaBoda?",
             answer:
               "Principalmente para wedding planners que llevan varias bodas a la vez. Las parejas que organizan su propia boda también pueden usarlo.",
           },
@@ -179,7 +179,7 @@ export const es = {
     /** MKT-3: `/parejas`, the page for couples organizing their own wedding. Warmer and shorter than /planners. */
     couples: {
       metadata: {
-        title: "Organiza tu boda en un solo lugar · listalaboda.com",
+        title: "Organiza tu boda en un solo lugar · ListaLaBoda",
         description:
           "Organiza invitados, RSVP, tareas, mesas, presupuesto, cronograma y el sitio de tu boda desde un solo lugar.",
       },
@@ -217,7 +217,7 @@ export const es = {
         eyebrow: "Presupuesto y cronograma",
         title: "Los números y el día, bajo control.",
         body: "Lo que planeas gastar, lo que contrataste y lo que ya pagaste, con las próximas cuotas a la vista. Y el día de la boda, hora por hora, listo para imprimir.",
-        note: "listalaboda.com registra los pagos; no los procesa.",
+        note: "ListaLaBoda registra los pagos; no los procesa.",
         budgetAlt:
           "Presupuesto de una boda de ejemplo en colones: presupuesto total, contratado, pagado, pendiente, sin programar y disponible.",
         timelineAlt:
@@ -252,7 +252,7 @@ export const es = {
         title: "Preguntas frecuentes",
         items: [
           {
-            question: "¿Necesito una wedding planner para usar listalaboda.com?",
+            question: "¿Necesito una wedding planner para usar ListaLaBoda?",
             answer:
               "No. Puedes organizar tu boda directamente. Si trabajas con una wedding planner, también puedes invitarla a tu boda para que colabore contigo.",
           },
@@ -347,10 +347,196 @@ export const es = {
       product: "Producto",
       account: "Cuenta",
       contact: "Contacto",
+      /** Batch 1: the legal pages (`LEGAL_LINKS`). */
+      legal: "Legal",
+    },
+  },
+  /**
+   * Batch 1: the legal pages (`/terminos`, `/privacidad`). Plain product
+   * policy for V1, PENDING LEGAL REVIEW before it is treated as final: no
+   * jurisdiction, governing law or liability clauses, no postal address.
+   * `{supportEmail}` = `SUPPORT_EMAIL`, `{plannerPrice}` / `{couplePrice}` =
+   * the display prices (`@/lib/billing/display-prices`); never typed here.
+   * Never "de por vida" or any equivalent promise for the couple access.
+   */
+  legal: {
+    links: {
+      terms: "Términos",
+      privacy: "Política de privacidad",
+      refunds: "Reembolsos y cancelaciones",
+    },
+    updated: "Última actualización: 17 de octubre de 2026",
+    terms: {
+      metadata: {
+        title: "Términos · ListaLaBoda",
+        description: "Las condiciones de uso de ListaLaBoda, sus planes, pagos, reembolsos y cancelaciones.",
+      },
+      title: "Términos",
+      intro: "Estas son las condiciones para usar ListaLaBoda. Las escribimos en lenguaje sencillo.",
+      sections: [
+        {
+          id: "quien-opera",
+          title: "Quién opera ListaLaBoda",
+          paragraphs: [
+            "listalaboda.com es operado por OnChainFest LLC.",
+            "En estos Términos, «ListaLaBoda» y «nosotros» se refieren al servicio de listalaboda.com. Para cualquier consulta, escríbenos a {supportEmail}.",
+          ],
+        },
+        {
+          id: "tu-cuenta",
+          title: "Tu cuenta",
+          paragraphs: [
+            "Para usar ListaLaBoda necesitas una cuenta con tu correo y una contraseña. Cuida tu contraseña: lo que se haga con tu cuenta es tu responsabilidad.",
+            "Cada cuenta es de un tipo, wedding planner o pareja. Lo eliges al entrar por primera vez y después no se puede cambiar.",
+          ],
+        },
+        {
+          id: "planes-y-precios",
+          title: "Planes y precios",
+          paragraphs: [
+            "Plan para wedding planners: suscripción mensual de {plannerPrice} por mes. Se renueva automáticamente cada mes, con el mismo método de pago, hasta que la canceles.",
+            "Acceso para tu boda (cuentas de pareja): pago único de {couplePrice}. El pago de Pareja es un pago único, sin suscripción ni cobros recurrentes. Da acceso a la cuenta de pareja para organizar una boda. Actualmente el acceso no tiene una fecha de vencimiento programada y permanece disponible mientras listalaboda.com continúe ofreciendo el servicio, sujeto a estos Términos.",
+            "Los precios son en dólares estadounidenses (USD). La página de pago de Stripe te muestra el monto exacto antes de que confirmes; tu banco puede aplicar su propio tipo de cambio o comisiones.",
+            "Si tienes un código promocional, lo aplicas en la página de pago de Stripe: el descuento que ves ahí antes de confirmar es el que se aplica.",
+            "Los pagos se procesan con Stripe. ListaLaBoda no guarda los datos de tu tarjeta.",
+          ],
+        },
+        {
+          id: "uso-sin-pago",
+          title: "Uso sin pago durante el lanzamiento",
+          paragraphs: [
+            "Durante esta etapa de lanzamiento puedes usar ListaLaBoda sin haber pagado. No hacemos ningún cobro automático: solo pagas si lo confirmas tú en Facturación.",
+            "No haber pagado no borra, por sí solo, la información que ya guardaste.",
+            "Si más adelante alguna función pasa a requerir pago, te avisaremos antes de que el cambio se aplique.",
+          ],
+        },
+        {
+          id: "reembolsos-y-cancelaciones",
+          title: "Reembolsos y cancelaciones",
+          paragraphs: [
+            "Suscripción de wedding planner: puedes cancelarla cuando quieras desde Facturación, en «Administrar suscripción». La cancelación detiene la próxima renovación; tu suscripción y tu acceso siguen activos hasta el final del período que ya pagaste. No prometemos reembolsos proporcionales por el resto del período en curso.",
+            "Pago único de pareja: no hay nada que cancelar, porque no hay cobros recurrentes.",
+            "Reembolsos: revisamos cada solicitud de forma manual, caso por caso. Escríbenos a {supportEmail} desde el correo de tu cuenta y cuéntanos el motivo. Si aprobamos un reembolso, lo procesamos en Stripe y te confirmamos por correo cómo queda tu acceso.",
+            "Nada en esta política limita los derechos que te correspondan de forma obligatoria según la ley aplicable.",
+          ],
+        },
+        {
+          id: "informacion-de-la-boda",
+          title: "La información de tu boda",
+          paragraphs: [
+            "Lo que guardas en una boda (pendientes, invitados, proveedores, presupuesto, mesas, cronograma y el contenido del sitio) lo ven solo las personas que forman parte de esa boda.",
+            "Si agregas datos de otras personas, como los nombres y correos de tus invitados o los contactos de tus proveedores, asegúrate de tener su permiso y úsalos solo para organizar la boda.",
+            "El sitio web de la boda es público solo cuando quien organiza la boda lo publica, y puede dejar de publicarlo cuando quiera. La Política de privacidad explica qué datos guardamos y cómo los usamos.",
+          ],
+        },
+        {
+          id: "uso-aceptable",
+          title: "Uso aceptable",
+          paragraphs: [
+            "No uses ListaLaBoda para enviar spam, hacerte pasar por otra persona, publicar contenido ilegal o intentar ver información que no te corresponde. Podemos suspender una cuenta que lo haga.",
+          ],
+        },
+        {
+          id: "el-servicio",
+          title: "El servicio",
+          paragraphs: [
+            "Trabajamos para que ListaLaBoda esté disponible y funcione bien, pero puede haber interrupciones o errores. Te recomendamos guardar aparte la información que no puedas perder.",
+          ],
+        },
+        {
+          id: "cambios",
+          title: "Cambios a estos Términos",
+          paragraphs: ["Si cambiamos estos Términos de forma importante, te avisaremos antes de que el cambio se aplique."],
+        },
+        {
+          id: "contacto",
+          title: "Contacto",
+          paragraphs: ["Escríbenos a {supportEmail}."],
+        },
+      ],
+    },
+    privacy: {
+      metadata: {
+        title: "Política de privacidad · ListaLaBoda",
+        description: "Qué información guarda ListaLaBoda, para qué la usa y quién la ve.",
+      },
+      title: "Política de privacidad",
+      intro: "Qué información guardamos, para qué la usamos y quién la ve.",
+      sections: [
+        {
+          id: "responsable",
+          title: "Quién es responsable",
+          paragraphs: [
+            "listalaboda.com es operado por OnChainFest LLC. Para cualquier pregunta sobre tus datos, escríbenos a {supportEmail}.",
+          ],
+        },
+        {
+          id: "que-guardamos",
+          title: "Qué información guardamos",
+          paragraphs: [
+            "Tu cuenta: tu correo, el tipo de cuenta que elegiste y tu contraseña, que nunca vemos ni guardamos en texto legible.",
+            "La información de cada boda: nombre, fecha y ciudad; pendientes; invitados y sus grupos, el correo de contacto opcional de cada grupo y sus respuestas de asistencia, incluidas las notas de comida; proveedores y sus datos de contacto; presupuesto y pagos registrados; mesas; cronograma; y el contenido del sitio web de la boda.",
+            "Facturación: los identificadores de cliente, suscripción y pago que nos da Stripe, y el estado de tu acceso. Nunca recibimos ni guardamos los datos de tu tarjeta.",
+            "Correos: cuando ListaLaBoda envía un correo (por ejemplo, una invitación o un recordatorio), guardamos a quién se envió, cuándo y si se entregó. No registramos si se abre ni en qué enlaces se hace clic.",
+          ],
+        },
+        {
+          id: "para-que",
+          title: "Para qué la usamos",
+          paragraphs: [
+            "Solo para que ListaLaBoda funcione: mostrarte tus bodas, enviar los correos que pides o activas, procesar pagos y darte soporte.",
+            "No vendemos tus datos ni los de tus invitados, y no los usamos para publicidad.",
+          ],
+        },
+        {
+          id: "quien-la-ve",
+          title: "Quién la ve",
+          paragraphs: [
+            "La información de una boda la ven solo las personas que forman parte de esa boda.",
+            "Cada grupo de invitados ve solo su propia invitación, con su enlace personal y sin crear una cuenta.",
+            "El sitio web de la boda es público solo cuando quien organiza la boda lo publica.",
+          ],
+        },
+        {
+          id: "servicios",
+          title: "Servicios que usamos",
+          paragraphs: [
+            "Supabase (base de datos y cuentas), Vercel (alojamiento de la aplicación), Resend (envío de correos) y Stripe (pagos). Cada uno trata los datos solo para prestarnos su servicio.",
+          ],
+        },
+        {
+          id: "cookies",
+          title: "Cookies",
+          paragraphs: [
+            "Usamos solo las cookies necesarias para mantener tu sesión iniciada y completar algunos pasos, como aceptar una invitación o restablecer tu contraseña. No usamos cookies de analítica ni de publicidad.",
+          ],
+        },
+        {
+          id: "datos-de-invitados",
+          title: "Datos de tus invitados",
+          paragraphs: [
+            "Quien organiza una boda decide qué datos de sus invitados agrega y es responsable de tener su permiso.",
+            "Si eres invitado y quieres que se corrijan o eliminen tus datos, pídeselo a quien organiza la boda o escríbenos a {supportEmail}.",
+          ],
+        },
+        {
+          id: "acceso-y-eliminacion",
+          title: "Acceso y eliminación",
+          paragraphs: [
+            "Puedes pedirnos una copia, una corrección o la eliminación de tu cuenta y de tus datos escribiendo a {supportEmail} desde el correo de tu cuenta. Por ahora estas solicitudes se atienden por correo: la aplicación todavía no tiene una opción para que elimines tu cuenta directamente.",
+            "No haber pagado no borra, por sí solo, la información que ya guardaste.",
+          ],
+        },
+        {
+          id: "cambios",
+          title: "Cambios a esta política",
+          paragraphs: ["Si cambiamos esta política de forma importante, te avisaremos antes de que el cambio se aplique."],
+        },
+      ],
     },
   },
   common: {
-    brand: "listalaboda.com",
+    brand: "ListaLaBoda",
     goHome: "Ir al inicio",
     goToMyWeddings: "Ir a mis bodas",
     login: "Entrar",
@@ -391,6 +577,12 @@ export const es = {
       checkEmailBody:
         "Si el correo es válido, te enviamos un enlace para confirmar tu cuenta. Ábrelo desde este mismo navegador para continuar.",
       weakPassword: "Elige una contraseña más segura.",
+      /** Batch 1: "Al crear tu cuenta aceptas los Términos y la Política de privacidad." with both linked. */
+      legalConsent: {
+        before: "Al crear tu cuenta aceptas los ",
+        between: " y la ",
+        after: ".",
+      },
     },
     /** AUTH-RECOVERY-01: never says whether an account exists. */
     forgotPassword: {
@@ -473,8 +665,29 @@ export const es = {
     priceNote: "Verás el precio exacto en la página de pago segura de Stripe antes de confirmar.",
     /** BILLING-02: promotion codes are typed in Stripe Checkout; the app never takes one. */
     promoNote: "¿Tienes un código promocional? Podrás aplicarlo en la página de pago.",
-    processorNote: "Los pagos se procesan con Stripe. listalaboda.com no guarda los datos de tu tarjeta.",
+    processorNote: "Los pagos se procesan con Stripe. ListaLaBoda no guarda los datos de tu tarjeta.",
     statusLabel: "Estado",
+    /** Batch 1: next to every pay button; "Términos", the refund section and the privacy policy are linked. */
+    legalConsent: {
+      before: "Al pagar aceptas los ",
+      refundsBefore: " (incluyen ",
+      refunds: "reembolsos y cancelaciones",
+      privacyBefore: ") y la ",
+      after: ".",
+    },
+    /** Batch 1: no plan or payment while payments aren't configured (no button to name). */
+    noneUnavailableBody: "No tienes un plan ni un pago activo en esta cuenta.",
+    /** Batch 1: shown only to an account that was never charged (never a lapsed or pending one). */
+    unpaidDataNote: "No haber pagado no borra, por sí solo, lo que ya guardaste.",
+    /**
+     * Batch 1: Stripe Checkout's message above the pay button (`custom_text.submit`),
+     * fixed per account type. Never a price, amount or currency (ADR-021 §15).
+     */
+    checkoutMessage: {
+      planner:
+        "Suscripción mensual con renovación automática. Puedes cancelarla desde Facturación; sigue activa hasta el final del período pagado.",
+      couple: "Pago único para organizar tu boda en ListaLaBoda. Sin suscripción ni cobros mensuales.",
+    },
     planner: {
       planName: "Plan para wedding planners",
       cadence: "Suscripción mensual",
@@ -497,7 +710,12 @@ export const es = {
       endsOn: "Termina el {date} y no se renovará.",
       problemBody:
         "Hay un problema con el pago de tu suscripción. Revisa tu método de pago en «Administrar suscripción».",
-      noneBody: "Todavía no tienes una suscripción activa.",
+      /** Batch 1: never subscribed, so never charged. */
+      noneBody:
+        "Todavía no tienes una suscripción y no se te ha cobrado nada. Durante esta etapa de lanzamiento puedes usar ListaLaBoda sin suscribirte; la suscripción solo empieza si la confirmas aquí con «Suscribirme».",
+      /** Batch 1: a subscription existed before (canceled, expired): no "never charged" claim. */
+      noneBodyPrevious:
+        "No tienes una suscripción activa. No se hará ningún cobro nuevo a menos que vuelvas a suscribirte aquí con «Suscribirme».",
       subscribe: "Suscribirme",
       subscribing: "Abriendo el pago…",
       manage: "Administrar suscripción",
@@ -516,7 +734,9 @@ export const es = {
       activeBody: "Tu acceso está activado.",
       paidOn: "Pago confirmado el {date}.",
       pendingBody: "Estamos confirmando tu pago. Según el método de pago, puede tardar un poco; no hace falta pagar otra vez.",
-      noneBody: "Todavía no has hecho el pago único.",
+      /** Batch 1: no paid or pending purchase, so never charged. */
+      noneBody:
+        "Todavía no has pagado el acceso y no se te ha cobrado nada. Durante esta etapa de lanzamiento puedes organizar tu boda sin pagar; el pago único solo se hace si lo confirmas aquí con «Pagar el acceso». No hay cobros automáticos.",
       buy: "Pagar el acceso",
       buying: "Abriendo el pago…",
     },
@@ -553,6 +773,12 @@ export const es = {
       billing: "Facturación",
       signedInAs: "Sesión iniciada como",
       logout: "Cerrar sesión",
+    },
+    /** Batch 1: the shell's one-line note for an account that was never charged (no gating). */
+    unpaidNote: {
+      planner: "Estás usando ListaLaBoda sin suscripción: no se te ha cobrado nada.",
+      couple: "Estás usando ListaLaBoda sin haber pagado el acceso: no se te ha cobrado nada.",
+      link: "Ver Facturación",
     },
     weddings: {
       title: "Mis bodas",
@@ -2125,7 +2351,7 @@ export const es = {
     personalNote: "Este enlace es solo para esta invitación. Por favor, no lo compartas con otras personas.",
     siteIntro: "Más información sobre la boda:",
     siteLink: "Ver sitio de la boda",
-    footer: "Te escribimos desde listalaboda.com a pedido de quienes organizan {wedding}.",
+    footer: "Te escribimos desde ListaLaBoda a pedido de quienes organizan {wedding}.",
   },
   rsvpConfirmationEmail: {
     subject: "Confirmación de asistencia — {wedding}",
@@ -2140,7 +2366,7 @@ export const es = {
       "Si necesitas cambiarla, abre el enlace personal que recibiste con tu invitación. Por seguridad, este correo no lo incluye.",
     siteIntro: "Más información sobre la boda:",
     siteLink: "Ver sitio de la boda",
-    footer: "Te escribimos desde listalaboda.com porque se guardó una respuesta para tu invitación a {wedding}.",
+    footer: "Te escribimos desde ListaLaBoda porque se guardó una respuesta para tu invitación a {wedding}.",
   },
   rsvpReminderEmail: {
     subject: "Recordatorio de confirmación — {wedding}",
@@ -2158,7 +2384,7 @@ export const es = {
     siteIntro: "Más información sobre la boda:",
     siteLink: "Ver sitio de la boda",
     thanks: "Muchas gracias.",
-    footer: "Te escribimos desde listalaboda.com a pedido de quienes organizan {wedding}.",
+    footer: "Te escribimos desde ListaLaBoda a pedido de quienes organizan {wedding}.",
   },
   rsvpReminderMessage: {
     greeting: "Hola, {party}:",

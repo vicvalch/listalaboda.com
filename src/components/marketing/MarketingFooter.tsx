@@ -4,11 +4,12 @@ import { BrandSignature } from "@/components/brand/BrandLogo";
 import { containerClass } from "@/components/marketing/classes";
 import { textLinkClass } from "@/components/ui/styles";
 import { getMessages } from "@/lib/i18n";
+import { LEGAL_LINKS } from "@/lib/legal/links";
 import { MARKETING_CONTACT_EMAIL, MARKETING_LINKS } from "@/lib/marketing/links";
 
-/** The marketing footer (Marketing Landing V1): only destinations that exist today. */
+/** The marketing footer (Marketing Landing V1): only destinations that exist today, plus the legal pages (Batch 1). */
 export function MarketingFooter() {
-  const { marketing } = getMessages();
+  const { marketing, legal } = getMessages();
   const groups = [
     {
       title: marketing.footer.product,
@@ -19,10 +20,18 @@ export function MarketingFooter() {
       ],
     },
     { title: marketing.footer.account, links: [{ href: MARKETING_LINKS.LOGIN, label: marketing.nav.login }] },
+    {
+      title: marketing.footer.legal,
+      links: [
+        { href: LEGAL_LINKS.TERMS, label: legal.links.terms },
+        { href: LEGAL_LINKS.REFUNDS, label: legal.links.refunds },
+        { href: LEGAL_LINKS.PRIVACY, label: legal.links.privacy },
+      ],
+    },
   ];
   return (
     <footer className="border-t border-border">
-      <div className={`${containerClass} grid gap-10 py-12 sm:grid-cols-[1.5fr_1fr_1fr_1.4fr]`}>
+      <div className={`${containerClass} grid gap-10 py-12 sm:grid-cols-3 lg:grid-cols-[1.4fr_1fr_1fr_1.2fr_1.4fr]`}>
         <div className="space-y-2">
           <p>
             <BrandSignature alt={marketing.brand} className="h-11" />

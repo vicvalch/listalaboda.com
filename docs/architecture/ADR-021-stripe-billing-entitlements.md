@@ -263,6 +263,41 @@ link keeps `next`; untyped → the account-type choice, then billing. Never a di
 plan or type in the URL: the account type is still chosen explicitly (ADR-020), so a person arriving from `/parejas`
 who chooses planner sees the planner plan.
 
+### 16. Launch remediation Batch 1 amendment (2026-10-17): unpaid state, legal surface, Checkout text
+
+**Unpaid access (product decision).** During the launch phase ListaLaBoda stays broadly usable without payment. Nothing
+is gated (§11 stays a proposal). What changes is that unpaid accounts are told so, truthfully:
+
+- "Never charged" is derived from the database view only (`isNeverCharged`, `@/lib/billing/presentation`): a planner
+  with no subscription row ever, a couple with no paid or pending purchase. A former subscriber gets a different body
+  (`noneBodyPrevious`) and never "no se te ha cobrado nada".
+- `/app/billing` says nothing was charged, that payment only happens deliberately through Facturación, and that not
+  paying doesn't by itself delete saved data. Planner and couple wording differ.
+- The `/app` shell shows a one-line note with a link to Facturación for a never-charged typed account while billing is
+  configured. It reads the same two own-row queries as the billing page (`loadBillingView`), never Stripe. It is
+  hidden on the billing pages, for untyped invited accounts (SIT-01) and **whenever the read fails** (fail open: a
+  database hiccup must never label a paying account unpaid). An entitlement-only read was rejected: it can't tell a
+  never-charged account from a lapsed or pending one.
+
+**Legal surface.** `/terminos` (with the directly linkable `#reembolsos-y-cancelaciones` section) and `/privacidad` are
+static marketing pages (`es.legal`, rendered as text by `LegalDocument`, `noindex` like the others). They name the
+operator ("listalaboda.com es operado por OnChainFest LLC."), state the planner subscription ($99 USD per month,
+automatic renewal, cancellation stops renewal and access stays until the end of the paid period, no prorated refund
+promised) and the couple payment ($149 USD one-time; access with no scheduled end date while the service is offered,
+never a lifetime promise), quoting `displayPrice()`, never a literal. Refunds are reviewed manually, case by case, by
+email (§9 unchanged: no automatic revocation or retention is promised), with a mandatory-rights clause. No jurisdiction,
+governing law, liability or postal address in V1. **The text is V1 product policy pending legal review.** Links:
+marketing footer, signup (consent sentence) and `/app/billing` (consent next to every pay button, links always).
+Support and contact = `SUPPORT_EMAIL` (`soporte@listalaboda.com`, `@/lib/legal/links`), which `MARKETING_CONTACT_EMAIL`
+now reuses.
+
+**Checkout text.** Every Checkout Session sends a fixed `custom_text.submit.message` per account type
+(`es.billing.checkoutMessage`): what is being bought, in words. It never carries a price, amount or currency (the
+display prices are never sent to Stripe). Price, mode, entitlement and the webhook are unchanged. Product names and
+descriptions, the public business name, statement descriptor, presentment currency and the Customer Portal's
+cancellation mode are Stripe Dashboard settings, not repository state
+([BILLING-STRIPE-DASHBOARD.md](../operations/BILLING-STRIPE-DASHBOARD.md)).
+
 ## Consequences
 
 - Paid state can only be written by Stripe-signed events (and the customer mapping by the app's own Stripe result).

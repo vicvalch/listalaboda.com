@@ -29,6 +29,8 @@ export type StandInSession = {
   payment_method_collection: string | null;
   trial_period_days: number | null;
   discounts: unknown;
+  /** Batch 1: `{ submit: { message } }` as received, or null when not sent. */
+  custom_text: { submit?: { message?: string } } | null;
   amount_total: number | null;
   payment_intent: string | null;
   subscriptionMetadata: Record<string, string> | null;

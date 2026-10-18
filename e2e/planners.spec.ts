@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { LEGAL_LINKS } from "../src/lib/legal/links";
 import { MARKETING_LINKS } from "../src/lib/marketing/links";
 import { WEDDING_SITE_THEME_KEYS } from "../src/lib/wedding-site/design/themes";
 import { es } from "./support/flows";
@@ -45,7 +46,7 @@ test.describe("marketing /planners", () => {
 
     // Every link is a known destination: never self-signup.
     const hrefs = await page.locator("a[href]").evaluateAll((anchors) => anchors.map((a) => a.getAttribute("href") ?? ""));
-    const known = new Set<string>(["/", "#contenido", ...Object.values(MARKETING_LINKS)]);
+    const known = new Set<string>(["/", "#contenido", ...Object.values(MARKETING_LINKS), LEGAL_LINKS.TERMS, LEGAL_LINKS.REFUNDS, LEGAL_LINKS.PRIVACY]);
     expect(hrefs.filter((href) => !known.has(href))).toEqual([]);
 
     // The five themes, named in text; renders hidden from assistive technology.

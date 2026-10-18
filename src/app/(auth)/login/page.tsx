@@ -30,6 +30,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
       {params.error === "callback" ? (
         <Notice tone="error">{auth.login.callbackFailed}</Notice>
       ) : null}
+      {params.error === "confirm" ? <Notice tone="info">{auth.login.confirmLinkInvalid}</Notice> : null}
       <LoginForm next={next} />
       <p className="text-sm">
         {auth.login.noAccount}{" "}

@@ -2,9 +2,13 @@
 
 import { useActionState } from "react";
 
+import Link from "next/link";
+
 import { FormField } from "@/components/ui/FormField";
 import { Notice } from "@/components/ui/Notice";
 import { SubmitButton } from "@/components/ui/SubmitButton";
+import { textLinkClass } from "@/components/ui/styles";
+import { loginPath } from "@/lib/auth/redirect";
 import { getMessages } from "@/lib/i18n";
 
 import { signupAction, type SignupState } from "../actions";
@@ -15,11 +19,22 @@ export function SignupForm({ next }: { next: string }) {
 
   if (state?.ok) {
     return (
-      <section aria-labelledby="signup-check-email" className="space-y-2" role="status">
+      <section aria-labelledby="signup-check-email" className="space-y-3" role="status">
         <h2 id="signup-check-email" className="text-lg font-semibold">
           {auth.signup.checkEmailTitle}
         </h2>
         <p>{auth.signup.checkEmailBody}</p>
+        <ul className="text-muted list-disc space-y-1 pl-5 text-sm">
+          {auth.signup.checkEmailHints.map((hint) => (
+            <li key={hint}>{hint}</li>
+          ))}
+        </ul>
+        <p className="text-sm">
+          {auth.signup.checkEmailHaveAccount}{" "}
+          <Link href={loginPath(next)} className={textLinkClass}>
+            {auth.signup.checkEmailLogin}
+          </Link>
+        </p>
       </section>
     );
   }

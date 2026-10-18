@@ -252,6 +252,16 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
+# Batch 3: scanner-safe, cross-device signup confirmation. The email links to the app's /auth/confirm/prepare
+# with {{ .TokenHash }} (never {{ .ConfirmationURL }}, which a scanner's GET would consume and whose PKCE exchange
+# only works in the signup browser) and passes {{ .RedirectTo }} back so the continuation survives. The token is
+# verified only when the person presses "Confirmar mi cuenta". Local sign-ups auto-confirm (enable_confirmations
+# above), so E2E sends this email with `resend`. Production: Supabase dashboard → Authentication → Email Templates
+# → Confirm signup, set as a separate step (docs/operations/AUTH-EMAIL-TEMPLATES.md).
+[auth.email.template.confirmation]
+subject = "Confirma tu cuenta | ListaLaBoda"
+content_path = "./supabase/templates/confirmation.html"
+
 # AUTH-RECOVERY-02: scanner-safe recovery. The email links to the app's /auth/recovery/prepare with
 # {{ .TokenHash }} (never {{ .ConfirmationURL }}, which a link scanner's GET would consume); the
 # token is verified only when the person presses "Continuar". Production uses the same template

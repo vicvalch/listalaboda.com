@@ -562,8 +562,13 @@ export const es = {
       noAccount: "¿Aún no tienes cuenta?",
       createAccount: "Crea una aquí",
       invalidCredentials: "El correo o la contraseña no son correctos.",
-      emailNotConfirmed: "Confirma tu correo antes de entrar. Revisa tu bandeja de entrada.",
-      callbackFailed: "No pudimos completar el acceso. Vuelve a entrar.",
+      emailNotConfirmed:
+        "Confirma tu correo antes de entrar. Busca el correo de ListaLaBoda (revisa también spam) y usa el enlace del más reciente.",
+      callbackFailed:
+        "No pudimos completar el acceso con ese enlace. Si ya confirmaste tu correo, entra con tu correo y contraseña.",
+      /** Batch 3: a used, replaced or expired confirmation link; the same words whatever the account's state. */
+      confirmLinkInvalid:
+        "Este enlace de confirmación ya se usó o ya no es válido. Si ya confirmaste tu cuenta, entra con tu correo y contraseña. Si no, crea tu cuenta de nuevo para recibir un enlace nuevo.",
       forgotPassword: "Olvidé mi contraseña",
     },
     signup: {
@@ -575,7 +580,16 @@ export const es = {
       goToLogin: "Entra aquí",
       checkEmailTitle: "Revisa tu correo",
       checkEmailBody:
-        "Si el correo es válido, te enviamos un enlace para confirmar tu cuenta. Ábrelo desde este mismo navegador para continuar.",
+        "Si el correo es válido, te enviamos un enlace para confirmar tu cuenta. Puedes abrirlo en este u otro dispositivo.",
+      /** Batch 3: the same hints for every address (no account enumeration). */
+      checkEmailHints: [
+        "Si no llega en unos minutos, revisa la carpeta de spam.",
+        "Si pediste más de un correo, usa el enlace del más reciente: los anteriores dejan de funcionar.",
+      ],
+      checkEmailHaveAccount: "¿Ya confirmaste tu cuenta?",
+      checkEmailLogin: "Entra aquí",
+      rateLimited:
+        "Hiciste demasiados intentos seguidos. Espera unos minutos antes de volver a intentarlo. Si ya pediste un correo de confirmación, revisa tu bandeja de entrada (y spam) y usa el enlace del más reciente.",
       weakPassword: "Elige una contraseña más segura.",
       /** Batch 1: "Al crear tu cuenta aceptas los Términos y la Política de privacidad." with both linked. */
       legalConsent: {
@@ -621,6 +635,22 @@ export const es = {
       unavailableTitle: "Este enlace ya no está disponible",
       unavailableBody: "Solicita un nuevo enlace para restablecer tu contraseña.",
       retry: "No pudimos verificar el enlace en este momento. Vuelve a intentarlo.",
+    },
+    /** Batch 3: signup email confirmation (scanner-safe, any device). */
+    signupConfirm: {
+      title: "Confirma tu cuenta",
+      body: "Por seguridad, abrir el enlace del correo no realiza ningún cambio. Pulsa el botón para confirmar tu cuenta y continuar.",
+      submit: "Confirmar mi cuenta",
+      submitting: "Confirmando…",
+      retry: "No pudimos confirmar tu cuenta en este momento. Vuelve a intentarlo.",
+      unavailableTitle: "Este enlace ya no está disponible",
+      unavailableBody:
+        "Si ya confirmaste tu cuenta, entra con tu correo y contraseña. Si no, crea tu cuenta de nuevo para recibir un enlace nuevo.",
+      login: "Entrar",
+      signup: "Crear cuenta",
+      doneTitle: "Tu cuenta ya está confirmada",
+      doneBody: "Ya iniciaste sesión. Puedes continuar.",
+      continue: "Continuar",
     },
     invitePending:
       "Te invitaron a una boda. Entra o crea tu cuenta y te llevaremos directo a ella.",

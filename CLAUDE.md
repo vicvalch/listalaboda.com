@@ -782,7 +782,8 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   input; token from the cookie, type fixed) calls `verifyOtp`, once; the cookie is cleared on success and on a definitive
   refusal (→ `/forgot-password?error=link`), kept on a limit/our failure. Never log the token or the link.
 - The token hash needs no PKCE verifier: the link works in any browser or device (intentional).
-- `/auth/callback` stays for signup confirmation and links sent with the previous template (PKCE `{{ .ConfirmationURL }}`).
+- `/auth/callback` stays for links sent with the previous templates (PKCE `{{ .ConfirmationURL }}`); signup
+  confirmation moved to `/auth/confirm` in Batch 3 (below).
 - `/forgot-password` never reveals whether an account exists: success, unknown addresses and every account-dependent
   Auth outcome (resend interval, email-send limit, mailer failure, thrown errors) get the same "Si existe una cuenta…"
   answer (`normalizePasswordResetRequestError`). Only `over_request_rate_limit` (per client, before any lookup) and a
@@ -800,6 +801,33 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   allow-list includes `https://listalaboda.com/auth/callback**`, Auth email via Supabase Custom SMTP on Resend (sender
   `cuenta@listalaboda.com`, verified domain). The Reset Password template is a project setting: switched only as an
   explicit, approved step, after confirming Resend click tracking / link rewriting is off.
+
+## Signup confirmation (Batch 3, the AUTH-RECOVERY-02 pattern)
+
+- Supabase Auth's own confirmation only: `signUp` (`emailRedirectTo` = `signupRedirectUrl(APP_ORIGIN, next)`, i.e.
+  `/auth/callback?next=…`, never request headers) → the "Confirm signup" email links to
+  `{{ .SiteURL }}/auth/confirm/prepare?token_hash={{ .TokenHash }}&redirect_to={{ .RedirectTo }}`
+  (`supabase/templates/confirmation.html`, never `{{ .ConfirmationURL }}`) → `/auth/confirm` → explicit "Confirmar mi
+  cuenta" → `verifyOtp({ token_hash, type: "email" })` → `next`. Pure rules in `@/lib/auth/signup-confirmation`.
+- GET NEVER CONSUMES THE TOKEN: `/auth/confirm/prepare` only checks the shape, moves it into the httpOnly
+  `lb_signup_token` cookie (`@/lib/auth/signup-confirmation-handoff`: SameSite=Lax, Secure in production, path
+  `/auth/confirm`, 15 min) and 303s to `/auth/confirm?next=…` (`no-store`, `no-referrer`); no Auth call. The page
+  renders no token. Only `confirmSignupAction` (token from the cookie, type fixed; the form carries only `next`,
+  re-validated) calls `verifyOtp`, once; cleared on success and on a definitive refusal, kept on a limit/our failure.
+- The continuation comes back only through `continuationFromRedirectTo`: the `/auth/callback` `next` inside
+  `redirect_to`, through `safeNextPath`; never an origin; anything else (incl. Supabase's Site URL fallback) = `/app`.
+  The `/app` guard and `/invite/continue` then decide (account-type choice, SIT-01). The invite itself stays in its
+  own browser's handoff cookie: confirm elsewhere = reopen the invite link there.
+- Cross-device by design (a token hash needs no PKCE verifier). Opening the link any number of times changes nothing.
+- No enumeration: a used, replaced (a retried sign-up issues a new token), expired or unknown link →
+  `/login?error=confirm` with one calm notice ("si ya confirmaste, entra…; si no, crea tu cuenta de nuevo"); a
+  signed-in person there just continues. No token + signed in on `/auth/confirm` = "Tu cuenta ya está confirmada".
+  `signUp`'s `over_email_send_rate_limit` (per-address resend interval) is the neutral "Revisa tu correo" like an
+  existing address; only `over_request_rate_limit` (per client, before any lookup) says to wait. The check-email
+  answer works on any device and says to use the newest email; never "same browser".
+- Local sign-ups auto-confirm (`enable_confirmations = false`, the journeys rely on it): E2E sends the real template
+  with Auth's `resend` for a locally admin-created unconfirmed account (`e2e/support/signup-confirmation.ts`).
+- Production templates and subjects are Dashboard settings: `docs/operations/AUTH-EMAIL-TEMPLATES.md` (manual).
 
 ## Billing (BILLING-01, ADR-021)
 
@@ -971,4 +999,7 @@ message per plan (no gating, no migration, no billing-logic change; Stripe Dashb
 Launch remediation Batch 2/2b (ADR-018 §14): template items already past on their wedding-local seed day get a 14-day
 catch-up grace before counting as overdue, so new weddings don't start "Atrasado" (derived only; no migration or
 template change).
+Launch remediation Batch 3: scanner-safe, cross-device signup confirmation (Spanish template linking to
+`/auth/confirm/prepare`, an explicit "Confirmar mi cuenta" `verifyOtp`, calm used-link login guidance, neutral resend
+limit; Dashboard template/subject changes are a manual checklist; no migration).
 Don't implement ahead of the current prompt.

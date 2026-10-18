@@ -43,19 +43,28 @@ export async function countEmailsTo(address: string): Promise<number> {
   return (await messagesTo(address)).length;
 }
 
-/** The newest email to `address` (waits for it), as plain text. */
-export async function latestEmailTextTo(address: string): Promise<string> {
+/**
+ * The newest email to `address`, waiting until at least `count` arrived: its
+ * subject and its body as plain text (text + HTML parts).
+ */
+export async function latestEmailTo(address: string, count = 1): Promise<{ subject: string; text: string }> {
   let id: string | undefined;
   await expect
     .poll(async () => {
-      id = (await messagesTo(address))[0]?.ID;
+      const messages = await messagesTo(address);
+      id = messages.length >= count ? messages[0]?.ID : undefined;
       return id !== undefined;
     }, { timeout: 15_000 })
     .toBe(true);
   const response = await fetch(`${mailpitUrl()}/api/v1/message/${id}`);
   if (!response.ok) throw new Error(`Mailpit message read failed: ${response.status}`);
-  const body = (await response.json()) as { Text?: string; HTML?: string };
-  return `${body.Text ?? ""}\n${body.HTML ?? ""}`;
+  const body = (await response.json()) as { Subject?: string; Text?: string; HTML?: string };
+  return { subject: body.Subject ?? "", text: `${body.Text ?? ""}\n${body.HTML ?? ""}` };
+}
+
+/** The newest email to `address` (waits for it), as plain text. */
+export async function latestEmailTextTo(address: string): Promise<string> {
+  return (await latestEmailTo(address)).text;
 }
 
 /**
@@ -65,5 +74,15 @@ export async function latestEmailTextTo(address: string): Promise<string> {
 export function recoveryLinkIn(text: string): URL {
   const match = /https?:\/\/[^\s"'<>]+\/auth\/recovery\/prepare\?[^\s"'<>]+/.exec(text);
   if (!match) throw new Error("No recovery link in the email.");
+  return new URL(match[0].replace(/&amp;/g, "&"));
+}
+
+/**
+ * The scanner-safe signup confirmation link inside a "Confirm signup" email
+ * (Batch 3: the app's /auth/confirm/prepare with Supabase's token hash).
+ */
+export function signupConfirmationLinkIn(text: string): URL {
+  const match = /https?:\/\/[^\s"'<>]+\/auth\/confirm\/prepare\?[^\s"'<>]+/.exec(text);
+  if (!match) throw new Error("No signup confirmation link in the email.");
   return new URL(match[0].replace(/&amp;/g, "&"));
 }

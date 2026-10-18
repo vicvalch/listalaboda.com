@@ -7,8 +7,10 @@
  * pilot, each with its own subject line.
  */
 
-/** The contact address shown and mailed from the marketing pages. */
-export const MARKETING_CONTACT_EMAIL = "vicvalch@onchainfest.xyz";
+import { SUPPORT_EMAIL } from "@/lib/legal/links";
+
+/** The contact address shown and mailed from the marketing pages: the support address (Batch 1). */
+export const MARKETING_CONTACT_EMAIL = SUPPORT_EMAIL;
 
 function mailto(subject: string): string {
   return `mailto:${MARKETING_CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}`;

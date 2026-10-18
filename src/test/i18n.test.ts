@@ -16,8 +16,8 @@ describe("i18n foundation", () => {
 
   it("serves the marketing copy from the Spanish catalog", () => {
     const { marketing } = getMessages();
-    expect(marketing.brand).toBe("listalaboda.com");
-    expect(marketing.planners.metadata.title).toBe("Software para wedding planners · listalaboda.com");
+    expect(marketing.brand).toBe("ListaLaBoda");
+    expect(marketing.planners.metadata.title).toBe("Software para wedding planners · ListaLaBoda");
     expect(marketing.howItWorks.eyebrow).toBe("Cómo funciona");
   });
 

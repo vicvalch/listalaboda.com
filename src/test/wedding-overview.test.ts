@@ -765,7 +765,7 @@ describe("one request clock, each wedding's own time zone", () => {
 
 // ------------------------------------------------- Batch 2: seeded weddings
 
-describe("newly seeded weddings don't start overdue (Batch 2)", () => {
+describe("newly seeded weddings don't start overdue (Batch 2/2b: 14-day catch-up grace)", () => {
   // The shipped template's offsets (es v1: 38 items, one without a date).
   const TEMPLATE_OFFSETS = [
     -365, -360, -350, null, -330, -300, -300, -180, -270, -250, -240, -240, -150, -90, -60, -240, -120, -90, -60, -240,
@@ -798,15 +798,29 @@ describe("newly seeded weddings don't start overdue (Batch 2)", () => {
     expect(kinds(result.attention).filter((id) => id.endsWith(":checklist_overdue"))).toEqual([]);
   });
 
-  it("the next day, still-pending inherited items are overdue, dated from the seed day", () => {
-    const result = buildWeddingsOverview(fresh, new Date(NOW.getTime() + DAY));
+  const after = (days: number) => buildWeddingsOverview(fresh, new Date(NOW.getTime() + days * DAY));
+  const overdueAttention = (result: ReturnType<typeof buildWeddingsOverview>) =>
+    kinds(result.attention).filter((id) => id.endsWith(":checklist_overdue"));
+
+  it("during the 14-day grace no inherited past-offset item counts (only the 240-day wedding's four items due ON the seed day)", () => {
+    for (const day of [1, 7, 14]) {
+      const [a, b, c] = after(day).weddings;
+      expect(a.checklist, `day ${day}`).toMatchObject(ok({ overdueCount: 0, oldestOverdueOn: null }));
+      expect(b.checklist, `day ${day}`).toMatchObject(ok({ overdueCount: 0, oldestOverdueOn: null }));
+      // Not inherited-past: the four "-240" items were due exactly on the seed day, so their own date applies.
+      expect(c.checklist, `day ${day}`).toMatchObject(ok({ overdueCount: 4, oldestOverdueOn: "2026-10-10" }));
+    }
+    expect(overdueAttention(after(14))).toEqual([`${C}:checklist_overdue`]);
+  });
+
+  it("after the grace (day 15) still-pending inherited items are overdue, dated from the end of the grace", () => {
+    const result = after(15);
     const [a, b, c] = result.weddings;
-    // Inherited items due on or before the seed day (2026-10-10); the raw-date
-    // counts (26 / 20 / 9) are what the production smoke saw on the seed day itself.
-    expect(a.checklist).toMatchObject(ok({ overdueCount: 26, oldestOverdueOn: "2026-10-10" }));
-    expect(b.checklist).toMatchObject(ok({ overdueCount: 20, oldestOverdueOn: "2026-10-10" }));
-    // 240 days: those 9, plus the four "-240" items that were due exactly on the seed day.
+    // The inherited counts are what the production smoke saw on the seed day (26 / 20 / 9).
+    expect(a.checklist).toMatchObject(ok({ overdueCount: 26, oldestOverdueOn: "2026-10-24" }));
+    expect(b.checklist).toMatchObject(ok({ overdueCount: 20, oldestOverdueOn: "2026-10-24" }));
     expect(c.checklist).toMatchObject(ok({ overdueCount: 13, oldestOverdueOn: "2026-10-10" }));
+    expect(overdueAttention(result)).toHaveLength(3);
   });
 
   it("regression: an older wedding with genuinely late items still shows overdue attention", () => {

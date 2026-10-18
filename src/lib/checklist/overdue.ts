@@ -1,5 +1,5 @@
 import { NEXT_ITEMS_LIMIT, sortByPlanning } from "@/lib/checklist/planning";
-import { effectiveDueDate } from "@/lib/checklist/timing";
+import { addDaysToIsoDate, effectiveDueDate } from "@/lib/checklist/timing";
 import type { ChecklistItem } from "@/lib/checklist/types";
 import { weddingLocalToday } from "@/lib/weddings/timezone";
 
@@ -26,14 +26,24 @@ export type PlanningDateContext = Readonly<{
 }>;
 
 /**
+ * Batch 2b: calendar days an INHERITED past-offset template item gets to be
+ * caught up before it counts as overdue. A launch-phase catch-up grace, not a
+ * re-baselining of the template's schedule.
+ */
+export const INHERITED_ITEM_GRACE_DAYS = 14;
+
+/**
  * The date an item's overdue classification is measured against: its
- * effective due date, except that a template-seeded relative item can't be
- * due before the wedding-local day it was seeded (Batch 2). A wedding created
- * four months out must not start with every "a year before" item already
- * late: on the seed day those items are due now, and they become overdue
- * only from the next day if still pending. Never stored; the template's
- * offset and the displayed due date are unchanged. Absolute dates (always
- * explicit) and custom items (`seededAt` null) keep their plain due date.
+ * effective due date, except for a template-seeded relative item whose date
+ * was ALREADY PAST on the wedding-local day it was seeded (Batch 2/2b): that
+ * one is measured against seed day + `INHERITED_ITEM_GRACE_DAYS`. A wedding
+ * created four months out must not start with every "a year before" item
+ * already late; those items are not overdue from the seed day through seed
+ * day + 14 inclusive, and become overdue the day after if still pending.
+ * Template items not yet past on the seed day (including due that very day)
+ * keep their own date. Never stored; the template's offset and the displayed
+ * due date are unchanged. Absolute dates (always explicit) and custom items
+ * (`seededAt` null) keep their plain due date.
  */
 export function overdueReferenceDate(
   item: Pick<ChecklistItem, "timing" | "seededAt">,
@@ -44,7 +54,8 @@ export function overdueReferenceDate(
     return due;
   }
   const seededOn = weddingLocalToday(timeZone, new Date(item.seededAt));
-  return seededOn !== null && due < seededOn ? seededOn : due;
+  if (seededOn === null || due >= seededOn) return due;
+  return addDaysToIsoDate(seededOn, INHERITED_ITEM_GRACE_DAYS) ?? due;
 }
 
 export function isOverdue(item: Pick<ChecklistItem, "status" | "timing" | "seededAt">, context: PlanningDateContext): boolean {

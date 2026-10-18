@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   isOverdue,
   nextUpcomingItems,
+  INHERITED_ITEM_GRACE_DAYS,
   overdueReferenceDate,
   overdueItems,
   planSections,
@@ -183,10 +184,11 @@ describe("progress is unaffected by overdue", () => {
   });
 });
 
-// Batch 2: a template-seeded relative item can't be overdue before the
-// wedding-local day it was seeded. Wedding 119 days after a seed on
-// 2026-10-17 (Costa Rica); no effective date is ever stored.
-describe("seed-day baseline for template items", () => {
+// Batch 2/2b: a template-seeded relative item whose date was already past on
+// the wedding-local seed day gets a 14-day catch-up grace (launch-phase policy,
+// not a re-baselined schedule). Wedding 119 days after a seed on 2026-10-17
+// (Costa Rica); no effective or grace date is ever stored.
+describe("inherited-item catch-up grace for template items", () => {
   const SEED_DAY = "2026-10-17";
   const SEEDED_AT = "2026-10-17T15:00:00Z"; // 09:00 in Costa Rica
   const WEDDING = "2027-02-13"; // 119 days after the seed day
@@ -196,27 +198,30 @@ describe("seed-day baseline for template items", () => {
     seededAt,
   });
 
-  it("a template item whose raw date is before the seed day is NOT overdue on the seed day", () => {
+  it("the grace is 14 calendar days", () => {
+    expect(INHERITED_ITEM_GRACE_DAYS).toBe(14);
+  });
+
+  it("an inherited past-due item: not overdue on the seed day, day 7 or day 14; overdue on day 15", () => {
     const value = seeded(relative(-180)); // raw 2026-08-17, 61 days before the seed
-    expect(overdueReferenceDate(value, on(SEED_DAY))).toBe(SEED_DAY);
-    expect(isOverdue(value, on(SEED_DAY))).toBe(false);
+    expect(overdueReferenceDate(value, on(SEED_DAY))).toBe("2026-10-31"); // seed day + 14
+    expect(isOverdue(value, on(SEED_DAY))).toBe(false); // seed day
+    expect(isOverdue(value, on("2026-10-24"))).toBe(false); // day 7
+    expect(isOverdue(value, on("2026-10-31"))).toBe(false); // day 14
+    expect(isOverdue(value, on("2026-11-01"))).toBe(true); // day 15
   });
 
-  it("the same item IS overdue the following day if still pending", () => {
-    expect(isOverdue(seeded(relative(-180)), on("2026-10-18"))).toBe(true);
-  });
-
-  it("raw date exactly on the seed day: due today, not overdue that day", () => {
+  it("raw date exactly on the seed day: not inherited-past, so its real date and no grace", () => {
     const value = seeded(relative(-119)); // raw 2026-10-17
     expect(overdueReferenceDate(value, on(SEED_DAY))).toBe(SEED_DAY);
-    expect(isOverdue(value, on(SEED_DAY))).toBe(false);
+    expect(isOverdue(value, on(SEED_DAY))).toBe(false); // due today
     expect(isOverdue(value, on("2026-10-18"))).toBe(true);
   });
 
-  it("raw date one day after the seed: not overdue until the day after it", () => {
+  it("raw date one day after the seed: its own date, overdue from the day after it", () => {
     const value = seeded(relative(-118)); // raw 2026-10-18
-    expect(isOverdue(value, on(SEED_DAY))).toBe(false);
-    expect(isOverdue(value, on("2026-10-18"))).toBe(false); // due today
+    expect(overdueReferenceDate(value, on(SEED_DAY))).toBe("2026-10-18");
+    expect(isOverdue(value, on("2026-10-18"))).toBe(false);
     expect(isOverdue(value, on("2026-10-19"))).toBe(true);
   });
 
@@ -239,22 +244,23 @@ describe("seed-day baseline for template items", () => {
     expect(isOverdue(custom(absolute("2026-09-01")), on(SEED_DAY))).toBe(true);
   });
 
-  it("a template item changed to an explicit absolute date keeps that date (no baseline)", () => {
+  it("a template item changed to an explicit absolute date keeps that date (no grace)", () => {
     const value = seeded(absolute("2026-09-01"));
     expect(overdueReferenceDate(value, on(SEED_DAY))).toBe("2026-09-01");
     expect(isOverdue(value, on(SEED_DAY))).toBe(true);
   });
 
-  it("the seed day is the WEDDING-LOCAL date, never the UTC date", () => {
-    // 2026-10-18T03:30Z is 21:30 on 2026-10-17 in Costa Rica: the seed day is the 17th there.
+  it("seed day and the 14 days are WEDDING-LOCAL calendar dates, never UTC", () => {
+    // 2026-10-18T03:30Z is 21:30 on 2026-10-17 in Costa Rica: seed day 17 → grace through the 31st.
     const lateEvening = seeded(relative(-180), "pending", "2026-10-18T03:30:00Z");
-    expect(overdueReferenceDate(lateEvening, on("2026-10-18"))).toBe("2026-10-17");
-    expect(isOverdue(lateEvening, on("2026-10-17"))).toBe(false);
-    expect(isOverdue(lateEvening, on("2026-10-18"))).toBe(true); // UTC slicing would wrongly say false
-    // The same instant in Madrid is already the 18th.
-    const madrid: PlanningDateContext = { weddingDate: WEDDING, today: "2026-10-18", timeZone: "Europe/Madrid" };
-    expect(overdueReferenceDate(lateEvening, madrid)).toBe("2026-10-18");
-    expect(isOverdue(lateEvening, madrid)).toBe(false);
+    expect(overdueReferenceDate(lateEvening, on(SEED_DAY))).toBe("2026-10-31");
+    expect(isOverdue(lateEvening, on("2026-10-31"))).toBe(false);
+    expect(isOverdue(lateEvening, on("2026-11-01"))).toBe(true); // UTC slicing would wrongly say false
+    // The same instant in Madrid is already the 18th: grace through November 1st.
+    const madrid = (today: string): PlanningDateContext => ({ weddingDate: WEDDING, today, timeZone: "Europe/Madrid" });
+    expect(overdueReferenceDate(lateEvening, madrid("2026-11-01"))).toBe("2026-11-01");
+    expect(isOverdue(lateEvening, madrid("2026-11-01"))).toBe(false);
+    expect(isOverdue(lateEvening, madrid("2026-11-02"))).toBe(true);
   });
 
   it("no time zone: nothing is overdue, as before; no wedding date: no relative due date", () => {
@@ -267,5 +273,14 @@ describe("seed-day baseline for template items", () => {
     const copy = structuredClone(value);
     isOverdue(value, on(SEED_DAY));
     expect(value).toEqual(copy);
+  });
+
+  it("the wedding home's lists use the same helper: inherited items sit in 'upcoming', not 'Atrasados', during the grace", () => {
+    const inherited = { ...seeded(relative(-180)), id: "inherited" };
+    const custom = item("custom", absolute("2026-09-01"));
+    const sections = planSections([inherited, custom], on("2026-10-24"));
+    expect(sections.overdue.map((i) => i.id)).toEqual(["custom"]);
+    expect(sections.upcoming.map((i) => i.id)).toEqual(["inherited"]);
+    expect(overdueItems([inherited, custom], on("2026-11-01")).map((i) => i.id).sort()).toEqual(["custom", "inherited"]);
   });
 });

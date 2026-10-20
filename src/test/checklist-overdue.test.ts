@@ -263,6 +263,27 @@ describe("inherited-item catch-up grace for template items", () => {
     expect(isOverdue(lateEvening, madrid("2026-11-02"))).toBe(true);
   });
 
+  it("day 14/15 and due-today flip at wedding-local midnight, across a daylight-saving change", () => {
+    // QA-01: `today` read from an instant, as each request does. New York leaves DST on
+    // 2026-11-01, so the seed (EDT, UTC−4) and the boundary (EST, UTC−5) use different offsets.
+    const zone = "America/New_York";
+    const at = (instant: string): PlanningDateContext => ({
+      weddingDate: WEDDING,
+      today: weddingLocalToday(zone, new Date(instant)),
+      timeZone: zone,
+    });
+    // 2026-10-26T03:30Z is 23:30 on 2026-10-25 in New York: seed day 25 → grace through 2026-11-08.
+    const inherited = seeded(relative(-180), "pending", "2026-10-26T03:30:00Z");
+    const custom = item("c", absolute("2026-11-08"));
+    expect(overdueReferenceDate(inherited, at("2026-10-26T03:30:00Z"))).toBe("2026-11-08");
+    // 23:59 EST on day 14 is already 2026-11-09 in UTC: still grace, and due today is not overdue.
+    expect(isOverdue(inherited, at("2026-11-09T04:59:00Z"))).toBe(false);
+    expect(isOverdue(custom, at("2026-11-09T04:59:00Z"))).toBe(false);
+    // 00:00 EST on day 15 (a fixed −04:00 offset would have flipped an hour early).
+    expect(isOverdue(inherited, at("2026-11-09T05:00:00Z"))).toBe(true);
+    expect(isOverdue(custom, at("2026-11-09T05:00:00Z"))).toBe(true);
+  });
+
   it("no time zone: nothing is overdue, as before; no wedding date: no relative due date", () => {
     expect(isOverdue(seeded(relative(-180)), { weddingDate: WEDDING, today: null, timeZone: null })).toBe(false);
     expect(overdueReferenceDate(seeded(relative(-180)), { weddingDate: null, timeZone: "America/Costa_Rica" })).toBeNull();

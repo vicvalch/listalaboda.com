@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import pg from "pg";
 
 import { addDaysToIsoDate } from "../src/lib/checklist/timing";
+import { formatWeddingDate } from "../src/lib/weddings/format";
 import { weddingLocalToday } from "../src/lib/weddings/timezone";
 import {
   addChecklistItem,
@@ -105,6 +106,13 @@ async function myWeddingsCard(page: Page) {
   return card;
 }
 
+/** The card's "Pendientes atrasados" row: same classification, its own count and "desde el …". */
+async function expectCardOverdue(page: Page, count: number, since: string) {
+  const row = (await myWeddingsCard(page)).locator('[data-testid="attention-row"][data-kind="checklist_overdue"]');
+  await expect(row).toContainText(`${count} ${count === 1 ? "pendiente" : "pendientes"}`);
+  await expect(row).toContainText(`desde el ${formatWeddingDate(since)}`);
+}
+
 test.describe("inherited-item catch-up grace (Batch 2/2b)", () => {
   test("OG1: a new wedding starts with nothing Atrasado; the template's own dates are shown", async ({ page }) => {
     const { base } = await seededWedding(page, "og-new");
@@ -159,6 +167,15 @@ test.describe("inherited-item catch-up grace (Batch 2/2b)", () => {
     // The inherited template items are still in their grace.
     await expect(checklistItem(page, BUDGET).getByTestId("checklist-item-overdue")).toHaveCount(0);
     await expect(page.getByTestId("checklist-item-overdue")).toHaveCount(2);
+
+    // Plan and Mis bodas count exactly the same two items (the oldest became due 2 days ago).
+    await page.goto(`${base}?view=plan`);
+    const planOverdue = page.getByTestId("plan-overdue").getByTestId("checklist-item");
+    await expect(planOverdue).toHaveCount(2);
+    for (const title of ["Confirmar la música", "Pagar el adelanto del lugar"]) {
+      await expect(planOverdue.filter({ has: page.getByText(title, { exact: true }) })).toHaveCount(1);
+    }
+    await expectCardOverdue(page, 2, daysFromToday(-2));
   });
 
   test("OG3: day 14 is still grace; day 15 is Atrasado, measured in wedding-local days", async ({ page }) => {
@@ -190,6 +207,8 @@ test.describe("inherited-item catch-up grace (Batch 2/2b)", () => {
     const card = await myWeddingsCard(page);
     await expect(card).toHaveAttribute("data-attention-level", "overdue");
     await expect(card).toContainText(es.app.weddings.attention.titles.checklist_overdue);
+    // "desde el" is the end of the grace (seed day + 14 = yesterday), never the template's raw date.
+    await expectCardOverdue(page, INHERITED, daysFromToday(-1));
 
     // Done is never overdue, grace or not.
     await page.goto(base);
@@ -212,5 +231,49 @@ test.describe("inherited-item catch-up grace (Batch 2/2b)", () => {
     await setTimeZone(page, weddingId, ZONE);
     await expect(page.getByTestId("checklist-no-time-zone")).toHaveCount(0);
     await expect(overdueCount(page)).toHaveText(String(INHERITED));
+  });
+
+  test("OG5: clearing the time zone hides a custom item's Atrasado everywhere; restoring it brings it back", async ({
+    page,
+  }) => {
+    const { weddingId, base } = await seededWedding(page, "og-zone-roundtrip");
+    const LATE = "Reservar el transporte";
+    await addChecklistItem(page, { title: LATE, timing: { mode: "absolute", date: daysFromToday(-1) } });
+
+    await page.goto(base);
+    await expect(overdueCount(page)).toHaveText("1");
+    await expect(checklistItem(page, LATE).getByTestId("checklist-item-overdue")).toHaveText(overdueCopy.badge);
+    const shownDate = (await checklistItem(page, LATE).getByTestId("checklist-item-timing").textContent())!;
+    expect(shownDate).not.toBe("");
+    await expectCardOverdue(page, 1, daysFromToday(-1));
+
+    // "Sin definir" through the real settings form: no overdue classification at all.
+    await setTimeZone(page, weddingId, "");
+    await page.goto(base);
+    await expect(page.getByTestId("checklist-no-time-zone")).toHaveCount(1);
+    await expect(page.getByTestId("overdue-summary")).toHaveCount(0);
+    await expect(page.getByTestId("checklist-item-overdue")).toHaveCount(0);
+    await expect(checklistItem(page, LATE).getByTestId("checklist-item-status")).toHaveText(
+      es.checklist.status.pending,
+    );
+    await expect(checklistItem(page, LATE).getByTestId("checklist-item-timing")).toHaveText(shownDate);
+    await page.goto(`${base}?view=plan`);
+    await expect(page.getByTestId("plan-overdue")).toHaveCount(0);
+    const card = await myWeddingsCard(page);
+    await expect(card.locator('[data-testid="attention-row"][data-kind="checklist_overdue"]')).toHaveCount(0);
+    await expect(card.locator('[data-testid="attention-row"][data-kind="wedding_time_zone_missing"]')).toHaveCount(1);
+
+    // Restored: the same item, same date, Atrasado again on every surface.
+    await setTimeZone(page, weddingId, ZONE);
+    await page.goto(base);
+    await expect(overdueCount(page)).toHaveText("1");
+    await expect(checklistItem(page, LATE).getByTestId("checklist-item-overdue")).toHaveText(overdueCopy.badge);
+    await expect(checklistItem(page, LATE).getByTestId("checklist-item-timing")).toHaveText(shownDate);
+    await expect(page.getByTestId("checklist-item-overdue")).toHaveCount(1);
+    await page.goto(`${base}?view=plan`);
+    const planOverdue = page.getByTestId("plan-overdue").getByTestId("checklist-item");
+    await expect(planOverdue).toHaveCount(1);
+    await expect(planOverdue.filter({ has: page.getByText(LATE, { exact: true }) })).toHaveCount(1);
+    await expectCardOverdue(page, 1, daysFromToday(-1));
   });
 });

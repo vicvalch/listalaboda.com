@@ -218,6 +218,73 @@ test.describe("scanner-safe signup confirmation", () => {
     await context.close();
   });
 
+  test("F2: confirmed on another device: reopen the invite there (not 'invalid', no account-type detour), then join only that wedding", async ({
+    browser,
+    baseURL,
+  }) => {
+    const owner = await freshPage(browser);
+    await logIn(owner.page, await createAccount("confirm-f2-owner", "planner"));
+    const weddingId = await createWedding(owner.page, "Boda en otro dispositivo");
+    const inviteUrl = await createInvite(owner.page, "collaborator");
+    await owner.context.close();
+    // An unrelated wedding the invite must never open.
+    const outsider = await freshPage(browser);
+    await logIn(outsider.page, await createAccount("confirm-f2-outsider", "planner"));
+    const unrelatedId = await createWedding(outsider.page, "Boda ajena");
+    await outsider.context.close();
+
+    // Browser A (the computer): the invite, then the sign-up; the handoff cookie lives only here.
+    const a = await freshPage(browser);
+    await a.page.goto(inviteUrl);
+    await expect(a.page).toHaveURL(/\/login\?next=%2Finvite%2Fcontinue$/);
+    await a.page.goto("/signup?next=%2Finvite%2Fcontinue");
+    await expect(a.page.getByText(es.auth.invitePending)).toBeVisible();
+    expect((await a.context.cookies()).some((c) => c.name === "lb_membership_invite")).toBe(true);
+    const { link } = await unconfirmedWithLink("confirm-f2-invitee", baseURL!, "/invite/continue");
+
+    // Browser B (the phone): the email link, confirmed there, with no invite context.
+    const b = await freshPage(browser);
+    expect((await b.context.cookies()).some((c) => c.name === "lb_membership_invite")).toBe(false);
+    await openLink(b.page, link);
+    await pressConfirm(b.page);
+    await expect(b.page).toHaveURL(/\/invite\/continue$/);
+    const missing = b.page.getByTestId("invite-missing");
+    await expect(missing.getByRole("heading", { level: 1, name: es.inviteMissing.title })).toBeVisible();
+    await expect(missing).toContainText(es.inviteMissing.body);
+    await expect(missing).toContainText(es.inviteMissing.newLink);
+    await expect(b.page.getByText(es.inviteInvalid.title)).toHaveCount(0);
+    // No way into the one-time account-type choice from here: reopening the invite is the way in.
+    await expect(b.page.getByRole("link", { name: es.common.goToMyWeddings })).toHaveCount(0);
+    await expect(missing.locator('a[href^="/app"], a[href^="/onboarding"]')).toHaveCount(0);
+
+    // Reopening the original invitation in B continues normally, without the choice.
+    await b.page.goto(inviteUrl);
+    await expect(b.page).toHaveURL(/\/invite\/continue$/);
+    await b.page.getByRole("button", { name: es.inviteAccept.submit }).click();
+    await expect(b.page).toHaveURL(new RegExp(`/app/weddings/${weddingId}\\?joined=new$`));
+    await expect(b.page.getByTestId("wedding-role")).toHaveText(es.roles.collaborator.label);
+    await expect(b.page).not.toHaveURL(ONBOARDING);
+
+    // Only that wedding. Still untyped, any other wedding (real or not) stops at the one-time
+    // choice before any wedding data, as for every invitee (SIT-01)…
+    for (const id of [unrelatedId, "00000000-0000-4000-8000-000000000000"]) {
+      await b.page.goto(`/app/weddings/${id}`);
+      await expect(b.page).toHaveURL(ONBOARDING);
+      await expect(b.page.getByText("Boda ajena")).toHaveCount(0);
+    }
+    // …and once a type is chosen, the unrelated wedding is the same 404 as a missing one.
+    await b.page.goto("/app");
+    await chooseAccountTypeInBrowser(b.page, "planner");
+    const response = await b.page.goto(`/app/weddings/${unrelatedId}`);
+    expect(response?.status()).toBe(404);
+    await expect(b.page.getByText("Boda ajena")).toHaveCount(0);
+    await b.page.goto(`/app/weddings/${weddingId}`);
+    await expect(b.page.getByTestId("wedding-role")).toHaveText(es.roles.collaborator.label);
+
+    await a.context.close();
+    await b.context.close();
+  });
+
   test("G: invalid, unknown and used tokens look the same; a malformed link shows only 'not available'", async ({
     browser,
     baseURL,

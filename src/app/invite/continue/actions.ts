@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { INVITE_CONTINUE_PATH, loginPath } from "@/lib/auth/redirect";
+import { INVITE_CONTINUE_PATH, INVITE_INVALID_PATH, loginPath } from "@/lib/auth/redirect";
 import { requireUser } from "@/lib/auth/session";
 import type { FormState } from "@/lib/forms/result";
 import { getMessages } from "@/lib/i18n";
@@ -39,8 +39,8 @@ export async function acceptInviteAction(): Promise<AcceptInviteState> {
   }
   if (result.reason === "invalid") {
     cookieStore.set(INVITE_HANDOFF_COOKIE, "", clearedInviteHandoffCookieOptions());
-    // Without the cookie, /invite/continue renders the generic invalid state.
-    redirect(INVITE_CONTINUE_PATH);
+    // Without the cookie and with the refusal flag, /invite/continue renders the generic invalid state.
+    redirect(INVITE_INVALID_PATH);
   }
   if (result.reason === "unauthenticated") await requireUser(INVITE_CONTINUE_PATH);
   return { ok: false, formError: getMessages().common.unexpectedError };

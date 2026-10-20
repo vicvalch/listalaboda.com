@@ -1300,6 +1300,12 @@ export const es = {
     title: "Este enlace de invitación ya no es válido.",
     body: "Pídele a quien te invitó que cree un enlace nuevo.",
   },
+  /** QA-02a: no invite pending in THIS browser (another device, or the handoff ran out); says nothing about the invite. */
+  inviteMissing: {
+    title: "Abre tu invitación en este dispositivo",
+    body: "No encontramos una invitación pendiente en este navegador. Si empezaste en otro dispositivo o ya pasó un rato, vuelve a abrir aquí el enlace de invitación que recibiste para unirte a la boda.",
+    newLink: "Si el enlace ya no funciona, pídele a quien te invitó que cree uno nuevo.",
+  },
   guests: {
     title: "Invitados",
     navLink: "Invitados",

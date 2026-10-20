@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { INVITE_CONTINUE_PATH } from "@/lib/auth/redirect";
+import { INVITE_CONTINUE_PATH, INVITE_INVALID_PATH } from "@/lib/auth/redirect";
 import {
   INVITE_HANDOFF_COOKIE,
   clearedInviteHandoffCookieOptions,
@@ -25,14 +25,15 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest, { params }: RouteContext<"/invite/[token]">) {
   const { token } = await params;
+  const wellFormed = isWellFormedMembershipInviteToken(token);
   const response = NextResponse.redirect(
-    new URL(INVITE_CONTINUE_PATH, request.nextUrl.origin),
+    new URL(wellFormed ? INVITE_CONTINUE_PATH : INVITE_INVALID_PATH, request.nextUrl.origin),
     303,
   );
   response.headers.set("Cache-Control", "private, no-store");
   response.headers.set("Referrer-Policy", "no-referrer");
 
-  if (isWellFormedMembershipInviteToken(token)) {
+  if (wellFormed) {
     response.cookies.set(INVITE_HANDOFF_COOKIE, token, inviteHandoffCookieOptions());
   } else {
     // Also forget any earlier pending invite: this link is what the user

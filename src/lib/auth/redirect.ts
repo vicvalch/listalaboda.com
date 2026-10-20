@@ -11,6 +11,16 @@ export const DEFAULT_NEXT_PATH = "/app";
 /** Path that resumes a membership invite after authentication. */
 export const INVITE_CONTINUE_PATH = "/invite/continue";
 
+/**
+ * QA-02a: /invite/continue after an invite was refused (malformed link, or
+ * the accept RPC said invalid), so the page can tell that apart from "no
+ * invite pending in this browser". A closed, presentation-only value: never
+ * a token, never an authorization input.
+ */
+export const INVITE_INVALID_PARAM = "invite";
+export const INVITE_INVALID_VALUE = "invalid";
+export const INVITE_INVALID_PATH = `${INVITE_CONTINUE_PATH}?${INVITE_INVALID_PARAM}=${INVITE_INVALID_VALUE}`;
+
 // Parsed against a fixed fake origin: anything that resolves elsewhere is
 // external, whatever tricks the raw string uses.
 const PROBE_ORIGIN = "https://listalaboda.invalid";

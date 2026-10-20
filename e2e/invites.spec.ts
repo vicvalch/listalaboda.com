@@ -200,7 +200,7 @@ test.describe("membership invites", () => {
 
   test("H: a malformed invite link shows the generic invalid state", async ({ page }) => {
     await page.goto("/invite/not-a-real-token");
-    await expect(page).toHaveURL(/\/invite\/continue$/);
+    await expect(page).toHaveURL(/\/invite\/continue\?invite=invalid$/);
     await expect(page.getByRole("heading", { name: es.inviteInvalid.title })).toBeVisible();
     await expect(page.getByText("not-a-real-token")).toHaveCount(0);
     await expect(page.getByRole("link", { name: es.common.login })).toBeVisible();

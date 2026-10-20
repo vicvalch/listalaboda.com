@@ -375,7 +375,7 @@ describe("accepting an invite (no account type involved)", () => {
     request.cookies.set("lb_membership_invite", TOKEN);
     invites.acceptMembershipInvite.mockResolvedValue({ ok: false, reason: "invalid" });
     const result = await settle(() => acceptInviteAction());
-    expect(result.redirect).toBe("/invite/continue");
+    expect(result.redirect).toBe("/invite/continue?invite=invalid");
     expect(accountService.selectAccountType).not.toHaveBeenCalled();
   });
 });

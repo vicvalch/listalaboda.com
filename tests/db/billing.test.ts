@@ -808,6 +808,27 @@ describe("billing_subscriptions.cancel_at (QA-03a)", () => {
     expect((await stored(sub))?.cancel_at?.toISOString()).toBe(CANCEL_AT);
   });
 
+  it("the deployed webhook's shortest call (no price, no period end, no cancel_at) still resolves to the one function", async () => {
+    const { user, customer } = await plannerWithCustomer();
+    const sub = subscriptionId();
+    const shortest = { ...deployedWebhookArgs(user.id, customer, sub) };
+    delete shortest.stripe_price_id;
+    delete shortest.current_period_end;
+    expect(await applySub(shortest)).toBe("applied");
+    expect(await stored(sub)).toEqual({ status: "active", cancel_at: null, cancel_at_period_end: false });
+    expect(await entitlement(user.id, "planner_pro")).toBe("active");
+  });
+
+  it("an explicit '-infinity' is the same as not sending cancel_at: the stored value is kept", async () => {
+    const { user, customer } = await plannerWithCustomer();
+    const sub = subscriptionId();
+    expect(await applySub(subArgs(user.id, customer, sub, { cancel_at: "-infinity" }))).toBe("applied");
+    expect((await stored(sub))?.cancel_at).toBeNull();
+    await applySub(subArgs(user.id, customer, sub, { cancel_at: CANCEL_AT }));
+    expect(await applySub(subArgs(user.id, customer, sub, { cancel_at: "-infinity" }))).toBe("no_change");
+    expect((await stored(sub))?.cancel_at?.toISOString()).toBe(CANCEL_AT);
+  });
+
   it("the new webhook stores, changes and clears it ('infinity' or null = none scheduled)", async () => {
     const { user, customer } = await plannerWithCustomer();
     const sub = subscriptionId();

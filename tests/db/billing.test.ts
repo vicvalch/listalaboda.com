@@ -742,3 +742,150 @@ describe("existing application access is unaffected", () => {
     expect(id).toMatch(/^[0-9a-f-]{36}$/);
   });
 });
+
+// ------------------------------------- QA-03a: scheduled cancellation (cancel_at)
+
+describe("billing_subscriptions.cancel_at (QA-03a)", () => {
+  async function plannerWithCustomer() {
+    const { user, client } = await freshUser("planner");
+    return { user, client, customer: await mapCustomer(user.id) };
+  }
+
+  async function stored(sub: string) {
+    const rows = await sql<{ status: SubStatus; cancel_at: Date | null; cancel_at_period_end: boolean }>(
+      `select status::text as status, cancel_at, cancel_at_period_end
+       from public.billing_subscriptions where stripe_subscription_id = $1`,
+      [sub],
+    );
+    return rows[0] ?? null;
+  }
+
+  /** EXACTLY the arguments the webhook deployed before this migration sends (no cancel_at key). */
+  function deployedWebhookArgs(userId: string, customer: string, sub: string, overrides: Partial<SubArgs> = {}): SubArgs {
+    const args = subArgs(userId, customer, sub, overrides);
+    expect(Object.keys(args)).not.toContain("cancel_at");
+    return args;
+  }
+
+  const CANCEL_AT = "2026-12-01T12:00:00.000Z";
+
+  it("one apply_stripe_subscription_event only (no overload), SECURITY DEFINER, executable by service_role alone", async () => {
+    const rows = await sql<{ sig: string; definer: boolean; anon: boolean; authed: boolean; service: boolean }>(
+      `select p.oid::regprocedure::text as sig, p.prosecdef as definer,
+              has_function_privilege('anon', p.oid, 'execute') as anon,
+              has_function_privilege('authenticated', p.oid, 'execute') as authed,
+              has_function_privilege('service_role', p.oid, 'execute') as service
+       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'apply_stripe_subscription_event'`,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ definer: true, anon: false, authed: false, service: true });
+    expect(rows[0].sig).toMatch(/,timestamp with time zone,timestamp with time zone\)$/);
+    const column = await sql<{ data_type: string; is_nullable: string }>(
+      `select data_type, is_nullable from information_schema.columns
+       where table_schema = 'public' and table_name = 'billing_subscriptions' and column_name = 'cancel_at'`,
+    );
+    expect(column).toEqual([{ data_type: "timestamp with time zone", is_nullable: "YES" }]);
+  });
+
+  it("the DEPLOYED webhook's call shape still works after the migration and stores no cancel_at", async () => {
+    const { user, customer } = await plannerWithCustomer();
+    const sub = subscriptionId();
+    expect(await applySub(deployedWebhookArgs(user.id, customer, sub))).toBe("applied");
+    expect(await stored(sub)).toEqual({ status: "active", cancel_at: null, cancel_at_period_end: false });
+    expect(await entitlement(user.id, "planner_pro")).toBe("active");
+    // …and its later events keep working (status changes, deletion) exactly as before.
+    expect(await applySub(deployedWebhookArgs(user.id, customer, sub, { cancel_at_period_end: true }))).toBe("applied");
+    expect(await applySub(deployedWebhookArgs(user.id, customer, sub, { subscription_status: "canceled" }))).toBe("applied");
+    expect(await entitlement(user.id, "planner_pro")).toBe("inactive");
+  });
+
+  it("the deployed webhook (no cancel_at) never clears one the new webhook stored", async () => {
+    const { user, customer } = await plannerWithCustomer();
+    const sub = subscriptionId();
+    await applySub(subArgs(user.id, customer, sub, { cancel_at: CANCEL_AT }));
+    expect(await applySub(deployedWebhookArgs(user.id, customer, sub))).toBe("no_change");
+    expect((await stored(sub))?.cancel_at?.toISOString()).toBe(CANCEL_AT);
+  });
+
+  it("the new webhook stores, changes and clears it ('infinity' or null = none scheduled)", async () => {
+    const { user, customer } = await plannerWithCustomer();
+    const sub = subscriptionId();
+    expect(await applySub(subArgs(user.id, customer, sub, { cancel_at: CANCEL_AT }))).toBe("applied");
+    expect((await stored(sub))?.cancel_at?.toISOString()).toBe(CANCEL_AT);
+    // Same value: nothing changed. Only cancel_at changing: applied.
+    expect(await applySub(subArgs(user.id, customer, sub, { cancel_at: CANCEL_AT }))).toBe("no_change");
+    expect(await applySub(subArgs(user.id, customer, sub, { cancel_at: "2027-02-01T12:00:00.000Z" }))).toBe("applied");
+    expect(await applySub(subArgs(user.id, customer, sub, { cancel_at: "infinity" }))).toBe("applied");
+    expect((await stored(sub))?.cancel_at).toBeNull();
+    await applySub(subArgs(user.id, customer, sub, { cancel_at: CANCEL_AT }));
+    // A JSON null (which the generated Args type doesn't allow) is read as "none scheduled" too.
+    const viaNull = await serviceRole.rpc("apply_stripe_subscription_event", {
+      ...subArgs(user.id, customer, sub),
+      cancel_at: null as unknown as string,
+    });
+    expect(viaNull.data).toBe("applied");
+    expect((await stored(sub))?.cancel_at).toBeNull();
+  });
+
+  it("a scheduled cancellation never changes access: still active until Stripe says canceled", async () => {
+    const { user, customer } = await plannerWithCustomer();
+    const sub = subscriptionId();
+    await applySub(subArgs(user.id, customer, sub, { cancel_at: CANCEL_AT, cancel_at_period_end: false }));
+    expect(await entitlement(user.id, "planner_pro")).toBe("active");
+    await applySub(subArgs(user.id, customer, sub, { subscription_status: "canceled", cancel_at: CANCEL_AT }));
+    expect(await entitlement(user.id, "planner_pro")).toBe("inactive");
+    // Terminal: a newer "active" observation (with or without a schedule) never revives it.
+    expect(await applySub(subArgs(user.id, customer, sub, { subscription_status: "active", cancel_at: "infinity" }))).toBe("stale");
+    expect(await stored(sub)).toMatchObject({ status: "canceled" });
+    expect(await entitlement(user.id, "planner_pro")).toBe("inactive");
+  });
+
+  it("an OLDER observation can't overwrite a newer cancel_at (stale), and replays are duplicates", async () => {
+    const { user, customer } = await plannerWithCustomer();
+    const sub = subscriptionId();
+    const older = nextObservation();
+    const newer = subArgs(user.id, customer, sub, { cancel_at: CANCEL_AT });
+    await applySub(newer);
+    expect(await applySub(subArgs(user.id, customer, sub, { cancel_at: "infinity", observed_at: older }))).toBe("stale");
+    expect(await applySub({ ...newer, cancel_at: "infinity" })).toBe("duplicate");
+    expect((await stored(sub))?.cancel_at?.toISOString()).toBe(CANCEL_AT);
+  });
+
+  it("the owner reads their own cancel_at through the Data API; nobody can write it", async () => {
+    const { user, client, customer } = await plannerWithCustomer();
+    const sub = subscriptionId();
+    await applySub(subArgs(user.id, customer, sub, { cancel_at: CANCEL_AT }));
+    const read = await client.from("billing_subscriptions").select("cancel_at");
+    expect(read.error).toBeNull();
+    expect(read.data?.map((r) => (r.cancel_at ? new Date(r.cancel_at).toISOString() : null))).toEqual([CANCEL_AT]);
+    const write = await client.from("billing_subscriptions").update({ cancel_at: null }).eq("user_id", user.id);
+    expect(write.error?.code).toBe(PERMISSION_DENIED);
+    expect((await stored(sub))?.cancel_at?.toISOString()).toBe(CANCEL_AT);
+    const other = await freshUser("planner");
+    expect((await other.client.from("billing_subscriptions").select("cancel_at")).data).toEqual([]);
+  });
+
+  it("works through the server-only webhook store module (the new caller)", async () => {
+    const { user, customer } = await plannerWithCustomer();
+    const sub = subscriptionId();
+    const store = createBillingWebhookStore({ supabaseUrl: ctx.apiUrl, serviceRoleKey: ctx.secretKey });
+    const base = {
+      eventType: "customer.subscription.updated",
+      livemode: false,
+      createdAt: new Date().toISOString(),
+      customerId: customer,
+      subscriptionId: sub,
+      priceId: "price_TESTONLYplanner",
+      metadataUserId: user.id,
+      status: "active" as const,
+      currentPeriodEnd: "2026-11-16T12:00:00.000Z",
+      cancelAtPeriodEnd: false,
+    };
+    expect(await store.applySubscription({ ...base, eventId: eventId(), cancelAt: CANCEL_AT, observedAt: nextObservation() })).toBe("applied");
+    expect((await stored(sub))?.cancel_at?.toISOString()).toBe(CANCEL_AT);
+    expect(await store.applySubscription({ ...base, eventId: eventId(), cancelAt: null, observedAt: nextObservation() })).toBe("applied");
+    expect((await stored(sub))?.cancel_at).toBeNull();
+    expect(await entitlement(user.id, "planner_pro")).toBe("active");
+  });
+});

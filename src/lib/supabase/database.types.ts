@@ -77,13 +77,13 @@ isOneToOne: false
                   ]
                 },"billing_subscriptions": {
                   Row: {
-                    "cancel_at_period_end": boolean,"created_at": string,"current_period_end": string | null,"entitlement_key": Database["public"]['Enums']["billing_entitlement_key"],"id": string,"status": Database["public"]['Enums']["billing_subscription_status"],"stripe_customer_id": string,"stripe_observed_at": string,"stripe_price_id": string | null,"stripe_subscription_id": string,"updated_at": string,"user_id": string
+                    "cancel_at": string | null,"cancel_at_period_end": boolean,"created_at": string,"current_period_end": string | null,"entitlement_key": Database["public"]['Enums']["billing_entitlement_key"],"id": string,"status": Database["public"]['Enums']["billing_subscription_status"],"stripe_customer_id": string,"stripe_observed_at": string,"stripe_price_id": string | null,"stripe_subscription_id": string,"updated_at": string,"user_id": string
                   }
                   Insert: {
-                    "cancel_at_period_end"?: boolean,"created_at"?: string,"current_period_end"?: string | null,"entitlement_key": Database["public"]['Enums']["billing_entitlement_key"],"id"?: string,"status": Database["public"]['Enums']["billing_subscription_status"],"stripe_customer_id": string,"stripe_observed_at": string,"stripe_price_id"?: string | null,"stripe_subscription_id": string,"updated_at"?: string,"user_id": string
+                    "cancel_at"?: string | null,"cancel_at_period_end"?: boolean,"created_at"?: string,"current_period_end"?: string | null,"entitlement_key": Database["public"]['Enums']["billing_entitlement_key"],"id"?: string,"status": Database["public"]['Enums']["billing_subscription_status"],"stripe_customer_id": string,"stripe_observed_at": string,"stripe_price_id"?: string | null,"stripe_subscription_id": string,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "cancel_at_period_end"?: boolean,"created_at"?: string,"current_period_end"?: string | null,"entitlement_key"?: Database["public"]['Enums']["billing_entitlement_key"],"id"?: string,"status"?: Database["public"]['Enums']["billing_subscription_status"],"stripe_customer_id"?: string,"stripe_observed_at"?: string,"stripe_price_id"?: string | null,"stripe_subscription_id"?: string,"updated_at"?: string,"user_id"?: string
+                    "cancel_at"?: string | null,"cancel_at_period_end"?: boolean,"created_at"?: string,"current_period_end"?: string | null,"entitlement_key"?: Database["public"]['Enums']["billing_entitlement_key"],"id"?: string,"status"?: Database["public"]['Enums']["billing_subscription_status"],"stripe_customer_id"?: string,"stripe_observed_at"?: string,"stripe_price_id"?: string | null,"stripe_subscription_id"?: string,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -664,7 +664,7 @@ isOneToOne: false
 { Args: { "entitlement_key": Database["public"]['Enums']["billing_entitlement_key"],"event_created_at": string,"event_livemode": boolean,"event_type": string,"metadata_user_id": string,"payment_status": Database["public"]['Enums']["billing_purchase_status"],"stripe_checkout_session_id": string,"stripe_customer_id": string,"stripe_event_id": string,"stripe_payment_intent_id"?: string,"stripe_price_id"?: string }; Returns: Database["public"]['Enums']["stripe_webhook_outcome"]
                            },
 "apply_stripe_subscription_event":
-{ Args: { "cancel_at_period_end": boolean,"current_period_end"?: string,"entitlement_key": Database["public"]['Enums']["billing_entitlement_key"],"event_created_at": string,"event_livemode": boolean,"event_type": string,"metadata_user_id": string,"observed_at": string,"stripe_customer_id": string,"stripe_event_id": string,"stripe_price_id"?: string,"stripe_subscription_id": string,"subscription_status": Database["public"]['Enums']["billing_subscription_status"] }; Returns: Database["public"]['Enums']["stripe_webhook_outcome"]
+{ Args: { "cancel_at"?: string,"cancel_at_period_end": boolean,"current_period_end"?: string,"entitlement_key": Database["public"]['Enums']["billing_entitlement_key"],"event_created_at": string,"event_livemode": boolean,"event_type": string,"metadata_user_id": string,"observed_at": string,"stripe_customer_id": string,"stripe_event_id": string,"stripe_price_id"?: string,"stripe_subscription_id": string,"subscription_status": Database["public"]['Enums']["billing_subscription_status"] }; Returns: Database["public"]['Enums']["stripe_webhook_outcome"]
                            },
 "begin_automatic_rsvp_reminder_send":
 { Args: { "expected_recipient": string,"expected_token_hash": string,"occurrence_claim_token": string,"target_occurrence_id": string }; Returns: {

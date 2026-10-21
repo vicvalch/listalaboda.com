@@ -63,13 +63,28 @@ function PlannerDetails({ view }: { view: PlannerBillingView }) {
     <>
       <p>{body}</p>
       <UnpaidDataNote view={view} />
-      {view.periodEnd ? (
-        <p className="text-muted text-sm">
-          {(view.cancelAtPeriodEnd ? copy.endsOn : copy.renewsOn).replace("{date}", billingDate(view.periodEnd))}
+      {view.renewal ? (
+        <p className="text-muted text-sm" data-testid="billing-renewal" data-kind={view.renewal.kind}>
+          {renewalText(view.renewal)}
         </p>
       ) : null}
     </>
   );
+}
+
+/** QA-03a: never "se renueva" when Stripe has a cancellation scheduled before the next renewal. */
+function renewalText(renewal: NonNullable<PlannerBillingView["renewal"]>): string {
+  const copy = getMessages().billing.planner;
+  switch (renewal.kind) {
+    case "renews":
+      return copy.renewsOn.replace("{date}", billingDate(renewal.on));
+    case "ends":
+      return copy.endsOn.replace("{date}", billingDate(renewal.on));
+    case "renews_then_ends":
+      return copy.renewsThenEnds
+        .replace("{renewsOn}", billingDate(renewal.renewsOn))
+        .replace("{endsOn}", billingDate(renewal.endsOn));
+  }
 }
 
 function CoupleDetails({ view }: { view: CoupleBillingView }) {

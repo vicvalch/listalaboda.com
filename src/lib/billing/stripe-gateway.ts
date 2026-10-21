@@ -103,6 +103,8 @@ export function toSubscriptionSnapshot(subscription: unknown): SubscriptionSnaps
     priceId: idOf(item?.price),
     currentPeriodEnd: typeof periodEnd === "number" && Number.isFinite(periodEnd) ? periodEnd : null,
     cancelAtPeriodEnd: subscription.cancel_at_period_end === true,
+    cancelAt:
+      typeof subscription.cancel_at === "number" && Number.isFinite(subscription.cancel_at) ? subscription.cancel_at : null,
     metadata: metadataOf(subscription.metadata),
   };
 }

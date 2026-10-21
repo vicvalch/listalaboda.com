@@ -27,6 +27,8 @@ export type SubscriptionSnapshot = Readonly<{
   /** Unix seconds; null when Stripe gives none. */
   currentPeriodEnd: number | null;
   cancelAtPeriodEnd: boolean;
+  /** QA-03a: Unix seconds Stripe will cancel at (`cancel_at`); null when none is scheduled. */
+  cancelAt: number | null;
   metadata: BillingObjectMetadata;
 }>;
 

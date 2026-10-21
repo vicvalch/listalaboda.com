@@ -62,10 +62,14 @@ describe("planner subscription policy", () => {
 });
 
 describe("billing page view", () => {
-  const sub = (status: BillingSubscriptionStatus, extra: Partial<{ currentPeriodEnd: string; cancelAtPeriodEnd: boolean }> = {}) => ({
+  const sub = (
+    status: BillingSubscriptionStatus,
+    extra: Partial<{ currentPeriodEnd: string; cancelAtPeriodEnd: boolean; cancelAt: string }> = {},
+  ) => ({
     status,
     currentPeriodEnd: extra.currentPeriodEnd ?? null,
     cancelAtPeriodEnd: extra.cancelAtPeriodEnd ?? false,
+    cancelAt: extra.cancelAt ?? null,
   });
 
   it("planner: the ENTITLEMENT decides active, never the subscription row alone", () => {
@@ -77,7 +81,13 @@ describe("billing page view", () => {
         { kind: "planner", entitlement: "active", subscriptions: [sub("active", { currentPeriodEnd: "2027-01-01T00:00:00Z", cancelAtPeriodEnd: true })] },
         true,
       ),
-    ).toEqual({ kind: "planner", state: "active", periodEnd: "2027-01-01T00:00:00Z", cancelAtPeriodEnd: true, action: "manage", everSubscribed: true });
+    ).toEqual({
+      kind: "planner",
+      state: "active",
+      renewal: { kind: "ends", on: "2027-01-01T00:00:00Z" },
+      action: "manage",
+      everSubscribed: true,
+    });
     expect(
       plannerBillingView({ kind: "planner", entitlement: "active", subscriptions: [sub("trialing")] }, true).state,
     ).toBe("trialing");
@@ -199,6 +209,7 @@ describe("Stripe object normalization", () => {
       priceId: "price_TESTONLYplanner",
       currentPeriodEnd: 1_900_000_000,
       cancelAtPeriodEnd: true,
+      cancelAt: null,
       metadata: { userId: "7f1d2c3b-4a5e-4f60-8a9b-0c1d2e3f4a5b", entitlementKey: "planner_pro" },
     });
   });

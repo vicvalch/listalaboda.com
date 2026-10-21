@@ -850,6 +850,10 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   Older observations are `stale`; `canceled`/`incomplete_expired` never revive; `paid` purchases are final.
 - Planner policy (frozen): only `active` and `trialing` grant; `past_due` (no grace), `unpaid`, `canceled`, `incomplete`,
   `incomplete_expired`, `paused` don't (`private.billing_subscription_grants` ↔ `SUBSCRIPTION_GRANTING_STATUSES`).
+- Scheduled cancellation (QA-03a, ADR-021 §17): `billing_subscriptions.cancel_at` (display only, written only by
+  `apply_stripe_subscription_event`; its `cancel_at` argument: timestamp, `'infinity'` = none, default `'-infinity'` = not
+  sent, keep). The page's renewal line comes only from `plannerRenewal`, for the granting subscription: never "Se
+  renueva" alone with a cancellation before the next renewal, never "no se renovará" when one more renewal comes first.
 - Couple: granted when the session is `complete` + `paid`; account-level in V1 (dated Constitution exception, not
   permanent policy). Refunds/disputes never revoke automatically in V1 (manual); don't add those events.
 - Users can't mutate billing state: every billing table has RLS, SELECT-own column grants only, and no write privilege

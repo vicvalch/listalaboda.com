@@ -46,6 +46,8 @@ export type SubscriptionApplication = StripeEventEnvelope &
     status: BillingSubscriptionStatus;
     currentPeriodEnd: string | null;
     cancelAtPeriodEnd: boolean;
+    /** QA-03a: when Stripe will cancel it (ISO), null = none scheduled. */
+    cancelAt: string | null;
     /** When the application retrieved this state from Stripe (ISO). */
     observedAt: string;
   }>;
@@ -97,6 +99,9 @@ export function createBillingWebhookStore({ supabaseUrl, serviceRoleKey }: Store
         observed_at: input.observedAt,
         ...(input.priceId ? { stripe_price_id: input.priceId } : {}),
         ...(input.currentPeriodEnd ? { current_period_end: input.currentPeriodEnd } : {}),
+        // QA-03a: always sent, so a schedule removed in Stripe clears the stored one. 'infinity' =
+        // none scheduled; an omitted cancel_at (the default '-infinity') means "not sent, keep it".
+        cancel_at: input.cancelAt ?? "infinity",
       };
       try {
         const { data, error } = await privileged.rpc("apply_stripe_subscription_event", args);

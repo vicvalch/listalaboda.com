@@ -72,6 +72,7 @@ export function subscriptionSnapshot(overrides: Partial<SubscriptionSnapshot> = 
     priceId: PLANNER_PRICE,
     currentPeriodEnd: 1_900_000_000,
     cancelAtPeriodEnd: false,
+    cancelAt: null,
     metadata: { userId: USER_ID, entitlementKey: "planner_pro" },
     ...overrides,
   };

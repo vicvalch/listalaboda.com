@@ -179,6 +179,57 @@ test.describe("billing", () => {
     await expect(page.getByTestId("unpaid-note")).toHaveCount(0);
   });
 
+  test("QA-03a: a scheduled cancellation (cancel_at_period_end or cancel_at) never reads 'Se renueva'; access stays until canceled", async ({ page, request }) => {
+    const email = await signUpAs(page, "billing-cancel-at", "planner");
+    const userId = await userIdOf(email);
+    const session = await checkout(page, billing.planner.subscribe);
+    const subscriptionId = (await standIn.complete(session.id)).subscription ?? "";
+    const unix = (iso: string) => Date.parse(iso) / 1000;
+    const periodEnd = unix("2027-01-15T12:00:00Z");
+    await standIn.setSubscription(subscriptionId, { current_period_end: periodEnd });
+    expect((await deliver(request, "customer.subscription.created", subscriptionId)).status()).toBe(200);
+    expect(await entitlementOf(userId, "planner_pro")).toBe("active");
+
+    const renewal = page.getByTestId("billing-renewal");
+    /** Stripe changes the subscription; its event arrives; the page reads the database. */
+    async function scheduled(fields: Record<string, unknown>, kind: string, text: string) {
+      await standIn.setSubscription(subscriptionId, fields);
+      expect((await deliver(request, "customer.subscription.updated", subscriptionId)).status()).toBe(200);
+      await page.goto("/app/billing");
+      await expect(renewal).toHaveAttribute("data-kind", kind);
+      await expect(renewal).toHaveText(text);
+      await expect(page.getByTestId("billing-status")).toHaveText(billing.planner.status.active);
+      expect(await entitlementOf(userId, "planner_pro")).toBe("active");
+    }
+
+    await page.goto("/app/billing");
+    await expect(renewal).toHaveText("Se renueva el 15 de enero de 2027.");
+    // Portal-style cancellation at the period's end.
+    await scheduled({ cancel_at_period_end: true }, "ends", "Termina el 15 de enero de 2027 y no se renovará.");
+    // cancel_at before the period's end: ends then, never "Se renueva".
+    await scheduled(
+      { cancel_at_period_end: false, cancel_at: unix("2027-01-05T12:00:00Z") },
+      "ends",
+      "Termina el 5 de enero de 2027 y no se renovará.",
+    );
+    // cancel_at after the period's end: one more renewal first (never "no se renovará").
+    await scheduled(
+      { cancel_at: unix("2027-03-15T12:00:00Z") },
+      "renews_then_ends",
+      "Se renueva el 15 de enero de 2027. Tu suscripción termina el 15 de marzo de 2027.",
+    );
+    // The schedule is removed in Stripe: renews again.
+    await scheduled({ cancel_at: null }, "renews", "Se renueva el 15 de enero de 2027.");
+
+    // Stripe ends it: access stops and no date is shown for a terminal subscription.
+    await standIn.setSubscription(subscriptionId, { status: "canceled", cancel_at: unix("2027-01-05T12:00:00Z") });
+    expect((await deliver(request, "customer.subscription.deleted", subscriptionId)).status()).toBe(200);
+    expect(await entitlementOf(userId, "planner_pro")).toBe("inactive");
+    await page.goto("/app/billing");
+    await expect(page.getByTestId("billing-status")).toHaveText(billing.planner.status.none);
+    await expect(renewal).toHaveCount(0);
+  });
+
   test("couple: one-time payment Checkout → signed webhook → access activated", async ({ page, request }) => {
     const email = await signUpAs(page, "billing-couple", "couple");
     const userId = await userIdOf(email);

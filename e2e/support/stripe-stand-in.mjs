@@ -70,6 +70,8 @@ function subscriptionObject(sub) {
     customer: sub.customer,
     status: sub.status,
     cancel_at_period_end: sub.cancel_at_period_end,
+    // QA-03a: Stripe's scheduled cancellation timestamp (Unix seconds) or null.
+    cancel_at: sub.cancel_at ?? null,
     metadata: sub.metadata,
     items: { object: "list", data: [{ id: `si_${sub.id}`, price: { id: sub.price }, current_period_end: sub.current_period_end }] },
   };
@@ -113,6 +115,7 @@ const server = createServer(async (req, res) => {
           // A trial Checkout starts the subscription in trialing, like Stripe.
           status: session.trial_period_days ? "trialing" : "active",
           cancel_at_period_end: false,
+          cancel_at: null,
           metadata: session.subscriptionMetadata ?? {},
           price: session.lineItems[0]?.price.id ?? null,
           current_period_end: now() + 30 * 24 * 3600,

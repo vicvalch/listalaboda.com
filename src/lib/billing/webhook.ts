@@ -84,6 +84,7 @@ async function applySubscription(
       currentPeriodEnd:
         subscription.currentPeriodEnd === null ? null : new Date(subscription.currentPeriodEnd * 1000).toISOString(),
       cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+      cancelAt: subscription.cancelAt === null ? null : new Date(subscription.cancelAt * 1000).toISOString(),
       observedAt,
     }),
   );

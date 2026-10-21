@@ -738,6 +738,8 @@ export const es = {
       trialingBody: "Tu suscripción está en período de prueba.",
       renewsOn: "Se renueva el {date}.",
       endsOn: "Termina el {date} y no se renovará.",
+      /** QA-03a: Stripe cancels at a date AFTER the next renewal, so one more renewal (and charge) comes first. */
+      renewsThenEnds: "Se renueva el {renewsOn}. Tu suscripción termina el {endsOn}.",
       problemBody:
         "Hay un problema con el pago de tu suscripción. Revisa tu método de pago en «Administrar suscripción».",
       /** Batch 1: never subscribed, so never charged. */

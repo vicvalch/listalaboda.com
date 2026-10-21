@@ -8,6 +8,7 @@ Amends: Product Constitution §11 ("COMMERCIAL MODEL DEFERRED", dated amendment 
 service-role modules, dated note there). Everything else stands.
 Amended: 2026-10-17 by BILLING-02 (§15: display prices, Stripe promotion codes, planner trial campaigns, zero-total
 Checkout). No migration, no new webhook event, no new secret.
+Amended: 2026-10-21 by QA-03a (§17: scheduled cancellation, `cancel_at`). One migration, no new webhook event.
 
 ## Context
 
@@ -297,6 +298,28 @@ display prices are never sent to Stripe). Price, mode, entitlement and the webho
 descriptions, the public business name, statement descriptor, presentment currency and the Customer Portal's
 cancellation mode are Stripe Dashboard settings, not repository state
 ([BILLING-STRIPE-DASHBOARD.md](../operations/BILLING-STRIPE-DASHBOARD.md)).
+
+### 17. QA-03a amendment (2026-10-21): scheduled cancellation (`cancel_at`)
+
+Stripe schedules a cancellation with `cancel_at_period_end` (ends when the current period ends) or with `cancel_at`, a
+timestamp that may fall before, at or after the current period's end; after it, the subscription renews (and is
+charged) at least once more, then ends at `cancel_at`. Only the first was stored, so a `cancel_at` schedule read as
+"Se renueva".
+
+- `billing_subscriptions.cancel_at` (nullable `timestamptz`, owner SELECT only, written only by
+  `apply_stripe_subscription_event`) stores the retrieved value. Display only: access still follows the status (§7);
+  Stripe's own transition to `canceled` ends it. `current_period_end` keeps its meaning. No backfill.
+- The page derives one renewal line (`plannerRenewal`, `@/lib/billing/presentation`) for the GRANTING subscription only
+  (terminal and problem states show none): `cancel_at` ≤ period end, or `cancel_at_period_end` → "Termina el {fecha} y
+  no se renovará"; `cancel_at` after the period end → "Se renueva el {fin del periodo}. Tu suscripción termina el
+  {cancel_at}."; nothing scheduled → "Se renueva el …". Never "se renueva" alone with a cancellation scheduled before
+  the next renewal, never "no se renovará" when one more renewal comes first.
+- Deployment-safe function change (migration `20261027120000`): `apply_stripe_subscription_event` is dropped and
+  recreated in one transaction with ONE trailing parameter, `cancel_at`, default `'-infinity'` = not sent (keep the
+  stored value); `'infinity'` (or null) = none scheduled. One function, no overloads; SECURITY DEFINER, `search_path`
+  and the service_role-only grant unchanged. The webhook deployed before it (no `cancel_at`) keeps working and never
+  clears a stored value; the new webhook always sends it. Order: migration first, then the deploy (a new webhook
+  against the old database fails its calls and Stripe redelivers them).
 
 ## Consequences
 

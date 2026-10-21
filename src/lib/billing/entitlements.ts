@@ -60,6 +60,8 @@ export type PlannerBillingStatus = Readonly<{
     status: BillingSubscriptionStatus;
     currentPeriodEnd: string | null;
     cancelAtPeriodEnd: boolean;
+    /** QA-03a: when Stripe will cancel it, null = none scheduled. */
+    cancelAt: string | null;
   }>[];
 }>;
 
@@ -77,7 +79,7 @@ export async function getPlannerBillingStatus(supabase: Client, userId: string):
       getBillingEntitlement(supabase, userId, "planner_pro"),
       supabase
         .from("billing_subscriptions")
-        .select("status, current_period_end, cancel_at_period_end")
+        .select("status, current_period_end, cancel_at_period_end, cancel_at")
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(20),
@@ -89,7 +91,14 @@ export async function getPlannerBillingStatus(supabase: Client, userId: string):
       subscriptions: subscriptions.data.flatMap((row) => {
         const status = parseSubscriptionStatus(row.status);
         return status
-          ? [{ status, currentPeriodEnd: row.current_period_end, cancelAtPeriodEnd: row.cancel_at_period_end }]
+          ? [
+              {
+                status,
+                currentPeriodEnd: row.current_period_end,
+                cancelAtPeriodEnd: row.cancel_at_period_end,
+                cancelAt: row.cancel_at ?? null,
+              },
+            ]
           : [];
       }),
     };

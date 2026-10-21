@@ -11,9 +11,8 @@ import { TERMINAL_SUBSCRIPTION_STATUSES, subscriptionGrantsAccess } from "@/lib/
 export type PlannerBillingView = Readonly<{
   kind: "planner";
   state: "active" | "trialing" | "problem" | "none";
-  /** ISO; the current period's end, when known. */
-  periodEnd: string | null;
-  cancelAtPeriodEnd: boolean;
+  /** What happens next to the granting subscription (null = nothing to say). */
+  renewal: PlannerRenewal;
   action: "subscribe" | "manage" | null;
   /** Any subscription row, in any status (BILLING-02: trials are for a first subscription only). */
   everSubscribed: boolean;
@@ -27,6 +26,34 @@ export type CoupleBillingView = Readonly<{
   action: "buy" | null;
 }>;
 
+/**
+ * QA-03a: the next thing Stripe will do to a GRANTING subscription. Stripe
+ * schedules a cancellation either with `cancel_at_period_end` (it ends when
+ * the current period ends) or with `cancel_at`, a timestamp that may fall
+ * before, at or after the current period's end. After it, the subscription
+ * still renews (and is charged) at the period's end first, then ends at
+ * `cancel_at`: never "no se renovará" then. ISO strings in, ISO strings out.
+ */
+export type PlannerRenewal =
+  | Readonly<{ kind: "renews"; on: string }>
+  | Readonly<{ kind: "ends"; on: string }>
+  | Readonly<{ kind: "renews_then_ends"; renewsOn: string; endsOn: string }>
+  | null;
+
+export function plannerRenewal(subscription: {
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  cancelAt: string | null;
+}): PlannerRenewal {
+  const { currentPeriodEnd: periodEnd, cancelAtPeriodEnd, cancelAt } = subscription;
+  if (cancelAt !== null && (periodEnd === null || Date.parse(cancelAt) <= Date.parse(periodEnd))) {
+    return { kind: "ends", on: cancelAt };
+  }
+  if (cancelAtPeriodEnd) return periodEnd === null ? null : { kind: "ends", on: periodEnd };
+  if (cancelAt !== null && periodEnd !== null) return { kind: "renews_then_ends", renewsOn: periodEnd, endsOn: cancelAt };
+  return periodEnd === null ? null : { kind: "renews", on: periodEnd };
+}
+
 /** `available` = billing is configured (else no action is offered). */
 export function plannerBillingView(status: PlannerBillingStatus, available: boolean): PlannerBillingView {
   const everSubscribed = status.subscriptions.length > 0;
@@ -35,8 +62,7 @@ export function plannerBillingView(status: PlannerBillingStatus, available: bool
     return {
       kind: "planner",
       state: granting?.status === "trialing" ? "trialing" : "active",
-      periodEnd: granting?.currentPeriodEnd ?? null,
-      cancelAtPeriodEnd: granting?.cancelAtPeriodEnd ?? false,
+      renewal: granting ? plannerRenewal(granting) : null,
       action: available ? "manage" : null,
       everSubscribed,
     };
@@ -47,8 +73,7 @@ export function plannerBillingView(status: PlannerBillingStatus, available: bool
     return {
       kind: "planner",
       state: "problem",
-      periodEnd: null,
-      cancelAtPeriodEnd: false,
+      renewal: null,
       action: available ? "manage" : null,
       everSubscribed,
     };
@@ -56,8 +81,7 @@ export function plannerBillingView(status: PlannerBillingStatus, available: bool
   return {
     kind: "planner",
     state: "none",
-    periodEnd: null,
-    cancelAtPeriodEnd: false,
+    renewal: null,
     action: available ? "subscribe" : null,
     everSubscribed,
   };

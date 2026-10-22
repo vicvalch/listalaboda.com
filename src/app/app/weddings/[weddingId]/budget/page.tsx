@@ -22,6 +22,7 @@ import { VENDOR_CATEGORIES, vendorCategoryDisplay, vendorCategoryLabel, vendorSt
 import { formatWeddingDate } from "@/lib/weddings/format";
 import { weddingLocalToday } from "@/lib/weddings/timezone";
 
+import { BackToWeddingLink } from "../BackToWeddingLink";
 import { removeBudgetAmountAction, saveBudgetAmountAction } from "./actions";
 import { BudgetAmountForm, BudgetRemoveButton } from "./BudgetForms";
 
@@ -72,9 +73,7 @@ export default async function BudgetPage({ params }: PageProps<"/app/weddings/[w
         <h1 className="text-3xl font-semibold tracking-tight">{copy.title}</h1>
         <p className="text-muted">{copy.intro}</p>
         <p className="text-sm">
-          <Link href={`/app/weddings/${id}`} className={textLinkClass}>
-            {copy.backToChecklist}
-          </Link>
+          <BackToWeddingLink weddingId={id} className={textLinkClass} />
         </p>
       </header>
 

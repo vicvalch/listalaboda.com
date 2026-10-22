@@ -75,6 +75,13 @@ export default async function AppLayout({ children }: LayoutProps<"/app">) {
                 {app.nav.createWedding}
               </Link>
             </nav>
+          ) : accountType === "couple" ? (
+            <nav aria-label={app.nav.label} className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              {/* `/app` opens a couple's own wedding (or its empty state). */}
+              <Link href="/app" className="text-sm font-semibold hover:underline">
+                {app.nav.myWedding}
+              </Link>
+            </nav>
           ) : null}
           <div className="flex flex-wrap items-center gap-3">
             {accountType !== null && isBillingAvailable() ? (

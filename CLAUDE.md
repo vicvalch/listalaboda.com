@@ -37,6 +37,8 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - Couple-first, Wedding-first, checklist-first. The list is home.
 - Spanish-first: UI copy lives in `src/lib/i18n/messages/es.ts`, never inline. Code and docs are in English.
 - Wedding language, not PM language: no project/program/portfolio/stakeholder/workstream/task concepts.
+- Brand (UX-01A): "Lista la boda" = the wedding is ready, never "a list". The wedding home is a couple's "Mi boda"
+  (neutral "la boda" for planners), the checklist heading is "Pendientes"; follow-ups in `docs/product/UX-01-FOLLOW-UPS.md`.
 - No AOC, Frontera, governance machinery or AI authority.
 - Donor code (Wedding-Fran-Marilu, PMFreak) is never copied; study, then reimplement (ADR-003).
 

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { Notice } from "@/components/ui/Notice";
@@ -24,6 +23,7 @@ import {
 import type { VendorFormValues } from "@/lib/vendors/validation";
 import { getWeddingDetail } from "@/lib/weddings/service";
 
+import { BackToWeddingLink } from "../BackToWeddingLink";
 import { createVendorAction } from "./actions";
 import { VendorForm } from "./VendorForm";
 import { VendorList, type VendorCardView } from "./VendorList";
@@ -67,9 +67,7 @@ export default async function VendorsPage({ params, searchParams }: PageProps<"/
         <h1 className="text-3xl font-semibold tracking-tight">{copy.title}</h1>
         <p className="text-muted">{copy.intro}</p>
         <p className="text-sm">
-          <Link href={`/app/weddings/${wedding.id}`} className={textLinkClass}>
-            {copy.backToChecklist}
-          </Link>
+          <BackToWeddingLink weddingId={wedding.id} className={textLinkClass} />
         </p>
       </header>
 

@@ -42,6 +42,7 @@ import {
   updateGuestNameAction,
   updatePartyLabelAction,
 } from "./actions";
+import { BackToWeddingLink } from "../BackToWeddingLink";
 import { AutomaticReminderForm } from "./AutomaticReminderForm";
 import { ConfirmButton } from "./ConfirmButton";
 import { NewPartyForm } from "./NewPartyForm";
@@ -128,9 +129,7 @@ export default async function GuestsPage({
         <h1 className="text-3xl font-semibold tracking-tight">{copy.title}</h1>
         <p className="text-muted">{copy.intro}</p>
         <p>
-          <Link href={`/app/weddings/${wedding.id}`} className={`${textLinkClass} text-sm`}>
-            {copy.backToChecklist}
-          </Link>
+          <BackToWeddingLink weddingId={wedding.id} className={`${textLinkClass} text-sm`} />
         </p>
       </header>
 

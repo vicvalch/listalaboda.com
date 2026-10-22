@@ -81,6 +81,12 @@ const eslintConfig = defineConfig([
     rules: { "no-restricted-syntax": ["error", ...envKeyRestrictions(["SUPABASE_SERVICE_ROLE_KEY"])] },
   },
   {
+    // ADR-022 §4, ADR-002 §6: the read-only photo origin, the sixth sanctioned
+    // service-role use (the publication gate is its authority).
+    files: ["src/lib/wedding-site/photo-origin.ts"],
+    rules: { "no-restricted-syntax": ["error", ...envKeyRestrictions(["SUPABASE_SERVICE_ROLE_KEY"])] },
+  },
+  {
     // ADR-021: the one module that reads the Stripe secret key.
     files: ["src/lib/billing/stripe-gateway.ts"],
     rules: { "no-restricted-syntax": ["error", ...envKeyRestrictions(["STRIPE_SECRET_KEY"])] },

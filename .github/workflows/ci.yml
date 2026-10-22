@@ -46,10 +46,12 @@ jobs:
 
       - run: npm ci
 
+      # Storage stays on: wedding-site photos (UX-01B, ADR-022) test the
+      # private bucket's policies through the Storage API.
       - name: Start local Supabase (applies all migrations from zero)
         run: >-
           npx supabase start
-          -x realtime,storage-api,imgproxy,mailpit,studio,edge-runtime,logflare,vector,supavisor
+          -x realtime,imgproxy,mailpit,studio,edge-runtime,logflare,vector,supavisor
 
       - run: npm run db:test
       - run: npm run db:types:check
@@ -78,10 +80,11 @@ jobs:
 
       # Mailpit stays on here: the password recovery journey (AUTH-RECOVERY-01)
       # reads the local Auth server's recovery email from it. Nothing is sent anywhere.
+      # Storage stays on for the wedding-site photo journeys (UX-01B, ADR-022).
       - name: Start local Supabase (applies all migrations from zero)
         run: >-
           npx supabase start
-          -x realtime,storage-api,imgproxy,studio,edge-runtime,logflare,vector,supavisor
+          -x realtime,imgproxy,studio,edge-runtime,logflare,vector,supavisor
 
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

@@ -393,6 +393,8 @@ describe("theme in the public read", () => {
       "section_kind",
       "section_title",
       "site_customization",
+      // UX-01B (ADR-022): public photos only (no ids of weddings, paths or sizes); tested in wedding-photos.test.ts.
+      "site_photos",
       "site_theme",
       "wedding_city",
       "wedding_date",

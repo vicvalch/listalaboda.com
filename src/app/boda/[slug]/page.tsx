@@ -7,6 +7,7 @@ import { WeddingSite } from "@/components/wedding-site/WeddingSite";
 import { getMessages } from "@/lib/i18n";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { resolveWeddingSiteDesign } from "@/lib/wedding-site/design/resolve";
+import { publicPhotoBasePath } from "@/lib/wedding-site/photos/model";
 import { getPublishedWeddingSite } from "@/lib/wedding-site/public";
 
 // Publication changes (unpublish, hidden sections, a new address) must
@@ -55,5 +56,10 @@ export default async function PublicWeddingSitePage({ params }: PageProps<"/boda
     );
   }
 
-  return <WeddingSite site={result.site} design={resolveWeddingSiteDesign(result.design)} />;
+  // Photos (UX-01B, ADR-022): only what the public read returned (published,
+  // visible, described), served by the publication-gated photo route.
+  const photos = result.photos && result.photos.length > 0
+    ? { blocks: result.photos, basePath: publicPhotoBasePath(result.site.slug) }
+    : undefined;
+  return <WeddingSite site={result.site} design={resolveWeddingSiteDesign(result.design)} photos={photos} />;
 }

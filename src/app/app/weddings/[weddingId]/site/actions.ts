@@ -22,6 +22,7 @@ import {
   type CustomizationGroup,
 } from "@/lib/wedding-site/design/customization";
 import { CUSTOMIZABLE_FIELDS, isWeddingSiteThemeKey, type CustomizableField } from "@/lib/wedding-site/design/themes";
+import { purgeWeddingPhotos } from "@/lib/wedding-site/photos/service";
 import { siteCustomPreviewPath } from "@/lib/wedding-site/preview";
 import { isSectionKind, parseSectionInput, type SectionField } from "@/lib/wedding-site/sections";
 import {
@@ -259,7 +260,8 @@ export async function setSlugAction(_prev: SlugFormState, formData: FormData): P
   const parsed = parseSlug(values.slug);
   if (!parsed.ok) return { ok: false, fieldErrors: { slug: parsed.error }, values };
 
-  const result = await setWeddingSiteSlug(await createSupabaseServerClient(), weddingId, parsed.slug);
+  const supabase = await createSupabaseServerClient();
+  const result = await setWeddingSiteSlug(supabase, weddingId, parsed.slug);
   if (!result.ok) {
     // Never says which wedding holds the address.
     if (result.reason === "already_used") return { ok: false, fieldErrors: { slug: copy.validation.taken }, values };
@@ -267,6 +269,8 @@ export async function setSlugAction(_prev: SlugFormState, formData: FormData): P
     return { ok: false, formError: await handleFailure(weddingId, result.reason), values };
   }
 
+  // Photo URLs carry the address: the old one must stop serving cached copies (ADR-022 §13.6).
+  await purgeWeddingPhotos(supabase, weddingId);
   revalidatePath(sitePath(weddingId));
   return { ok: true, data: { message: copy.saved, nonce: crypto.randomUUID() } };
 }
@@ -301,8 +305,11 @@ export async function unpublishSiteAction(
   const weddingId = formText(formData, "weddingId");
   await requireUser(sitePath(weddingId));
 
-  const result = await unpublishWeddingSite(await createSupabaseServerClient(), weddingId);
+  const supabase = await createSupabaseServerClient();
+  const result = await unpublishWeddingSite(supabase, weddingId);
   if (!result.ok) return { ok: false, formError: await handleFailure(weddingId, result.reason) };
+  // Unpublished photos must stop being served from the CDN too (ADR-022 §7).
+  await purgeWeddingPhotos(supabase, weddingId);
   revalidatePath(sitePath(weddingId));
   redirect(`${sitePath(weddingId)}?done=unpublished`);
 }

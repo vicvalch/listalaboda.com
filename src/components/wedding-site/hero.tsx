@@ -1,11 +1,28 @@
 import { DetailsLine, Ornament } from "@/components/wedding-site/parts";
-import { ALIGN, cx, nameClass, TYPOGRAPHY } from "@/components/wedding-site/styles";
+import { CoverImage } from "@/components/wedding-site/photos";
+import { ALIGN, COVER_FRAME, cx, nameClass, TYPOGRAPHY } from "@/components/wedding-site/styles";
 import type { ResolvedSiteDesign } from "@/lib/wedding-site/design/resolve";
+import type { SitePhotoBlock } from "@/lib/wedding-site/photos/model";
 import type { PublishedWeddingSite } from "@/lib/wedding-site/sections";
 
-type HeroProps = { site: PublishedWeddingSite; design: ResolvedSiteDesign };
+type HeroProps = {
+  site: PublishedWeddingSite;
+  design: ResolvedSiteDesign;
+  /** The cover (UX-01B, ADR-022) and where its bytes come from; none = the text-only opening, unchanged. */
+  cover?: Readonly<{ block: SitePhotoBlock; basePath: string }> | null;
+};
 
-/** The site's opening (the couple's name, date and city), in the theme's hero variant. */
+function Cover({ cover, design }: Pick<HeroProps, "cover" | "design">) {
+  if (!cover) return null;
+  return <CoverImage block={cover.block} basePath={cover.basePath} design={design} frame={COVER_FRAME[design.hero]} />;
+}
+
+/**
+ * The site's opening (the couple's name, date and city), in the theme's hero
+ * variant. With a cover, each variant places the photo in its own way (above
+ * the names, beside them, inside the frame, or above the band); text never
+ * sits on the photo.
+ */
 export function SiteHero(props: HeroProps) {
   switch (props.design.hero) {
     case "simple":
@@ -22,9 +39,14 @@ export function SiteHero(props: HeroProps) {
 }
 
 /** Classic: the name over its details, closed by a rule. */
-function HeroSimple({ site, design }: HeroProps) {
+function HeroSimple({ site, design, cover }: HeroProps) {
   return (
     <header className={cx("space-y-3 border-b border-border pb-8", ALIGN[design.alignment])}>
+      {cover ? (
+        <div className="pb-3">
+          <Cover cover={cover} design={design} />
+        </div>
+      ) : null}
       <h1 className={nameClass(design.headingScale, design.typography)}>{site.name}</h1>
       <DetailsLine
         site={site}
@@ -35,9 +57,10 @@ function HeroSimple({ site, design }: HeroProps) {
 }
 
 /** Editorial: a large name, the theme's ornament, then the details in spaced small capitals. */
-function HeroEditorial({ site, design }: HeroProps) {
+function HeroEditorial({ site, design, cover }: HeroProps) {
   return (
     <header className={cx("space-y-6 sm:space-y-8", ALIGN[design.alignment])}>
+      <Cover cover={cover} design={design} />
       <h1 className={nameClass(design.headingScale, design.typography)}>{site.name}</h1>
       <Ornament kind={design.ornament} alignment={design.alignment} />
       <DetailsLine
@@ -52,9 +75,9 @@ function HeroEditorial({ site, design }: HeroProps) {
 }
 
 /** Minimal: the name and a compact details line, aligned to the content grid. */
-function HeroGrid({ site, design }: HeroProps) {
-  return (
-    <header className={cx("space-y-4", ALIGN[design.alignment])}>
+function HeroGrid({ site, design, cover }: HeroProps) {
+  const text = (
+    <>
       <h1 className={nameClass(design.headingScale, design.typography)}>{site.name}</h1>
       <Ornament kind={design.ornament} alignment={design.alignment} />
       <DetailsLine
@@ -64,15 +87,23 @@ function HeroGrid({ site, design }: HeroProps) {
           TYPOGRAPHY[design.typography].label,
         )}
       />
+    </>
+  );
+  if (!cover) return <header className={cx("space-y-4", ALIGN[design.alignment])}>{text}</header>;
+  return (
+    <header className={cx("grid gap-6 sm:grid-cols-2 sm:items-center sm:gap-10", ALIGN[design.alignment])}>
+      <div className="min-w-0 space-y-4">{text}</div>
+      <Cover cover={cover} design={design} />
     </header>
   );
 }
 
 /** Romantic: the name, a flourish and the details inside a fine double frame. */
-function HeroFramed({ site, design }: HeroProps) {
+function HeroFramed({ site, design, cover }: HeroProps) {
   return (
     <header className={cx("border border-border p-1.5 sm:p-2", ALIGN[design.alignment])}>
       <div className="space-y-6 border border-border px-5 py-12 sm:space-y-8 sm:px-12 sm:py-16">
+        <Cover cover={cover} design={design} />
         <h1 className={nameClass(design.headingScale, design.typography)}>{site.name}</h1>
         <Ornament kind={design.ornament} alignment={design.alignment} />
         <DetailsLine
@@ -88,8 +119,8 @@ function HeroFramed({ site, design }: HeroProps) {
 }
 
 /** Tropical: the theme's ornament, the name and the details on a solid color band. */
-function HeroBanner({ site, design }: HeroProps) {
-  return (
+function HeroBanner({ site, design, cover }: HeroProps) {
+  const band = (
     <header
       className={cx(
         "space-y-5 bg-(--site-band) px-6 py-12 text-(--site-band-text) sm:space-y-6 sm:px-12 sm:py-16",
@@ -106,5 +137,13 @@ function HeroBanner({ site, design }: HeroProps) {
         )}
       />
     </header>
+  );
+  if (!cover) return band;
+  // The photo above the band; the names stay on the band's solid color.
+  return (
+    <div>
+      <Cover cover={cover} design={design} />
+      {band}
+    </div>
   );
 }

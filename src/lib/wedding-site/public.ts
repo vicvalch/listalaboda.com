@@ -4,6 +4,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/lib/supabase/database.types";
 import { toWeddingSiteDesign, type WeddingSiteDesign } from "@/lib/wedding-site/design/resolve";
+import { isWeddingSitePhotosEnabled } from "@/lib/wedding-site/photos/flag";
+import { toSitePhotoBlocks, type SitePhotoBlock } from "@/lib/wedding-site/photos/model";
 import {
   toPublishedSite,
   type PublishedSiteRow,
@@ -23,6 +25,11 @@ import { isValidSlug } from "@/lib/wedding-site/slug";
  * ADR-019). No theme, or one this code doesn't know, is Classic; the stored
  * customization is re-read here, field by field, and never trusted.
  *
+ * Photos (UX-01B, ADR-022) come back as a third, separate value, only with
+ * the `WEDDING_SITE_PHOTOS` flag on: the visible blocks with public photos
+ * (`site_photos`), re-read here field by field; flag off or a database
+ * without the column = no photos.
+ *
  * A malformed, unknown or unpublished slug is the same `unavailable`, so a
  * site's existence can't be probed before it is published.
  */
@@ -30,7 +37,7 @@ import { isValidSlug } from "@/lib/wedding-site/slug";
 type Client = SupabaseClient<Database>;
 
 export type PublishedSiteResult =
-  | Readonly<{ ok: true; site: PublishedWeddingSite; design: WeddingSiteDesign }>
+  | Readonly<{ ok: true; site: PublishedWeddingSite; design: WeddingSiteDesign; photos?: readonly SitePhotoBlock[] }>
   | Readonly<{ ok: false; reason: "unavailable" | "error" }>;
 
 export async function getPublishedWeddingSite(
@@ -49,8 +56,14 @@ export async function getPublishedWeddingSite(
     // Every row repeats the design. Read as unknown: a database from before
     // the theme or customization column (deploy skew) has none, which is
     // Classic / no customization.
-    const first = data[0] as { site_theme?: unknown; site_customization?: unknown } | undefined;
-    return { ok: true, site, design: toWeddingSiteDesign(first?.site_theme, first?.site_customization) };
+    const first = data[0] as { site_theme?: unknown; site_customization?: unknown; site_photos?: unknown } | undefined;
+    return {
+      ok: true,
+      site,
+      design: toWeddingSiteDesign(first?.site_theme, first?.site_customization),
+      // Flag off: no photos at all (not even an empty list).
+      ...(isWeddingSitePhotosEnabled() ? { photos: toSitePhotoBlocks(first?.site_photos) } : {}),
+    };
   } catch {
     return { ok: false, reason: "error" };
   }

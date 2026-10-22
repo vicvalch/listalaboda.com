@@ -6,6 +6,8 @@ import type {
   ContentWidth,
   Density,
   HeadingScale,
+  HeroVariant,
+  SectionStyle,
   SitePalette,
   Typography,
 } from "@/lib/wedding-site/design/themes";
@@ -131,4 +133,27 @@ export const DENSITY: Record<Density, { page: string; stack: string; footer: str
 export const ALIGN: Record<Alignment, string> = {
   center: "text-center",
   start: "text-start",
+};
+
+/**
+ * Photo treatments (UX-01B, ADR-022), one per section style so each theme's
+ * photos follow its own look: `image` on every photo, `tile` around a photo
+ * with its caption, `block` around a whole photo block, `caption` on
+ * captions. Closed strings in code; nothing from data.
+ */
+export const PHOTO_STYLE: Record<SectionStyle, { image: string; tile: string; block: string; caption: string }> = {
+  plain: { image: "rounded-md", tile: "", block: "", caption: "" },
+  editorial: { image: "", tile: "", block: "border-t border-border pt-6", caption: "italic" },
+  ruled: { image: "", tile: "", block: "border-t border-border pt-6", caption: "tracking-wide" },
+  centered: { image: "rounded-2xl", tile: "", block: "", caption: "text-center" },
+  tiles: { image: "", tile: "bg-accent-soft p-2", block: "", caption: "px-1 pb-1" },
+};
+
+/** The cover's box in each hero variant (aspect ratios reserve the space: no layout shift). */
+export const COVER_FRAME: Record<HeroVariant, string> = {
+  simple: "aspect-[3/2]",
+  editorial: "aspect-[4/5] sm:aspect-[3/2]",
+  grid: "aspect-[4/5]",
+  framed: "aspect-[3/2]",
+  banner: "aspect-[16/9]",
 };

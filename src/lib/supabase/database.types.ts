@@ -535,6 +535,44 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"wedding_photo_origin_usage": {
+                  Row: {
+                    "month": string,"origin_bytes": number,"updated_at": string
+                  }
+                  Insert: {
+                    "month": string,"origin_bytes"?: number,"updated_at"?: string
+                  }
+                  Update: {
+                    "month"?: string,"origin_bytes"?: number,"updated_at"?: string
+                  }
+                  Relationships: [
+
+                  ]
+                },"wedding_photos": {
+                  Row: {
+                    "alt_text": string | null,"block_id": string | null,"bytes": number | null,"caption": string | null,"created_at": string,"created_by": string | null,"focal_x": number,"focal_y": number,"height": number | null,"id": string,"position": number,"state": Database["public"]['Enums']["wedding_photo_state"],"wedding_id": string,"width": number | null
+                  }
+                  Insert: {
+                    "alt_text"?: string | null,"block_id"?: string | null,"bytes"?: number | null,"caption"?: string | null,"created_at"?: string,"created_by"?: string | null,"focal_x"?: number,"focal_y"?: number,"height"?: number | null,"id"?: string,"position"?: number,"state"?: Database["public"]['Enums']["wedding_photo_state"],"wedding_id": string,"width"?: number | null
+                  }
+                  Update: {
+                    "alt_text"?: string | null,"block_id"?: string | null,"bytes"?: number | null,"caption"?: string | null,"created_at"?: string,"created_by"?: string | null,"focal_x"?: number,"focal_y"?: number,"height"?: number | null,"id"?: string,"position"?: number,"state"?: Database["public"]['Enums']["wedding_photo_state"],"wedding_id"?: string,"width"?: number | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "wedding_photos_block_fkey"
+      columns: ["block_id","wedding_id"]
+isOneToOne: false
+      referencedRelation: "wedding_site_photo_blocks"
+      referencedColumns: ["id","wedding_id"]
+    },{
+      foreignKeyName: "wedding_photos_wedding_id_fkey"
+      columns: ["wedding_id"]
+isOneToOne: false
+      referencedRelation: "weddings"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"wedding_publications": {
                   Row: {
                     "created_at": string,"published_at": string | null,"slug": string,"updated_at": string,"wedding_id": string
@@ -588,6 +626,25 @@ isOneToOne: true
       foreignKeyName: "wedding_site_designs_wedding_id_fkey"
       columns: ["wedding_id"]
 isOneToOne: true
+      referencedRelation: "weddings"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"wedding_site_photo_blocks": {
+                  Row: {
+                    "anchor": Database["public"]['Enums']["content_section_kind"] | null,"body": string | null,"created_at": string,"id": string,"is_visible": boolean,"kind": Database["public"]['Enums']["wedding_site_photo_block_kind"],"position": number,"title": string | null,"updated_at": string,"variant": Database["public"]['Enums']["wedding_site_photo_block_variant"],"wedding_id": string
+                  }
+                  Insert: {
+                    "anchor"?: Database["public"]['Enums']["content_section_kind"] | null,"body"?: string | null,"created_at"?: string,"id"?: string,"is_visible"?: boolean,"kind": Database["public"]['Enums']["wedding_site_photo_block_kind"],"position"?: number,"title"?: string | null,"updated_at"?: string,"variant": Database["public"]['Enums']["wedding_site_photo_block_variant"],"wedding_id": string
+                  }
+                  Update: {
+                    "anchor"?: Database["public"]['Enums']["content_section_kind"] | null,"body"?: string | null,"created_at"?: string,"id"?: string,"is_visible"?: boolean,"kind"?: Database["public"]['Enums']["wedding_site_photo_block_kind"],"position"?: number,"title"?: string | null,"updated_at"?: string,"variant"?: Database["public"]['Enums']["wedding_site_photo_block_variant"],"wedding_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "wedding_site_photo_blocks_wedding_id_fkey"
+      columns: ["wedding_id"]
+isOneToOne: false
       referencedRelation: "weddings"
       referencedColumns: ["id"]
     }
@@ -676,6 +733,12 @@ isOneToOne: false
               "occurrence_claim_token": string,"occurrence_id": string
             }[]
                            },
+"claim_published_wedding_photo":
+{ Args: { "rendition": string,"site_slug": string,"target_photo_id": string }; Returns: string
+                           },
+"complete_wedding_photo":
+{ Args: { "rendition_height": number,"rendition_width": number,"target_photo_id": string }; Returns: boolean
+                           },
 "create_guest_invitation":
 { Args: { "guest_names": (string)[],"invitation_token_ciphertext": string,"invitation_token_hash": string,"party_contact_email"?: string,"party_label": string,"target_wedding_id": string }; Returns: string
                            },
@@ -696,6 +759,9 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"create_wedding_photo":
+{ Args: { "target_wedding_id": string }; Returns: string
+                           },
 "finish_automatic_rsvp_reminder":
 { Args: { "occurrence_claim_token": string,"outcome": Database["public"]['Enums']["automatic_rsvp_reminder_finish_outcome"],"target_occurrence_id": string }; Returns: Database["public"]['Enums']["automatic_rsvp_reminder_state"]
                            },
@@ -717,7 +783,7 @@ isOneToOne: false
                            },
 "get_published_wedding_site":
 { Args: { "site_slug": string }; Returns: {
-              "section_body": string,"section_kind": Database["public"]['Enums']["content_section_kind"],"section_title": string,"site_customization": Json,"site_theme": Database["public"]['Enums']["wedding_site_theme"],"wedding_city": string,"wedding_date": string,"wedding_name": string
+              "section_body": string,"section_kind": Database["public"]['Enums']["content_section_kind"],"section_title": string,"site_customization": Json,"site_photos": Json,"site_theme": Database["public"]['Enums']["wedding_site_theme"],"wedding_city": string,"wedding_date": string,"wedding_name": string
             }[]
                            },
 "get_rsvp_confirmation_email_context":
@@ -740,6 +806,12 @@ isOneToOne: false
 { Args: { "target_wedding_id": string }; Returns: {
               "already_initialized": boolean,"item_count": number,"template_key": string,"template_version": number
             }[]
+                           },
+"move_wedding_photo":
+{ Args: { "direction": string,"target_photo_id": string }; Returns: boolean
+                           },
+"move_wedding_site_photo_block":
+{ Args: { "direction": string,"target_block_id": string }; Returns: boolean
                            },
 "prepare_automatic_rsvp_reminder":
 { Args: { "occurrence_claim_token": string,"target_occurrence_id": string }; Returns: {
@@ -782,6 +854,9 @@ isOneToOne: false
 "set_rsvp_reminder_policy":
 { Args: { "reminder_days_before": number,"reminders_enabled": boolean,"target_wedding_id": string }; Returns: boolean
                            },
+"set_wedding_cover_photo":
+{ Args: { "target_photo_id": string,"target_wedding_id": string }; Returns: string
+                           },
 "set_wedding_display_name":
 { Args: { "new_display_name": string,"target_wedding_id": string }; Returns: string
                            },
@@ -798,7 +873,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "account_type": "planner"|"couple","automatic_rsvp_reminder_finish_outcome": "link_unrecoverable"|"sent_unrecorded"|"retry"|"recipient_rejected"|"idempotency_conflict","automatic_rsvp_reminder_outcome_reason": "answered"|"no_contact_email"|"link_unavailable"|"link_unrecoverable"|"recently_reminded"|"policy_disabled"|"out_of_window"|"recipient_undeliverable"|"recipient_rejected"|"ineligible_after_attempt"|"idempotency_conflict"|"attempts_exhausted"|"replay_window_expired","automatic_rsvp_reminder_state": "claimed"|"sending"|"retry_wait"|"sent"|"sent_unrecorded"|"skipped"|"failed"|"unknown","billing_entitlement_key": "planner_pro"|"couple_access","billing_entitlement_source": "subscription"|"purchase","billing_entitlement_status": "active"|"inactive","billing_purchase_status": "pending"|"paid"|"failed","billing_subscription_status": "incomplete"|"incomplete_expired"|"trialing"|"active"|"past_due"|"canceled"|"unpaid"|"paused","checklist_category": "first_steps"|"venue_and_date"|"vendors"|"attire"|"invitations"|"ceremony"|"reception"|"final_preparations"|"after_wedding","checklist_item_status": "pending"|"done"|"not_applicable","checklist_timing_mode": "none"|"relative_to_wedding"|"absolute","content_section_kind": "intro"|"ceremony"|"reception"|"schedule"|"dress_code"|"faq"|"rsvp","email_bounce_type": "permanent"|"transient"|"undetermined","email_delivery_event_type": "delivered"|"delivery_delayed"|"failed"|"suppressed"|"bounced"|"complained","email_delivery_ingest_outcome": "applied"|"no_change"|"duplicate"|"unknown_message","email_delivery_kind": "guest_invitation"|"rsvp_confirmation"|"rsvp_reminder_manual"|"rsvp_reminder_automatic","email_delivery_status": "accepted"|"delayed"|"failed"|"delivered"|"suppressed"|"bounced"|"complained","email_recipient_block": "none"|"suppressed"|"bounced"|"complained","seating_table_shape": "round"|"rectangle","stripe_webhook_outcome": "applied"|"no_change"|"stale"|"ignored"|"duplicate","wedding_activity_actor": "member"|"guest_capability"|"system","wedding_activity_event": "guest_invitation_created"|"guest_invitation_link_rotated"|"guest_invitation_revoked"|"guest_invitation_contact_email_changed"|"guest_invitation_email_sent"|"guest_rsvp_submitted"|"guest_rsvp_updated"|"rsvp_confirmation_email_sent"|"rsvp_reminder_email_sent","wedding_role": "owner"|"collaborator","wedding_site_theme": "classic"|"editorial"|"minimal"|"romantic"|"tropical","wedding_timeline_phase": "getting_ready"|"setup"|"ceremony"|"photos"|"cocktail"|"reception"|"closing","wedding_vendor_category": "venue"|"catering"|"photography"|"video"|"music"|"flowers_decor"|"cake_desserts"|"beauty"|"attire"|"officiant"|"stationery"|"transport"|"lodging"|"rentals"|"planning"|"other","wedding_vendor_status": "considering"|"quoted"|"selected"|"booked"|"discarded"
+            "account_type": "planner"|"couple","automatic_rsvp_reminder_finish_outcome": "link_unrecoverable"|"sent_unrecorded"|"retry"|"recipient_rejected"|"idempotency_conflict","automatic_rsvp_reminder_outcome_reason": "answered"|"no_contact_email"|"link_unavailable"|"link_unrecoverable"|"recently_reminded"|"policy_disabled"|"out_of_window"|"recipient_undeliverable"|"recipient_rejected"|"ineligible_after_attempt"|"idempotency_conflict"|"attempts_exhausted"|"replay_window_expired","automatic_rsvp_reminder_state": "claimed"|"sending"|"retry_wait"|"sent"|"sent_unrecorded"|"skipped"|"failed"|"unknown","billing_entitlement_key": "planner_pro"|"couple_access","billing_entitlement_source": "subscription"|"purchase","billing_entitlement_status": "active"|"inactive","billing_purchase_status": "pending"|"paid"|"failed","billing_subscription_status": "incomplete"|"incomplete_expired"|"trialing"|"active"|"past_due"|"canceled"|"unpaid"|"paused","checklist_category": "first_steps"|"venue_and_date"|"vendors"|"attire"|"invitations"|"ceremony"|"reception"|"final_preparations"|"after_wedding","checklist_item_status": "pending"|"done"|"not_applicable","checklist_timing_mode": "none"|"relative_to_wedding"|"absolute","content_section_kind": "intro"|"ceremony"|"reception"|"schedule"|"dress_code"|"faq"|"rsvp","email_bounce_type": "permanent"|"transient"|"undetermined","email_delivery_event_type": "delivered"|"delivery_delayed"|"failed"|"suppressed"|"bounced"|"complained","email_delivery_ingest_outcome": "applied"|"no_change"|"duplicate"|"unknown_message","email_delivery_kind": "guest_invitation"|"rsvp_confirmation"|"rsvp_reminder_manual"|"rsvp_reminder_automatic","email_delivery_status": "accepted"|"delayed"|"failed"|"delivered"|"suppressed"|"bounced"|"complained","email_recipient_block": "none"|"suppressed"|"bounced"|"complained","seating_table_shape": "round"|"rectangle","stripe_webhook_outcome": "applied"|"no_change"|"stale"|"ignored"|"duplicate","wedding_activity_actor": "member"|"guest_capability"|"system","wedding_activity_event": "guest_invitation_created"|"guest_invitation_link_rotated"|"guest_invitation_revoked"|"guest_invitation_contact_email_changed"|"guest_invitation_email_sent"|"guest_rsvp_submitted"|"guest_rsvp_updated"|"rsvp_confirmation_email_sent"|"rsvp_reminder_email_sent","wedding_photo_state": "pending"|"ready","wedding_role": "owner"|"collaborator","wedding_site_photo_block_kind": "cover"|"gallery"|"carousel"|"photo_text","wedding_site_photo_block_variant": "standard"|"grid"|"masonry"|"image_start"|"image_end","wedding_site_theme": "classic"|"editorial"|"minimal"|"romantic"|"tropical","wedding_timeline_phase": "getting_ready"|"setup"|"ceremony"|"photos"|"cocktail"|"reception"|"closing","wedding_vendor_category": "venue"|"catering"|"photography"|"video"|"music"|"flowers_decor"|"cake_desserts"|"beauty"|"attire"|"officiant"|"stationery"|"transport"|"lodging"|"rentals"|"planning"|"other","wedding_vendor_status": "considering"|"quoted"|"selected"|"booked"|"discarded"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -914,7 +989,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "account_type": ["planner", "couple"],"automatic_rsvp_reminder_finish_outcome": ["link_unrecoverable", "sent_unrecorded", "retry", "recipient_rejected", "idempotency_conflict"],"automatic_rsvp_reminder_outcome_reason": ["answered", "no_contact_email", "link_unavailable", "link_unrecoverable", "recently_reminded", "policy_disabled", "out_of_window", "recipient_undeliverable", "recipient_rejected", "ineligible_after_attempt", "idempotency_conflict", "attempts_exhausted", "replay_window_expired"],"automatic_rsvp_reminder_state": ["claimed", "sending", "retry_wait", "sent", "sent_unrecorded", "skipped", "failed", "unknown"],"billing_entitlement_key": ["planner_pro", "couple_access"],"billing_entitlement_source": ["subscription", "purchase"],"billing_entitlement_status": ["active", "inactive"],"billing_purchase_status": ["pending", "paid", "failed"],"billing_subscription_status": ["incomplete", "incomplete_expired", "trialing", "active", "past_due", "canceled", "unpaid", "paused"],"checklist_category": ["first_steps", "venue_and_date", "vendors", "attire", "invitations", "ceremony", "reception", "final_preparations", "after_wedding"],"checklist_item_status": ["pending", "done", "not_applicable"],"checklist_timing_mode": ["none", "relative_to_wedding", "absolute"],"content_section_kind": ["intro", "ceremony", "reception", "schedule", "dress_code", "faq", "rsvp"],"email_bounce_type": ["permanent", "transient", "undetermined"],"email_delivery_event_type": ["delivered", "delivery_delayed", "failed", "suppressed", "bounced", "complained"],"email_delivery_ingest_outcome": ["applied", "no_change", "duplicate", "unknown_message"],"email_delivery_kind": ["guest_invitation", "rsvp_confirmation", "rsvp_reminder_manual", "rsvp_reminder_automatic"],"email_delivery_status": ["accepted", "delayed", "failed", "delivered", "suppressed", "bounced", "complained"],"email_recipient_block": ["none", "suppressed", "bounced", "complained"],"seating_table_shape": ["round", "rectangle"],"stripe_webhook_outcome": ["applied", "no_change", "stale", "ignored", "duplicate"],"wedding_activity_actor": ["member", "guest_capability", "system"],"wedding_activity_event": ["guest_invitation_created", "guest_invitation_link_rotated", "guest_invitation_revoked", "guest_invitation_contact_email_changed", "guest_invitation_email_sent", "guest_rsvp_submitted", "guest_rsvp_updated", "rsvp_confirmation_email_sent", "rsvp_reminder_email_sent"],"wedding_role": ["owner", "collaborator"],"wedding_site_theme": ["classic", "editorial", "minimal", "romantic", "tropical"],"wedding_timeline_phase": ["getting_ready", "setup", "ceremony", "photos", "cocktail", "reception", "closing"],"wedding_vendor_category": ["venue", "catering", "photography", "video", "music", "flowers_decor", "cake_desserts", "beauty", "attire", "officiant", "stationery", "transport", "lodging", "rentals", "planning", "other"],"wedding_vendor_status": ["considering", "quoted", "selected", "booked", "discarded"]
+            "account_type": ["planner", "couple"],"automatic_rsvp_reminder_finish_outcome": ["link_unrecoverable", "sent_unrecorded", "retry", "recipient_rejected", "idempotency_conflict"],"automatic_rsvp_reminder_outcome_reason": ["answered", "no_contact_email", "link_unavailable", "link_unrecoverable", "recently_reminded", "policy_disabled", "out_of_window", "recipient_undeliverable", "recipient_rejected", "ineligible_after_attempt", "idempotency_conflict", "attempts_exhausted", "replay_window_expired"],"automatic_rsvp_reminder_state": ["claimed", "sending", "retry_wait", "sent", "sent_unrecorded", "skipped", "failed", "unknown"],"billing_entitlement_key": ["planner_pro", "couple_access"],"billing_entitlement_source": ["subscription", "purchase"],"billing_entitlement_status": ["active", "inactive"],"billing_purchase_status": ["pending", "paid", "failed"],"billing_subscription_status": ["incomplete", "incomplete_expired", "trialing", "active", "past_due", "canceled", "unpaid", "paused"],"checklist_category": ["first_steps", "venue_and_date", "vendors", "attire", "invitations", "ceremony", "reception", "final_preparations", "after_wedding"],"checklist_item_status": ["pending", "done", "not_applicable"],"checklist_timing_mode": ["none", "relative_to_wedding", "absolute"],"content_section_kind": ["intro", "ceremony", "reception", "schedule", "dress_code", "faq", "rsvp"],"email_bounce_type": ["permanent", "transient", "undetermined"],"email_delivery_event_type": ["delivered", "delivery_delayed", "failed", "suppressed", "bounced", "complained"],"email_delivery_ingest_outcome": ["applied", "no_change", "duplicate", "unknown_message"],"email_delivery_kind": ["guest_invitation", "rsvp_confirmation", "rsvp_reminder_manual", "rsvp_reminder_automatic"],"email_delivery_status": ["accepted", "delayed", "failed", "delivered", "suppressed", "bounced", "complained"],"email_recipient_block": ["none", "suppressed", "bounced", "complained"],"seating_table_shape": ["round", "rectangle"],"stripe_webhook_outcome": ["applied", "no_change", "stale", "ignored", "duplicate"],"wedding_activity_actor": ["member", "guest_capability", "system"],"wedding_activity_event": ["guest_invitation_created", "guest_invitation_link_rotated", "guest_invitation_revoked", "guest_invitation_contact_email_changed", "guest_invitation_email_sent", "guest_rsvp_submitted", "guest_rsvp_updated", "rsvp_confirmation_email_sent", "rsvp_reminder_email_sent"],"wedding_photo_state": ["pending", "ready"],"wedding_role": ["owner", "collaborator"],"wedding_site_photo_block_kind": ["cover", "gallery", "carousel", "photo_text"],"wedding_site_photo_block_variant": ["standard", "grid", "masonry", "image_start", "image_end"],"wedding_site_theme": ["classic", "editorial", "minimal", "romantic", "tropical"],"wedding_timeline_phase": ["getting_ready", "setup", "ceremony", "photos", "cocktail", "reception", "closing"],"wedding_vendor_category": ["venue", "catering", "photography", "video", "music", "flowers_decor", "cake_desserts", "beauty", "attire", "officiant", "stationery", "transport", "lodging", "rentals", "planning", "other"],"wedding_vendor_status": ["considering", "quoted", "selected", "booked", "discarded"]
           }
         }
 } as const

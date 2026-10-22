@@ -104,8 +104,10 @@ RSVP capabilities; wedding domain data. Customizations are validated on write (a
 
 ### 7. Deferred, each needing an explicit decision
 
-- **Images and media**: no uploads, storage, image URLs or media schema. A separate ADR must cover storage, metadata
-  stripping and publish-gated serving first (the Constitution keeps Gallery out).
+- **Images and media**: no uploads, storage, image URLs or media schema in the design. *Later note (2026-10-22):*
+  photos are now wedding content governed by [ADR-022](ADR-022-wedding-site-photography.md) (storage, metadata
+  stripping, publication-gated serving), never design; themes only decide how photo blocks are drawn, through closed
+  values.
 - **Section reordering**: not part of CP6; it requires an explicit amendment of the LB-10 rule (public order = the
   fixed kind order). Visibility stays in `content_sections` either way.
 - **Planner presets**: a reusable design owned by its author, applied by copying it into a wedding's design through the

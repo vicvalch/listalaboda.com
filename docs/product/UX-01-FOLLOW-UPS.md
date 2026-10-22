@@ -29,7 +29,7 @@ couple-facing site editor.
 ## UX-01B: photo blocks, cover image, carousel, gallery, safe upload
 
 > **Superseded by UX-01B1 (2026-10-22):** the owner made photography a core product feature. The architecture is
-> [ADR-022 (Proposed)](../architecture/ADR-022-wedding-site-photography.md) and the stages (UX-01B2 cover, UX-01B3 gallery/carousel/photo-text, UX-01B4 QA and smoke), free-tier limits and open decisions are in
+> [ADR-022 (Accepted 2026-10-22)](../architecture/ADR-022-wedding-site-photography.md) and the stages (UX-01B2 cover, UX-01B3 gallery/carousel/photo-text, UX-01B4 QA and smoke), free-tier limits and open decisions are in
 > [UX-01B-PHOTOGRAPHY-PLAN.md](UX-01B-PHOTOGRAPHY-PLAN.md). The notes below are kept as the original sketch.
 
 Decisions needed before code (in this order):

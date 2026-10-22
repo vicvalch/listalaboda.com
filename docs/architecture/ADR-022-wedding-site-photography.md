@@ -1,8 +1,10 @@
 # ADR-022 — Wedding Site Photography (Zero-Cost MVP)
 
-Status: **Proposed** (UX-01B1, revised 2026-10-22). Not accepted, not effective. It becomes effective only when the
-owner ratifies the Constitution amendment in Appendix A and accepts this ADR in a reviewed change; until then the
-Constitution's "Gallery: OUT" stands and nothing here may be implemented.
+Status: **Accepted** · Date: 2026-10-22 (proposed in UX-01B1; ratified by the product owner on 2026-10-22, who
+ratified the Constitution amendment in Appendix A, accepted this ADR including its §13 implementation decisions, the
+read-only sixth service-role module (§4, amending ADR-002 §6) and a direct, version-pinned `sharp` dependency).
+Authorization covers building and testing; production migrations, storage resources and activation of the
+`WEDDING_SITE_PHOTOS` flag each remain separate, explicitly approved steps (§11).
 Related: [Product Constitution §1, §8, §10](../product/PRODUCT-CONSTITUTION.md), [ADR-002 §4, §6, §7](ADR-002-auth-and-security-boundaries.md),
 [ADR-013](ADR-013-visual-seating-planner-layout-model.md) (LB-20 drag policy), [ADR-019](ADR-019-wedding-site-design-and-themes.md),
 [ADR-021](ADR-021-stripe-billing-entitlements.md). Plan, limits and tickets: [UX-01B photography plan](../product/UX-01B-PHOTOGRAPHY-PLAN.md).
@@ -61,14 +63,14 @@ Measured against the free tiers (sources and dates in the plan, §2):
   at render (`object-position`), so no re-cropping source is needed. Object names hold the random photo id only, never
   a wedding id, slug or file name.
 
-### 3. Upload and processing (one Server Action, member session)
+### 3. Upload and processing (one member request, member session)
 
 1. The editor (client component) checks the chosen file: ≤ **15 MB**, JPEG/PNG/WebP (HEIC accepted only where the
    browser can decode it), then decodes and downsizes it in the browser to ≤ 2400 px and ≤ 4 MB JPEG. This is a
    transport step only (Vercel's 4.5 MB body limit); it is never trusted.
-2. Server Action (`requireUser` → `requireWeddingMembership` → feature flag): calls `create_wedding_photo(wedding)`,
-   which locks the wedding row and enforces the quotas (§6), first deleting this wedding's stale `pending` rows, and
-   inserts a `pending` row.
+2. Member upload request (§13.1; `requireUser` → `requireWeddingMembership` → feature flag): calls `create_wedding_photo(wedding)`,
+   which locks the wedding row and enforces the quotas (§6), first deleting this wedding's stale `pending` rows (their
+   objects are removed just before, §13.3), and inserts a `pending` row.
 3. The server verifies the magic bytes, decodes with `sharp` under `limitInputPixels` (≤ 50 MP, each side ≤ 10,000 px,
    short side ≥ 600 px), applies the orientation and **re-encodes** both renditions; EXIF, GPS, XMP and ICC profiles are
    dropped (sRGB output).
@@ -88,7 +90,7 @@ chunk is ever served. The worst a member can do is break their own wedding's pho
 - Route `GET /boda/[slug]/fotos/[photoId]/[1600|640]`: reads and sets no cookies and is excluded explicitly from the
   session proxy matcher in `src/proxy.ts` (the path has no file extension, so today's `.webp` exclusion does not cover
   it). Any query string → 404, so the CDN cache cannot be bypassed with `?x=`.
-- It calls the server-only module **`src/lib/wedding-site/photo-origin.ts`** (proposed **sixth service-role module**,
+- It calls the server-only module **`src/lib/wedding-site/photo-origin.ts`** (the **sixth service-role module**,
   read-only, one operation): `fetchPublishedPhoto(slug, photoId, rendition)` → service_role-only RPC
   `claim_published_wedding_photo` (returns the object path only if the wedding is published, the photo is `ready`
   and placed in a visible block, and the monthly origin budget allows it; it adds the object's size to the month's
@@ -96,12 +98,12 @@ chunk is ever served. The worst a member can do is break their own wedding's pho
 - **Why a privileged reader is justified:** with an anon storage policy, anyone holding the public anon key could
   download published photos straight from Supabase, bypassing the CDN and the meter, and exhaust the free egress that
   the whole product (Auth, billing, RSVP) shares. The module never writes, never authorizes members, takes no wedding
-  id or path from input, and exposes no client. Accepting it amends ADR-002 §6 in the same change.
+  id or path from input, and exposes no client. Its acceptance amends ADR-002 §6 (later note, 2026-10-22).
 - Response headers: `Content-Type: image/webp` (fixed), `X-Content-Type-Options: nosniff`,
   `Content-Security-Policy: default-src 'none'`, `Cross-Origin-Resource-Policy: same-origin`, `X-Robots-Tag: noindex`,
   `Cache-Control: public, max-age=600` (browsers: 10 minutes), `Vercel-CDN-Cache-Control: public, max-age=2592000`
-  (edge: 30 days), `Vercel-Cache-Tag: lb-photo-<photoId>`. Every failure is the same 404 (short cache).
-- **Member preview**: `/app/weddings/[id]/site/fotos/[photoId]/[rendition]` with the member session (storage SELECT
+  (edge: 30 days), `Vercel-Cache-Tag: lb-photo-<photoId>`. Every failure is the same 404 (`no-store`, §13.6).
+- **Member preview**: `/app/weddings/[id]/site/photos/[photoId]/[rendition]` with the member session (storage SELECT
   policy for members of the photo's wedding), `private, no-store`.
 - The public read `get_published_wedding_site` gains one field, `site_photos`: visible blocks with `ready` photos
   (kind, variant, anchor, position; per photo id, width, height, alt text, caption, focal point). No paths, wedding ids,
@@ -200,19 +202,56 @@ transformation services (paid); a join table for multi-block photos; `@dnd-kit/s
 "Mover antes/después" buttons); full site drafts (per-block visibility plus the member preview instead); background
 cleanup jobs.
 
+### 13. Implementation decisions (recorded at ratification, 2026-10-22)
+
+Reconciliations of the text above with the platform, none weaker than the decision they refine:
+
+1. **Upload transport.** One member-authenticated `POST /app/weddings/[weddingId]/site/photos/upload` route handler
+   (multipart, one photo per request) instead of a Server Action: Server Actions cannot report upload progress and
+   default to a 1 MB body. It runs the same checks in the same order (`requireUser` → `requireWeddingMembership` →
+   flag) and adds the CSRF check Server Actions do implicitly: the `Origin` header must be present and match the
+   request's host; the session cookies are `SameSite=Lax`. The body is refused above 4.5 MB before decoding.
+2. **Daily upload count.** "Deleted photos count" needs a durable counter: `private.wedding_photo_upload_days`
+   (wedding, UTC day, count), written only by `create_wedding_photo`, no client privilege. It is a rate limit, not
+   wedding-planning time, so UTC is correct here.
+3. **Stale pending sweep.** Supabase Storage refuses SQL deletes of `storage.objects` ("use the Storage API"). The
+   upload request therefore removes the objects of this wedding's stale `pending` rows through the Storage API with
+   the member's session first; `create_wedding_photo` then deletes the stale rows. A failed object removal leaves an
+   orphan object without a row, which is never served and is removed by the operator reconcile (§8).
+4. **Alt text.** A photo without alt text is never public: the public read (`site_photos`) and the origin claim use
+   one shared predicate (`private.public_wedding_photos`) that requires `ready`, non-empty alt text and a visible
+   block of a published wedding. The editor marks such photos ("Falta la descripción: no se mostrará").
+5. **Variants (closed per kind).** `cover`: `standard` (the theme's hero variant decides the treatment, plan §5);
+   `gallery`: `grid | masonry`; `carousel`: `standard`; `photo_text`: `image_start | image_end`.
+6. **Purge and failures.** Purges use Next 16's `revalidateTag("lb-photo-<id>", { expire: 0 })` (delete semantics on
+   Vercel's CDN, no stale copy served) for the affected photos after hiding, removing or deleting them, and for every
+   photo of the wedding after unpublishing or changing the address. 404s are `no-store` (a photo made visible is
+   served at once; misses cost an invocation, never storage egress).
+7. **Renditions.** Long edge `min(1600, source)` and `min(640, source)` (never upscaled), WebP quality 80, stepping
+   down to 70 and 60 only if a rendition would exceed the bucket's 1 MB object limit; otherwise the upload fails with
+   the closed "No pudimos preparar la foto" error. Delivery validation parses the RIFF container (VP8/VP8L/VP8X, no
+   `EXIF`/`XMP `/`ICCP` chunks, long edge within the rendition's bound) without decoding.
+8. **Carousel without JavaScript.** The public site ships no client JavaScript (ADR-019). The carousel is a focusable
+   CSS scroll-snap region (keyboard arrows scroll it natively, swipe on touch) with "Anterior/Siguiente" as in-page
+   links to the neighbouring slide, "3 de 8" text, no autoplay and smooth scrolling only without
+   `prefers-reduced-motion`.
+9. **Member preview of hidden blocks.** The member preview shows visible blocks normally and hidden ones marked
+   "Oculta"; the public read never returns hidden blocks.
+10. **Reordering.** "Mover antes / Mover después" buttons call one SECURITY INVOKER function per move that swaps two
+    positions under the member's RLS; no drag library (LB-20).
+
 ## Consequences
 
 - Photos become wedding-site content under the existing publication gate, at zero incremental cost while the
   breakers hold.
-- One narrow, read-only privileged module is added, if accepted.
+- One narrow, read-only privileged module is added (the sixth; ADR-002 §6).
 - Free-tier capacity is finite (plan §2); growth means a paid plan, not a redesign.
 
-## Appendix A — Proposed Constitution amendment (draft, not ratified)
+## Appendix A — Constitution amendment (ratified 2026-10-22)
 
-To be applied to `docs/product/PRODUCT-CONSTITUTION.md` only after owner ratification, in the same change that marks
-this ADR Accepted.
+Applied to `docs/product/PRODUCT-CONSTITUTION.md` in the same change that marked this ADR Accepted.
 
-1. Header: add "Amended: Wedding site photography (YYYY-MM-DD, ADR-022) — curated photos on the published wedding
+1. Header: add "Amended: Wedding site photography (2026-10-22, ADR-022) — curated photos on the published wedding
    website: §8, §10."
 2. §8, Phase 2: add "Curated wedding-site photography (ADR-022): one cover photo and up to 20 photos per wedding in
    predefined sections (gallery, carousel, photo with text), processed on the server, quota-limited and shown only on

@@ -154,6 +154,18 @@ Applies to two distinct token kinds:
   `STRIPE_WEBHOOK_SECRET`, read only in `src/lib/billing/webhook-auth.ts`). Webhooks carry no session and users must
   never write paid state, so every billing table denies client (and direct service_role) writes. No generic client;
   their responsibilities are not to be broadened. ESLint allows `SUPABASE_SERVICE_ROLE_KEY` only in the five files.
+- *Later note (UX-01B, 2026-10-22, owner-ratified):* [ADR-022 §4](ADR-022-wedding-site-photography.md) accepts a
+  **sixth** service-role module, `src/lib/wedding-site/photo-origin.ts`: a **read-only, publication-gated byte
+  origin** for published wedding photos. One operation, `fetchPublishedPhoto(slug, photoId, rendition)`: it calls one
+  fixed service_role-only SECURITY DEFINER function (`claim_published_wedding_photo`, which returns an object name
+  only for a `ready` photo with alt text in a visible block of a published wedding and only within the monthly origin
+  budget, which it meters), downloads that one object from the private `wedding-photos` bucket, validates it and
+  returns its bytes. Its authority is the publication gate itself: guests have no session, and an anon storage policy
+  would let anyone with the public anon key bypass the CDN and the meter and exhaust the free egress the whole product
+  shares. It never writes objects or rows other than the meter, never authorizes members (member uploads, edits,
+  deletes and previews use the member's own session under RLS and storage policies), takes no wedding id or object
+  path from input and exposes no client, URL signer or generic storage helper. ESLint allows
+  `SUPABASE_SERVICE_ROLE_KEY` only in the six files.
 
 ### 7. Public / private boundary
 
@@ -161,7 +173,7 @@ Applies to two distinct token kinds:
 |---|---|---|
 | PRIVATE | Wedding members (RLS) | Checklist, notes, budget, vendors, contracts, guest list, members |
 | SHARED | One token holder, one GuestInvitation | A household's GuestInvitation, its guests' RSVP |
-| PUBLIC | Anyone with the link | Published ceremony/reception info, schedule, FAQ, dress code |
+| PUBLIC | Anyone with the link | Published ceremony/reception info, schedule, FAQ, dress code, photos in visible sections of a published site (ADR-022) |
 
 - Wedding fields are **private by default**. Content becomes public only through
   an explicit publish action on specific content sections.

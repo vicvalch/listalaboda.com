@@ -1,8 +1,9 @@
 # UX-01B — Wedding site photography: plan, limits and tickets (zero-cost MVP)
 
-Status: **design only** (UX-01B1, revised 2026-10-22). Architecture: [ADR-022 (Proposed)](../architecture/ADR-022-wedding-site-photography.md).
-Nothing here is implemented or approved. Implementation starts only after the owner ratifies the Constitution
-amendment (ADR-022 Appendix A) and accepts ADR-022. Photos, including the gallery, are part of this MVP.
+Status: **approved** (owner ratification 2026-10-22). Architecture: [ADR-022 (Accepted)](../architecture/ADR-022-wedding-site-photography.md),
+including its §13 implementation decisions, which win over this plan where they differ. Photos, including the gallery,
+are part of this MVP. Production migrations, storage resources and turning `WEDDING_SITE_PHOTOS` on remain separate,
+explicitly approved steps.
 
 ## 1. Current architecture inventory (origin/main 9880486)
 
@@ -180,12 +181,11 @@ theme change in UX-01B.
 - Regression: billing, QA personas, site editor, themes and publication flows unchanged (`npm run verify`,
   `npm run db:verify`, the existing Playwright journeys).
 
-## 10. Remaining owner decisions (blocking implementation, not this document)
+## 10. Owner decisions
 
-1. Ratify the Constitution amendment and accept ADR-022.
-2. Accept the read-only sixth service-role module (`photo-origin.ts`); without it, photos must be served from a public
-   or anon-readable bucket, which exposes the shared free egress to direct-download abuse.
-3. Approve the Terms/Privacy texts (§6) after legal review, before UX-01B4's production smoke.
+1. ~~Ratify the Constitution amendment and accept ADR-022.~~ Done 2026-10-22.
+2. ~~Accept the read-only sixth service-role module (`photo-origin.ts`).~~ Done 2026-10-22 (ADR-002 §6 later note).
+3. Approve the Terms/Privacy texts (§6) after legal review, before UX-01B4's production smoke. **Still open.**
 
 Not blocking but standing: the Vercel team is on Hobby, which Vercel defines as non-commercial; this predates photos
 and applies to the whole paid product.

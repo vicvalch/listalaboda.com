@@ -1,8 +1,8 @@
-# UX-01B — Wedding site photography: plan, costs and tickets
+# UX-01B — Wedding site photography: plan, limits and tickets (zero-cost MVP)
 
-Status: **design only** (UX-01B1, 2026-10-22). Architecture: [ADR-022 (Proposed)](../architecture/ADR-022-wedding-site-photography.md).
+Status: **design only** (UX-01B1, revised 2026-10-22). Architecture: [ADR-022 (Proposed)](../architecture/ADR-022-wedding-site-photography.md).
 Nothing here is implemented or approved. Implementation starts only after the owner ratifies the Constitution
-amendment (ADR-022 Appendix A) and accepts ADR-022.
+amendment (ADR-022 Appendix A) and accepts ADR-022. Photos, including the gallery, are part of this MVP.
 
 ## 1. Current architecture inventory (origin/main 9880486)
 
@@ -10,193 +10,182 @@ amendment (ADR-022 Appendix A) and accepts ADR-022.
 |---|---|---|
 | Public site page | `src/app/boda/[slug]/page.tsx` | `force-dynamic`, `noindex`, one read, identical 404s |
 | Public read | `src/lib/wedding-site/public.ts` → `get_published_wedding_site` | published + visible sections + theme/customization |
-| Publication | `supabase/migrations/20261005120100_lb_wedding_site_publication.sql` | owner-only SECURITY DEFINER slug/publish/unpublish; slug can change |
+| Publication | `supabase/migrations/20261005120100_lb_wedding_site_publication.sql` | owner-only slug/publish/unpublish; the slug can change |
 | Content | `supabase/migrations/20261005120000_lb_wedding_site_content.sql`, `src/lib/wedding-site/sections.ts` | fixed kinds, plain text, `is_visible` default false, no JSON |
-| Design | `src/lib/wedding-site/design/{themes,customization,resolve,colors}.ts`, migrations `20261022120000`, `20261023120000`, `20261024120000` | 5 themes; closed options; presentation only |
+| Design | `src/lib/wedding-site/design/{themes,customization,resolve,colors}.ts` | 5 themes; closed options; presentation only |
 | Renderer | `src/components/wedding-site/{WeddingSite,hero,section,parts,styles}.tsx` | Server Components, no client JS; hero variants `simple, editorial, grid, framed, banner` |
-| Editor | `src/app/app/weddings/[weddingId]/site/` (`page.tsx`, `SectionForm`, `ThemeSection`, `CustomizeSection`, `PublishForm`, `SlugForm`, `preview/page.tsx`) | status card → style → header facts → sections; member-only preview |
-| Palettes | `src/app/globals.css` (`data-site-palette`) | light/dark CSS variables (has an unrelated local edit in the main worktree) |
-| Auth / tenancy | `@/lib/auth/session`, `@/lib/authz/wedding`, `private.is_wedding_member` | membership is the boundary; owners = collaborators for content |
-| Privileged modules | ADR-002 §6; five service-role modules | a sixth (media processor) needs approval |
-| Storage | `supabase/config.toml` `[storage]` | defaults only; no buckets in migrations; image transformation "Pro plan" |
-| Image libs | `node_modules/next/package.json` optionalDependencies | `sharp` 0.35.5 present only as Next's optional dependency |
-| Images in UI | `src/components/marketing/{ProductShot,LifestylePhoto}.tsx` | plain `<picture>`/`<img>`, no `next/image` runtime |
-| Proxy | `src/proxy.ts` matcher | skips `.webp/.png/.jpg…` paths (no session refresh) |
-| Headers | `next.config.ts` | `nosniff`, `frame-ancestors 'none'`, `/boda` `X-Robots-Tag: noindex`; no full CSP |
-| Hosting | Vercel (Hobby team), `vercel.json` daily cron | 4.5 MB function body limit; Hobby is non-commercial |
+| Editor | `src/app/app/weddings/[weddingId]/site/` (`page.tsx`, `SectionForm`, `ThemeSection`, `CustomizeSection`, `PublishForm`, `SlugForm`, `preview/page.tsx`) | status → style → header facts → sections; member-only preview |
+| Auth / tenancy | `@/lib/auth/session`, `@/lib/authz/wedding`, `private.is_wedding_member` | owners = collaborators for content; publishing owner-only |
+| Privileged modules | ADR-002 §6 (five service-role modules) | ADR-022 proposes a sixth, read-only |
+| Storage | `supabase/config.toml` `[storage]` | CLI defaults only; no buckets in migrations; production not inspected |
+| Image libs | `node_modules/next/package.json` optionalDependencies | `sharp` 0.35.5 only as Next's optional dependency |
+| Proxy | `src/proxy.ts` matcher | excludes `.webp/.png/.jpg…` paths only |
+| Headers | `next.config.ts` | `nosniff`, `frame-ancestors 'none'`, `/boda` `X-Robots-Tag: noindex` |
+| Hosting | Vercel Hobby, `vercel.json` | 4.5 MB function body limit |
 | Drag policy | LB-20 / ADR-013 | `@dnd-kit/core` 6.3.1 pinned; no `@dnd-kit/sortable` |
-| Tests | Vitest (`src/test/`), DB tests (`npm run db:verify`), Playwright (`e2e/`) | golden Classic markup in `src/test/__golden__/wedding-site-classic/` |
+| Tests | `src/test/` (Vitest), `npm run db:verify`, `e2e/` (Playwright) | golden Classic markup `src/test/__golden__/wedding-site-classic/` |
 
-## 2. Workflow (storage → processing → delivery)
+## 2. Free-tier limits (read 2026-10-22 from the vendors' own pages)
 
-1. Member clicks "Subir foto" → Server Action: `requireUser`, membership, feature flag → `reserve_wedding_media`
-   (quotas) → signed upload URL for `wedding-media-incoming/<id>/original` (member session).
-2. Browser uploads directly (progress bar; one retry button; max 5 concurrent per wedding).
-3. Browser calls "finalize" → Server Action: membership → media processor reads raw → magic bytes → `sharp` decode
-   (pixel limit) → rotate → re-encode WebP master 2400 + 1600/960/480 → processor writes `wedding-media/<id>/*` →
-   `complete_wedding_media` (sizes from storage) → processor deletes raw.
-4. Member sets alt text (required before it can appear publicly), places it in a block, sets focal point, previews
-   (member route, `no-store`).
-5. Guest opens `/boda/<slug>` → page lists photos from `get_published_wedding_site.site_photos` → `<img srcset>` to
-   `/boda/<slug>/fotos/<id>/<rendition>` → Vercel CDN hit, or on a miss the route re-checks publication and streams the
-   object (anon key + gated storage policy).
-6. Unpublish/hide/delete → new misses 404 at once; cached copies expire within the stated window (ADR-022 §7).
+| Provider | Storage | Files | Delivery / month | Requests / ops | Over the limit |
+|---|---|---|---|---|---|
+| Pinata Free | 1 GB | 500 | 10 GB (dedicated gateway) | 10,000 gateway requests; API 60/min | uploads and dedicated gateway blocked once 25 % over |
+| Supabase Free | 1 GB | — | 5 GB uncached + 5 GB cached egress, shared with all API/database traffic | — (max file 50 MB) | grace period, then Fair Use restrictions on the whole organization: pausing, read-only database, 402 responses; lifted next cycle or by upgrading |
+| Vercel Blob (Hobby) | 1 GB | — | 10 GB Blob transfer | 10,000 simple ops (cache misses), 2,000 advanced ops (uploads) | Blob unusable for 30 days |
+| Vercel Hobby (CDN, functions) | — | — | 100 GB Fast Data Transfer (whole app) | 1 M function invocations; purge by tag 50 calls/s per team | Hobby is "for personal, non-commercial use" |
 
-## 3. Editor and guest experience
+Sources: [Pinata pricing](https://pinata.cloud/pricing) and [Pinata free plan](https://pinata.cloud/blog/pinatas-new-free-plan/)
+(500 files, 10 GB, 10,000 requests), [Pinata limits](https://docs.pinata.cloud/account-management/limits);
+[Supabase pricing](https://supabase.com/pricing), [Supabase billing FAQ](https://supabase.com/docs/guides/platform/billing-faq)
+(Fair Use restrictions); [Vercel pricing](https://vercel.com/pricing),
+[Vercel Blob pricing](https://vercel.com/docs/vercel-blob/usage-and-pricing),
+[Vercel CDN purge](https://vercel.com/docs/caching/cdn-cache/purge) (purge on all plans, tag rules). Pinata's comparison
+table was partly unreadable; its free figures come from Pinata's own free-plan post and match third-party listings.
+Pinata publishes no statement on commercial use of the free plan.
 
-Placement in the existing editor (`site/page.tsx`): a new card **"Fotos"** after "Estilo del sitio" and before the
-text sections, with three parts: **Portada** (one photo, focal point, "Cambiar portada", "Quitar"), **Biblioteca**
-(the up-to-20 photos, counter "12 de 20 fotos", "Subir fotos", per photo alt text and "Eliminar" with the list of blocks
-using it), and **Bloques de fotos** (add gallery / carousel / photo with text; per block: variant, anchor "Después de:
-<sección>", visibility toggle, items, "Mover antes / Mover después").
+Capacity of the selected design inside free tiers (≈ 370 KB stored per photo: 1600 px ≈ 300 KB + 640 px ≈ 70 KB):
 
-- Predefined components only; no free layout. Reordering with buttons and the keyboard first (LB-20); each move
-  announces the new position in one polite live region.
-- Focal point: click/tap on the photo or arrow keys move a marker (0–10000 grid, like the seating board); the preview
-  shows the crop in desktop and phone frames side by side (the existing preview renders the real `WeddingSite`).
-- "Drafts": every new block is hidden until the couple turns it on; the member preview shows hidden blocks marked as
-  such. Saved and visible = live, like text today. Full site drafts stay a separate decision.
-- Upload states in plain Spanish: "Subiendo… 40 %", "Preparando la foto…", "Lista", and closed failures: "Esta foto
-  pesa más de 15 MB", "Usa una foto JPG, PNG o WebP", "La foto es muy pequeña para verse bien", "Llegaste al límite de
-  20 fotos", "No pudimos preparar la foto. Inténtalo otra vez." Never an internal message.
-- Slow networks: direct upload with progress, no page reload; an interrupted upload expires on its own (30 min).
-- Guest side: cover in the hero (theme-dependent treatment), gallery as a responsive grid (2 columns phone, 3–4
-  desktop), carousel with visible "Anterior/Siguiente" buttons, position "3 de 8", no autoplay, swipe only as
-  progressive enhancement, `prefers-reduced-motion` respected, works without JavaScript as a scrollable list
-  (CSS scroll-snap). Every `<img>` has width/height (no layout shift), `srcset`/`sizes`, `loading="lazy"` except the
-  cover (`fetchpriority="high"`), and the couple's alt text; captions as visible text.
-
-## 4. Theme compatibility (the five current themes)
-
-Verified keys: `classic, editorial, minimal, romantic, tropical` (`WEDDING_SITE_THEME_KEYS`). Photos inherit the
-theme through closed presentation values, never per-photo styling:
-
-| Theme | Cover (by hero variant) | Gallery / carousel framing |
+| Measure | Value | Bound by |
 |---|---|---|
-| Classic | `simple`: photo above the names, full content width; Classic stays pixel-identical when there is no photo | plain grid, small radius |
-| Editorial | `editorial`: tall photo with names below, serif display | wide margins, thin rule between blocks |
-| Minimal | `grid`: photo in the grid's second column | square crops, no radius, ruled |
-| Romantic | `framed`: photo inside the frame with the flourish | soft radius, airy spacing |
+| Weddings with 20 photos | ≈ 108 | 800 MB storage breaker |
+| Weddings with 12 photos (typical) | ≈ 180 | same |
+| Page views with photos / month | ≈ 100,000 at ≈ 1 MB per view | Vercel Hobby 100 GB transfer, shared with the app |
+| Origin downloads / month | 3 GB (≈ 10,000 distinct renditions re-fetched) | origin breaker, inside Supabase's 5 GB |
+
+For comparison, Pinata Free would hold about 12 full weddings (500 files ÷ 2 renditions ÷ 20) and about 900 typical
+page views a month (10,000 requests ÷ 11 images per view).
+
+Beyond the free tiers: Supabase Pro (from $25/month: 100 GB storage, 250 GB egress) and Vercel Pro ($20/month: 1 TB
+transfer, commercial use). Storage stays cheap at any scale; delivered bytes are the cost driver (see the previous
+revision's simulations, kept in git history of this file).
+
+## 3. Workflow
+
+1. Couple picks photos → the editor checks ≤ 15 MB and type, shows a thumbnail, downsizes in the browser
+   (≤ 2400 px, ≤ 4 MB JPEG) and posts each one to the Server Action, at most 3 at a time, with progress.
+2. Server: auth + membership + flag → `create_wedding_photo` (quotas, breakers, stale-pending sweep) → magic bytes →
+   `sharp` decode with pixel limits → orientation → re-encode 1600/640 WebP without metadata → upload with the member's
+   session → `complete_wedding_photo` (sizes from storage) → `ready`.
+3. Couple adds alt text, places the photo in the cover or a block, sets the focal point, previews (member route).
+4. Guest opens `/boda/<slug>` → `site_photos` from the public read → `<img srcset>` to `/boda/<slug>/fotos/<id>/<size>`
+   → Vercel CDN hit, or on a miss `photo-origin.ts` checks the gate and the meter, validates and streams.
+5. Unpublish / hide / delete → the gate closes at once; tags `lb-photo-<id>` purged; browsers may keep a copy ≤ 10 min.
+
+## 4. Editor and guest experience
+
+- New card **"Fotos"** in `site/page.tsx` after "Estilo del sitio": **Portada** (one photo, focal point, "Cambiar
+  portada", "Quitar"), **Biblioteca** ("12 de 20 fotos", "Subir fotos", alt text, "Eliminar"), **Secciones con fotos**
+  (add gallery / carousel / photo with text; variant; "Después de: <sección>"; visible toggle; "Mover antes / Mover
+  después" buttons with a polite live region). Predefined components only; no free layout, no drag library.
+- New blocks start hidden; the member preview shows hidden blocks marked as such. That is the MVP's "draft".
+- A fixed notice near "Publicar" and in "Fotos": "Cualquier persona con el enlace del sitio puede ver y descargar las
+  fotos publicadas. Si quitas una foto, deja de mostrarse en pocos minutos, pero no podemos borrar copias que alguien
+  ya haya guardado."
+- Plain Spanish states and closed errors: "Subiendo…", "Preparando la foto…", "Lista"; "La foto pesa más de 15 MB",
+  "Usa una foto JPG, PNG o WebP", "La foto es muy pequeña para verse bien", "Llegaste al límite de 20 fotos",
+  "Las fotos están en pausa por mantenimiento", "No pudimos preparar la foto. Inténtalo otra vez."
+- Guests: cover in the hero; gallery as a responsive grid; carousel with visible "Anterior/Siguiente", "3 de 8", no
+  autoplay, `prefers-reduced-motion`, CSS scroll-snap so it works without JavaScript (swipe comes free on touch).
+  Every `<img>` has width/height (no layout shift), `srcset` (640/1600) and `sizes`, `loading="lazy"` except the cover,
+  and the couple's alt text; captions as visible text.
+
+## 5. Theme compatibility
+
+Verified keys: `classic, editorial, minimal, romantic, tropical` (`WEDDING_SITE_THEME_KEYS`). Photos inherit the theme
+through closed values; no per-photo styling.
+
+| Theme | Cover (hero variant) | Gallery / carousel |
+|---|---|---|
+| Classic | `simple`: photo above the names; pixel-identical page when there is no cover | plain grid, small radius |
+| Editorial | `editorial`: tall photo, serif names below | wide margins, thin rules |
+| Minimal | `grid`: photo in the second column | square crops, no radius |
+| Romantic | `framed`: photo inside the frame with the flourish | soft radius, airy |
 | Tropical | `banner`: photo as banner, names on the band | tiles on the surface color |
 
-- Text over photos only where the overlay contrast can be guaranteed (a solid band or scrim using palette tokens;
-  never text directly on an unknown photo). Captions use the palette's text/muted tokens (WCAG AA as today).
-- Custom colors (CP7) apply to frames and bands the same way as to text surfaces.
-- A future theme declares its photo treatments in its `ThemeDefinition` (closed values), like hero variants today.
+Text never sits directly on a photo: it uses a solid band or scrim from palette tokens so WCAG AA holds; custom
+colors (CP7) apply to frames and bands as to any surface. UX-01C (after UX-01B4): `floral` first, then `boho`, later
+"classic garden" and "romantic editorial" variants, each declaring its photo treatments as closed theme values; no
+theme change in UX-01B.
 
-## 5. Quotas and cost simulations
+## 6. Terms and Privacy changes required before photos go live (legal review pending)
 
-Rendition sizes (estimates for typical photos, WebP): master 2400 px ≈ 600 KB, 1600 ≈ 300 KB, 960 ≈ 130 KB,
-480 ≈ 45 KB → **≈ 1.08 MB stored per photo**; 20 photos ≈ 21.5 MB (cap 40 MB). Typical wedding assumed 12 photos
-(≈ 13 MB). Provider replication is internal and not billed separately.
+- Terms: the couple must own or have permission for every photo and the consent of the people shown; published photos
+  can be viewed and downloaded by anyone with the link; we cannot recall copies others saved; prohibited content
+  (illegal, sexual, violent, others' private data) and our right to remove it; limits (20 photos, 15 MB); a takedown
+  request goes to `soporte@listalaboda.com`.
+- Privacy: what we store (two processed copies, no originals, no location or camera data), where (our storage and CDN
+  providers as processors), who sees it (members; anyone with the link once published), how long (until deleted by the
+  couple or the account is removed; CDN copies purged within minutes, browser copies briefly), and guests' requests to
+  remove a photo of themselves (via the couple or support).
+- The current documents must not be edited in UX-01B; the texts above are inputs for the legal review.
 
-Traffic assumptions per wedding per month (only weddings with a published site):
+## 7. Required migrations and components (none created yet)
 
-| Scenario | Views / wedding / month | Image requests / view | Bytes / view |
-|---|---|---|---|
-| Conservative | 50 | 3 (cover + 2 thumbs, phone) | 0.3 MB |
-| Typical | 300 | 11 (cover 960 + 8 × 480 + 2 × 1600) | 1 MB |
-| High | 3,000 | 25 (desktop, whole gallery at 1600) | 3 MB |
+- Migration (UX-01B2): enums `wedding_photo_state`, `wedding_site_photo_block_kind`, variant enum; tables
+  `wedding_photos`, `wedding_site_photo_blocks`, `wedding_photo_origin_usage` with RLS and column grants; functions
+  `create_wedding_photo`, `complete_wedding_photo` (member, SECURITY INVOKER where possible), `claim_published_wedding_photo`
+  (service_role only); storage bucket `wedding-photos` (private, 1 MB, `image/webp`) and its policies (member
+  INSERT on own pending names, member SELECT/DELETE for own wedding, no anon); recreated `get_published_wedding_site`
+  with `site_photos`. Indexes: `(wedding_id, state)`, `(block_id, position)`, `(wedding_id, anchor, position)`.
+- Code: `src/lib/wedding-site/photos/` (service, processing with `sharp`, quotas mapping), `photo-origin.ts`
+  (service role, ESLint allow-list entry), the public route and the member route, the proxy matcher exclusion, editor
+  components, renderer blocks per theme, `es.site.photos` copy, flag `WEDDING_SITE_PHOTOS`.
+- Dependency: `sharp` declared explicitly and pinned (an approved package install in UX-01B2).
+- Operator runbook: reconcile query (objects whose photo id has no row → delete), breaker levels, how to raise them.
+- No queues, cron jobs, edge functions or new vendors.
 
-Volumes (`egress = weddings × views × bytes`; stored at 13 MB typical / 40 MB cap):
+## 8. Implementation stages
 
-| Weddings | Photos (typ.) | Stored typ. / cap | Requests / month (typ.) | Transfer cons. / typ. / high |
-|---|---|---|---|---|
-| 100 | 1,200 | 1.3 GB / 4 GB | 0.33 M | 1.5 GB / 30 GB / 0.9 TB |
-| 1,000 | 12,000 | 13 GB / 40 GB | 3.3 M | 15 GB / 300 GB / 9 TB |
-| 10,000 | 120,000 | 130 GB / 400 GB | 33 M | 150 GB / 3 TB / 90 TB |
+### UX-01B2 — Secure image storage and cover photo
 
-Published prices used (read 2026-10-22; "starting at" prices may be tiered; recheck before deciding):
-Vercel Pro $20/month, 1 TB Fast Data Transfer included, then from $0.15/GB, Hobby "personal, non-commercial use"
-([vercel.com/pricing](https://vercel.com/pricing)); Supabase Pro from $25/month, 100 GB storage included then
-$0.0213/GB, 250 GB egress included then $0.09/GB, cached egress $0.03/GB, image transformations 100 origin images
-included then $5 per 1,000; Free: 1 GB storage, 5 GB egress, no image transformations
-([supabase.com/pricing](https://supabase.com/pricing)); Smart CDN on Pro and above, invalidation up to 60 s, "revoking
-or expiring a token does not purge its CDN cache entry" ([Smart CDN docs](https://supabase.com/docs/guides/storage/cdn/smart-cdn));
-Cloudflare R2 $0.015/GB-month, egress free, Class B $0.36 per million ([R2 pricing](https://developers.cloudflare.com/r2/pricing/)).
+- **Scope**: §7 migration, upload/process/complete, member route, public route with `photo-origin.ts`, breakers,
+  cover block only, cover in the five hero variants, editor "Portada" + "Biblioteca", disclosure copy, flag off.
+- **Prerequisites**: amendment ratified; ADR-022 accepted (incl. the sixth module and the ADR-002 §6 note); `sharp`
+  install approved; production Supabase plan and bucket absence verified read-only.
+- **Rollback**: flag off; forward migration to drop after deleting objects.
+- **Acceptance**: a couple uploads a 12 MB phone JPEG and gets a cover with alt text and focal point; the stored
+  objects are WebP with no EXIF/GPS (checked by reading them); the cover shows in the member preview before publishing
+  and on the public site only after; unpublishing returns 404 on the next uncached request and the CDN copy is purged;
+  a member of another wedding cannot read, write or delete it; the Classic golden markup is unchanged without a cover.
 
-Incremental monthly cost on the selected design (Vercel CDN in front; Supabase origin egress ≈ cache misses, assumed
-10 % of transfer), on top of the two plan bases (~$45/month, needed for a commercial launch regardless of photos):
+### UX-01B3 — Gallery, carousel and photo with text
 
-| Weddings | Conservative | Typical | High |
-|---|---|---|---|
-| 100 | ≈ $0 | ≈ $0 | ≈ $0 (0.9 TB < 1 TB included) |
-| 1,000 | ≈ $0 | ≈ $0 | ≈ $1,200 transfer + ≈ $60 origin |
-| 10,000 | ≈ $0 | ≈ $300 transfer + ≈ $5 origin + ≈ $1 storage | ≈ $13,000+ transfer + ≈ $800 origin |
+- **Scope**: block kinds gallery (grid, masonry), carousel, photo_text; captions; anchors; visibility; button
+  reordering; library management up to 20; renderer per theme; `site_photos` for all kinds.
+- **Prerequisites**: UX-01B2 merged and its migration in production.
+- **Acceptance**: 20 photos across cover, a gallery, a carousel and a photo-with-text block; the 21st upload is
+  refused by the server even when the UI is bypassed; keyboard reordering announces positions; carousel operable by
+  keyboard and without JavaScript, no autoplay, reduced motion respected; first screen of a 12-photo gallery on a
+  phone ≤ ≈ 1 MB; no layout shift.
 
-Reading: storage is negligible at every scale (≤ $10/month even at the 400 GB cap); **delivered bytes drive cost**.
-"High" for every wedding is a stress bound, not a forecast; the realistic risk is a few viral sites (one wedding with
-100,000 views × 3 MB ≈ 300 GB). At ~10,000 weddings or sustained high traffic, moving the byte origin to R2 behind
-Cloudflare (egress free; ≈ $2 storage + ≈ $12–270 requests in the table's volumes) is the planned exit, enabled by the
-ADR-022 §9 seams; it needs a domain/DNS decision and a way to keep the publication re-check (edge function or
-short-lived tokens), so it is not free to build.
+### UX-01B4 — QA, privacy, quotas and production smoke
 
-Runaway-bill safeguards: Supabase spend cap on, Vercel spend management with an alert at a fixed monthly amount, a
-firewall rate limit on `/boda/*/fotos/*`, quotas (ADR-022 §8), and a monthly review of stored GB, transfer and the top
-weddings by image requests.
-
-## 6. Tickets
-
-### UX-01B2 — Cover image MVP
-
-- **Scope**: buckets, `wedding_media`, blocks/items tables (cover only enabled), reserve/complete RPCs, storage
-  policies, media processor module, upload/finalize actions, member media route, public delivery route,
-  `site_photos` in the public read (cover only), cover in the five hero variants, editor "Portada" with focal point
-  and alt text, reconcile script, feature flag `WEDDING_SITE_PHOTOS` (off by default).
-- **Prerequisites**: Constitution amendment ratified; ADR-022 accepted (incl. the sixth service-role module and the
-  ADR-002 §6 note); plan decisions in §7; `sharp` added as an explicit pinned dependency (approved package install);
-  hosting plans decided.
-- **Migrations**: enums, three tables with RLS and grants, quota RPCs, storage buckets + policies, recreated
-  `get_published_wedding_site` (+ `site_photos`), `get_published_wedding_photo`. Applied to production BEFORE the
-  code deploy, with dry-run and backup (QA-03a lesson).
-- **Security tests**: §14 of ADR-022 for cover paths; anon/outsider/collaborator matrices; EXIF fixture removal;
-  polyglot/oversize/bomb refusal; storage write attempts by members on `wedding-media`; 404 equivalence.
-- **Functional tests**: upload/replace/remove cover; focal point persists; preview shows unpublished cover; public page
-  shows it only when published; Classic golden unchanged without a cover; each theme with a cover in light/dark at
-  360/390/1280 px; no layout shift.
-- **Rollback**: flag off (hides editor and public photos); forward migration to drop; reconcile deletes objects.
-- **Acceptance**: a couple uploads a phone photo, sets alt text and focal point, previews, publishes, a guest sees the
-  cover on a phone in under one image request per size, unpublishing removes it within the stated window.
-- **Deploy dependencies**: storage buckets exist in production; spend caps/alerts set; flag enabled per environment
+- **Scope**: the full test matrix (§9), breaker drills, legal texts approved and published, operator runbook, then a
+  production smoke with an owner-approved QA wedding and generated test images (no personal photos), flag enabled only
   by explicit approval.
+- **Acceptance**: every item in §9 passes; Supabase egress/storage and Vercel transfer dashboards checked after the
+  smoke; disclosure visible; the flag can be turned off and photos disappear within the stated window.
 
-### UX-01B3 — Gallery, carousel and photo with text (committed phase, follows UX-01B2)
+## 9. Tests and validations (definition of done for B2–B4)
 
-- **Scope**: library UI (up to 20), block kinds `gallery` (grid/masonry), `carousel`, `photo_text`, captions, anchors,
-  visibility, button reordering, delete-with-usages, public rendering for the five themes.
-- **Prerequisites**: UX-01B2 in production and stable for at least one release; reconcile run once.
-- **Migrations**: enable the extra kinds/variants; reorder RPC; `site_photos` extended to all kinds.
-- **Security tests**: cross-wedding block items refused (composite FKs); hidden blocks never in the public read; a
-  photo removed from all visible blocks 404s; quota counts a photo once across blocks.
-- **Functional tests**: create each block, reorder with keyboard, caption, hide/show, delete a photo used twice; carousel
-  without JS, reduced motion, screen-reader labels; Lighthouse-style checks for CLS and lazy loading.
-- **Rollback**: flag per block kind off; data stays.
-- **Acceptance**: a gallery of 12 photos loads on a phone at ≤ ~1 MB for the first screen; carousel fully operable by
-  keyboard; no autoplay.
+- Database: RLS matrix (owner, collaborator, outsider, anon) on all tables and storage policies; anon and members
+  cannot call `claim_published_wedding_photo`; quotas and breakers under concurrency; `complete_wedding_photo` refuses
+  missing objects and reads sizes itself; the claim returns nothing for unpublished, hidden, pending, deleted, foreign
+  and wrong-slug ids.
+- Processing (Vitest, generated fixtures): EXIF/GPS/XMP removed; orientation applied; oversized, undersized, > 50 MP,
+  truncated, wrong-signature and polyglot files refused; delivery validation refuses a member-uploaded WebP with EXIF.
+- Route: query string → 404; every failure identical; headers exact; no cookies set; cache tag present.
+- E2E: upload → preview → publish → public → unpublish → 404; replace cover; delete; quota messages; reorder by
+  keyboard; each theme at 360/390/1280 px, light and dark; Classic golden unchanged.
+- Regression: billing, QA personas, site editor, themes and publication flows unchanged (`npm run verify`,
+  `npm run db:verify`, the existing Playwright journeys).
 
-### UX-01C — Themes (after UX-01B3, or in parallel only for non-photo work)
+## 10. Remaining owner decisions (blocking implementation, not this document)
 
-- **Scope**: `floral` first, then `boho`; later candidates "classic garden", "romantic editorial" variants. Each theme
-  defines its photo treatments as closed values; quality bar beyond colors: typography pairing, ornament, section
-  rhythm, photo framing, light/dark AA, phone layouts.
-- **Prerequisites**: ADR-019 rules; photos available to design the treatments; clean worktree (never stage the
-  unrelated `globals.css` local edit).
-- **Migrations**: add the enum value and extend the CHECK validator's per-theme options.
-- **Tests**: AA unit test over palettes, golden Classic unchanged, theme snapshot per viewport, DB/app options parity.
-- **Rollback**: a theme key is never removed; a broken theme gets fixed forward.
+1. Ratify the Constitution amendment and accept ADR-022.
+2. Accept the read-only sixth service-role module (`photo-origin.ts`); without it, photos must be served from a public
+   or anon-readable bucket, which exposes the shared free egress to direct-download abuse.
+3. Approve the Terms/Privacy texts (§6) after legal review, before UX-01B4's production smoke.
 
-## 7. Owner decisions still open
-
-1. Ratify the Constitution amendment (ADR-022 Appendix A) and accept ADR-022.
-2. Accept the sixth service-role module (media processor) or choose another write authority.
-3. Hosting plans: Vercel Pro (Hobby is non-commercial) and Supabase Pro (Free has 1 GB storage, no Smart CDN, no
-   transformations). The production Supabase plan was not verified in UX-01B1.
-4. Revocation window: `max-age=300, s-maxage=600` (recommended) vs `no-store` (instant, higher cost).
-5. Limits in ADR-022 §8 (20 photos, 15 MB raw, 40 MB stored, 5 concurrent, 60/day).
-6. HEIC/AVIF input (not in the MVP: the prebuilt `sharp` decoder set and patents make HEIC uncertain; iOS usually
-   uploads JPEG from the browser).
-7. Whether photos are part of the paid entitlement or free for every site (no gating exists today; gating is a
-   separate decision, ADR-021).
-8. Legal text: Terms/Privacy updates for photo content, guest likeness and removal (pending legal review).
-9. Orphan cleanup: operator script only, or a scheduled job (another privileged authority).
-10. Whether full site drafts are needed beyond per-block visibility.
+Not blocking but standing: the Vercel team is on Hobby, which Vercel defines as non-commercial; this predates photos
+and applies to the whole paid product.

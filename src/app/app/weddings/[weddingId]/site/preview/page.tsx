@@ -13,6 +13,10 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { sameOverrides } from "@/lib/wedding-site/design/customization";
 import { resolveWeddingSiteDesign } from "@/lib/wedding-site/design/resolve";
 import { WEDDING_SITE_THEME_KEYS } from "@/lib/wedding-site/design/themes";
+import { previewPhotoBlocks } from "@/lib/wedding-site/photos/editor";
+import { isWeddingSitePhotosEnabled } from "@/lib/wedding-site/photos/flag";
+import { memberPhotoBasePath } from "@/lib/wedding-site/photos/model";
+import { getPhotoEditor } from "@/lib/wedding-site/photos/service";
 import { previewDesign, sitePreviewPath, toPreviewSite } from "@/lib/wedding-site/preview";
 import { getWeddingSiteEditor } from "@/lib/wedding-site/service";
 import { getWeddingDetail } from "@/lib/weddings/service";
@@ -54,9 +58,11 @@ export default async function WeddingSitePreviewPage({
     notFound();
   }
 
-  const [wedding, editor] = await Promise.all([
+  const photosEnabled = isWeddingSitePhotosEnabled();
+  const [wedding, editor, photoEditor] = await Promise.all([
     getWeddingDetail(supabase, access.access.weddingId),
     getWeddingSiteEditor(supabase, access.access),
+    photosEnabled ? getPhotoEditor(supabase, access.access) : Promise.resolve(null),
   ]);
   if (!wedding) notFound();
 
@@ -82,6 +88,10 @@ export default async function WeddingSitePreviewPage({
   const isCurrent = themeKey === current && sameOverrides(design.customization, saved.customization);
   const isPublished = Boolean(editor.publication?.publishedAt);
   const site = toPreviewSite(wedding, editor.sections, editor.publication?.slug ?? "");
+  // Photos (UX-01B, ADR-022 §13.9): visible blocks as the public page will
+  // draw them, hidden ones marked; bytes from the member route (no-store).
+  const photoBlocks = photoEditor ? previewPhotoBlocks(photoEditor, { includeHidden: true }) : [];
+  const photos = photoBlocks.length > 0 ? { blocks: photoBlocks, basePath: memberPhotoBasePath(wedding.id) } : undefined;
 
   return (
     <div className="space-y-6">
@@ -161,7 +171,7 @@ export default async function WeddingSitePreviewPage({
         data-theme={themeKey}
         className="overflow-hidden rounded-2xl border border-border bg-background text-foreground shadow-sm lg:-mx-8 xl:-mx-24"
       >
-        <WeddingSite site={site} design={resolveWeddingSiteDesign(design)} element="div" />
+        <WeddingSite site={site} design={resolveWeddingSiteDesign(design)} photos={photos} element="div" />
       </section>
     </div>
   );

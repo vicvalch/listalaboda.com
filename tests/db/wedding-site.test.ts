@@ -513,6 +513,8 @@ describe("public read boundary", () => {
         section_body: "Hola a todos",
         site_theme: "classic",
         site_customization: {},
+        // UX-01B (ADR-022): no visible photo blocks.
+        site_photos: [],
       },
       {
         wedding_name: "Boda pública de prueba",
@@ -523,6 +525,8 @@ describe("public read boundary", () => {
         section_body: "Ceremonia visible",
         site_theme: "classic",
         site_customization: {},
+        // UX-01B (ADR-022): no visible photo blocks.
+        site_photos: [],
       },
       {
         wedding_name: "Boda pública de prueba",
@@ -533,6 +537,8 @@ describe("public read boundary", () => {
         section_body: "Pregunta\nRespuesta",
         site_theme: "classic",
         site_customization: {},
+        // UX-01B (ADR-022): no visible photo blocks.
+        site_photos: [],
       },
       {
         wedding_name: "Boda pública de prueba",
@@ -543,6 +549,8 @@ describe("public read boundary", () => {
         section_body: null,
         site_theme: "classic",
         site_customization: {},
+        // UX-01B (ADR-022): no visible photo blocks.
+        site_photos: [],
       },
     ]);
     // Nothing private anywhere in the payload.
@@ -574,6 +582,8 @@ describe("public read boundary", () => {
         section_body: null,
         site_theme: "classic",
         site_customization: {},
+        // UX-01B (ADR-022): no visible photo blocks.
+        site_photos: [],
       },
     ]);
   });

@@ -5,6 +5,12 @@ including its §13 implementation decisions, which win over this plan where they
 are part of this MVP. Production migrations, storage resources and turning `WEDDING_SITE_PHOTOS` on remain separate,
 explicitly approved steps.
 
+**Implementation (2026-10-22, UX-01B PR):** the full MVP (storage, cover, gallery, carousel, photo with text, editor,
+preview, public delivery) is implemented behind `WEDDING_SITE_PHOTOS` (off), with the migration
+`20261028120000_lb_wedding_site_photos.sql` applied locally only. Deployment, reversal and the reconcile procedure:
+[WEDDING-PHOTOS.md](../operations/WEDDING-PHOTOS.md). Stages B2 and B3 shipped together; B4 (legal texts and the
+production smoke) remains.
+
 ## 1. Current architecture inventory (origin/main 9880486)
 
 | Area | Where | Relevant fact |

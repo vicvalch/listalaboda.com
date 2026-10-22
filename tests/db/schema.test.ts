@@ -150,7 +150,10 @@ describe("schema guarantees", () => {
                                 'record_automatic_rsvp_reminder_email', 'finish_automatic_rsvp_reminder',
                                 'ingest_email_delivery_event', 'get_guest_invitation_email_block',
                                 'select_account_type', 'record_billing_customer',
-                                'apply_stripe_subscription_event', 'apply_stripe_checkout_payment_event'))
+                                'apply_stripe_subscription_event', 'apply_stripe_checkout_payment_event',
+                                'create_wedding_photo', 'complete_wedding_photo', 'set_wedding_cover_photo',
+                                'move_wedding_site_photo_block', 'move_wedding_photo',
+                                'claim_published_wedding_photo'))
        order by 1`,
     );
 
@@ -162,6 +165,9 @@ describe("schema guarantees", () => {
       "private.automatic_rsvp_reminder_party_due_at",
       // BILLING-01 (ADR-021): the planner policy, the guards and the entitlement recomputation.
       "private.billing_subscription_grants",
+      // UX-01B (ADR-022): storage policy helpers, block/photo triggers, the limits and the public predicate.
+      "private.can_access_wedding_photo_object",
+      "private.can_upload_wedding_photo_object",
       "private.email_comparison_form",
       "private.email_delivery_status_rank",
       "private.email_recipient_block",
@@ -185,6 +191,9 @@ describe("schema guarantees", () => {
       "private.guest_invitation_expires_at",
       "private.has_wedding_role",
       "private.is_wedding_member",
+      "private.place_wedding_photo",
+      "private.prepare_wedding_site_photo_block",
+      "private.public_wedding_photos",
       "private.record_email_delivery",
       "private.record_guest_invitation_contact_email_change",
       "private.refresh_billing_entitlement",
@@ -192,14 +201,19 @@ describe("schema guarantees", () => {
       "private.set_updated_at",
       "private.stamp_checklist_item_completion",
       "private.validate_wedding_time_zone",
+      "private.wedding_photo_limit",
+      "private.wedding_photo_object_id",
       "private.wedding_site_customization_is_valid",
       "public.accept_membership_invite",
       "public.apply_stripe_checkout_payment_event",
       "public.apply_stripe_subscription_event",
       "public.begin_automatic_rsvp_reminder_send",
       "public.claim_automatic_rsvp_reminders",
+      "public.claim_published_wedding_photo",
+      "public.complete_wedding_photo",
       "public.create_guest_invitation",
       "public.create_wedding",
+      "public.create_wedding_photo",
       "public.finish_automatic_rsvp_reminder",
       "public.get_guest_invitation",
       "public.get_guest_invitation_email_block",
@@ -211,6 +225,8 @@ describe("schema guarantees", () => {
       "public.guest_invitation_link_is_current",
       "public.ingest_email_delivery_event",
       "public.initialize_wedding_checklist",
+      "public.move_wedding_photo",
+      "public.move_wedding_site_photo_block",
       "public.prepare_automatic_rsvp_reminder",
       "public.publish_wedding_site",
       "public.record_automatic_rsvp_reminder_email",
@@ -224,6 +240,7 @@ describe("schema guarantees", () => {
       "public.save_wedding_site_section",
       "public.select_account_type",
       "public.set_rsvp_reminder_policy",
+      "public.set_wedding_cover_photo",
       "public.set_wedding_display_name",
       "public.set_wedding_site_slug",
       "public.submit_guest_rsvp",
@@ -237,15 +254,24 @@ describe("schema guarantees", () => {
 
     const callable = rows.filter((r) => r.authenticated_exec).map((r) => r.name);
     expect(callable).toEqual([
+      // UX-01B (ADR-022): the storage policies and the invoker triggers run as
+      // the member, so these read-only helpers must be executable by them.
+      "private.can_access_wedding_photo_object",
+      "private.can_upload_wedding_photo_object",
       "private.has_wedding_role",
       "private.is_wedding_member",
       // ADR-019 CP6: a pure validator; executable only so the CHECK on
       // wedding_site_designs runs for members' own writes. The private
       // schema is not exposed by the Data API.
+      "private.wedding_photo_limit",
+      "private.wedding_photo_object_id",
       "private.wedding_site_customization_is_valid",
       "public.accept_membership_invite",
+      // UX-01B: membership-checked inside (quotas need the wedding lock and the bucket total).
+      "public.complete_wedding_photo",
       "public.create_guest_invitation",
       "public.create_wedding",
+      "public.create_wedding_photo",
       "public.get_guest_invitation",
       // LB-18.3: membership-checked inside; one closed value, no ids or history.
       "public.get_guest_invitation_email_block",
@@ -255,6 +281,9 @@ describe("schema guarantees", () => {
       "public.get_wedding_activity",
       "public.guest_invitation_link_is_current",
       "public.initialize_wedding_checklist",
+      // UX-01B: SECURITY INVOKER (RLS applies).
+      "public.move_wedding_photo",
+      "public.move_wedding_site_photo_block",
       "public.publish_wedding_site",
       "public.revoke_guest_invitation_link",
       "public.rotate_guest_invitation_link",
@@ -265,6 +294,7 @@ describe("schema guarantees", () => {
       "public.select_account_type",
       // LB-17: owner-checked inside; the five scheduler functions are NOT here.
       "public.set_rsvp_reminder_policy",
+      "public.set_wedding_cover_photo",
       "public.set_wedding_display_name",
       "public.set_wedding_site_slug",
       "public.submit_guest_rsvp",

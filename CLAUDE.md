@@ -719,11 +719,49 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   (never stored together). WCAG AA (4.5:1) for every drawn pair (`CONTRAST_PAIRS`), enforced by the parser, the CHECK
   validator (same formula; a DB test compares them) and again at render, where an invalid palette is ignored WHOLE.
   Light mode only: `globals.css` maps the six fixed `--site-custom-*` properties under
-  `@media not (prefers-color-scheme: dark)`; dark mode is the theme's own palette. The only inline style on the
-  public page is `customColorStyle` (fixed property names, re-validated values); never a user style string. Custom
+  `@media not (prefers-color-scheme: dark)`; dark mode is the theme's own palette. The only inline styles on the
+  public page are `customColorStyle` (fixed property names, re-validated values) and, since UX-01B, a photo's
+  focal point as `object-position` from re-validated integers (`focalPosition`); never a user style string. Custom
   colors carry over on a theme change; "Restablecer: Colores personalizados" removes them.
 - CP7 state: members customize the five themes with closed options or six AA-checked custom colors; no custom fonts,
   drafts, reordering, presets or images.
+
+## Wedding-site photos (UX-01B, ADR-022)
+
+- Photos are wedding CONTENT, never design: `wedding_photos` (pending → ready, at most one block each) and
+  `wedding_site_photo_blocks` (closed kinds `cover | gallery | carousel | photo_text`, closed variants per kind, an
+  anchor = a content section kind or null = after the opening; the fixed LB-10 section order is unchanged; hidden by
+  default; one cover per wedding; cover and photo-with-text hold one photo; ≤ 12 blocks). Same-wedding composite FKs;
+  member RLS (owners = collaborators) with column grants; no client INSERT on `wedding_photos` (only
+  `create_wedding_photo`); anon nothing. Themes only map block kinds to closed treatments (`PHOTO_STYLE`, `COVER_FRAME`).
+- Everything is behind the server flag `WEDDING_SITE_PHOTOS` (exactly `on`; default off): no editor, uploads,
+  `site_photos` or photo routes (404) when off. Turning it on in production is a separate, approved step
+  (`docs/operations/WEDDING-PHOTOS.md`).
+- Storage: one PRIVATE bucket `wedding-photos` (1 MB objects, `image/webp` only). Objects are only
+  `<photo id>/1600.webp` and `<photo id>/640.webp` (random id; never a wedding id, slug or file name). No originals.
+  Policies: members INSERT only the two names of their OWN fresh (15 min) pending photo, SELECT/DELETE their
+  wedding's objects; no UPDATE (no overwrite), no anon access, never a public bucket or public/signed URL.
+- Upload (`POST …/site/photos/upload`, one photo, same-origin check, ≤ 4.5 MB): browser downsizing is transport only.
+  Server: membership + flag → magic bytes → sweep stale pending (objects first, member session) →
+  `create_wedding_photo` (quotas under the wedding lock: 20 photos incl. pending, 3 pending, 60/day, 40 MB/wedding,
+  800 MB bucket breaker) → `processPhoto` (`sharp` pinned; ≤ 50 MP, sides ≤ 10,000, short side ≥ 600; rotate,
+  re-encode WebP sRGB, no EXIF/GPS/XMP/ICC, never upscaled) → upload both with the MEMBER's session →
+  `complete_wedding_photo` (sizes read from `storage.objects`, never the caller). Any failure removes objects + row.
+- Public: the ONE predicate `private.public_wedding_photos` (ready, alt text, visible block) feeds both
+  `get_published_wedding_site.site_photos` (no paths, wedding ids, sizes, timestamps) and the origin claim. A photo
+  without alt text is never public. `/boda/<slug>/fotos/<id>/<1600|640>` (excluded from the session proxy; any query
+  string → 404) → `photo-origin.ts` (the sixth service-role module, read-only) → claim (published + public + monthly
+  3 GB origin meter) → download → `isDeliverableWebp` (clean still WebP within bounds) → fixed headers
+  (`image/webp`, `nosniff`, `default-src 'none'`, browser 10 min, Vercel CDN 30 days, tag `lb-photo-<id>`). Every
+  failure is the same `no-store` 404.
+- Members preview through `…/site/photos/<id>/<rendition>` (member session, `private, no-store`); the member preview
+  shows hidden blocks marked "Oculta". Unpublish, a new address, hiding, removing, clearing alt text or deleting a photo
+  purge its tags (`purgePhotoCache`, `revalidateTag(tag, { expire: 0 })`); deletion removes objects BEFORE the row.
+- Rendering: plain `<img>` (never `next/image`: paid transforms and an ungated path) with real width/height, a
+  640/1600 `srcset`, `sizes`, `loading="lazy"` except the cover; text never sits on a photo; the carousel is CSS
+  scroll-snap with in-page "Anterior/Siguiente" links, no script, no autoplay. No photos = the text-only page,
+  markup-identical (Classic golden tests). Reordering by "Mover antes/después" buttons only (LB-20: no drag library).
+- Orphan objects (after wedding/account deletion) are never served; the operator reconcile is in the runbook.
 
 ## Account type (ACCOUNT-01, ADR-020)
 
@@ -1014,4 +1052,9 @@ template change).
 Launch remediation Batch 3: scanner-safe, cross-device signup confirmation (Spanish template linking to
 `/auth/confirm/prepare`, an explicit "Confirmar mi cuenta" `verifyOtp`, calm used-link login guidance, neutral resend
 limit; Dashboard template/subject changes are a manual checklist; no migration).
+UX-01B (ADR-022, owner-ratified 2026-10-22) adds curated wedding-site photos behind `WEDDING_SITE_PHOTOS` (off): a
+private Supabase Storage bucket with two processed WebP renditions per photo, server-enforced quotas and breakers, a
+cover in every theme's opening, gallery, carousel and photo-with-text blocks at fixed slots, button reordering, the
+member preview and a publication-gated, CDN-cached public photo route through a read-only sixth service-role module
+(production migration and activation are separate approved steps).
 Don't implement ahead of the current prompt.

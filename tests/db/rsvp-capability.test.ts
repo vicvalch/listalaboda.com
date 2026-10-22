@@ -297,9 +297,14 @@ describe("capability secret privacy", () => {
     );
     // ADR-019 CP6: the customization validator is executable by authenticated
     // only for its CHECK constraint; it reads its two arguments and nothing else.
+    // UX-01B (ADR-022): read-only storage-policy and trigger helpers for wedding photos.
     expect(privateCallable.map((r) => r.name)).toEqual([
+      "can_access_wedding_photo_object",
+      "can_upload_wedding_photo_object",
       "has_wedding_role",
       "is_wedding_member",
+      "wedding_photo_limit",
+      "wedding_photo_object_id",
       "wedding_site_customization_is_valid",
     ]);
   });

@@ -10,11 +10,17 @@ import { requireWeddingMembership } from "@/lib/authz/wedding";
 import { getRequestOrigin } from "@/lib/http/origin";
 import { getMessages } from "@/lib/i18n";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { coverOf, photoCount } from "@/lib/wedding-site/photos/editor";
+import { isWeddingSitePhotosEnabled } from "@/lib/wedding-site/photos/flag";
+import { PHOTO_LIMITS } from "@/lib/wedding-site/photos/model";
+import type { PhotoEditor } from "@/lib/wedding-site/photos/editor";
+import { getPhotoEditor } from "@/lib/wedding-site/photos/service";
 import { toPreviewSite } from "@/lib/wedding-site/preview";
 import { getWeddingSiteEditor } from "@/lib/wedding-site/service";
 import { PUBLIC_SITE_BASE_PATH, publicSitePath, suggestSlug } from "@/lib/wedding-site/slug";
 import { formatWeddingDate } from "@/lib/weddings/format";
 import { getWeddingDetail } from "@/lib/weddings/service";
+import { interpolate } from "@/lib/i18n";
 
 import { ConfirmButton } from "../guests/ConfirmButton";
 import { BackToWeddingLink } from "../BackToWeddingLink";
@@ -50,10 +56,12 @@ export default async function WeddingSitePage({
     notFound();
   }
 
-  const [wedding, editor, origin] = await Promise.all([
+  const photosEnabled = isWeddingSitePhotosEnabled();
+  const [wedding, editor, origin, photoEditor] = await Promise.all([
     getWeddingDetail(supabase, access.access.weddingId),
     getWeddingSiteEditor(supabase, access.access),
     getRequestOrigin(),
+    photosEnabled ? getPhotoEditor(supabase, access.access) : Promise.resolve(null),
   ]);
   if (!wedding) notFound();
 
@@ -164,6 +172,8 @@ export default async function WeddingSitePage({
         />
       ) : null}
 
+      {photosEnabled ? <PhotosCard weddingId={wedding.id} editor={photoEditor} /> : null}
+
       <section className="space-y-3" aria-labelledby="site-header-title">
         <h2 id="site-header-title" className="text-2xl font-semibold tracking-tight">
           {copy.header.title}
@@ -219,5 +229,43 @@ export default async function WeddingSitePage({
         </section>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * "Fotos" (UX-01B, ADR-022): a summary of the wedding's photos and the way
+ * into the photo editor, with the fixed disclosure next to publishing.
+ */
+function PhotosCard({ weddingId, editor }: { weddingId: string; editor: PhotoEditor | null }) {
+  const copy = getMessages().site.photos;
+  const cover = editor ? coverOf(editor) : null;
+  return (
+    <section className={`${cardClass} space-y-4`} aria-labelledby="site-photos-title" data-testid="site-photos-card">
+      <header className="space-y-1">
+        <h2 id="site-photos-title" className="text-xl font-semibold">
+          {copy.cardTitle}
+        </h2>
+        <p className="text-muted">{copy.cardIntro}</p>
+      </header>
+      {editor ? (
+        <ul className="space-y-1 text-sm">
+          <li>{interpolate(copy.count, { count: String(photoCount(editor)), max: String(PHOTO_LIMITS.photosPerWedding) })}</li>
+          <li>
+            <span className="text-muted">{copy.coverSummary} </span>
+            <span className="font-semibold">
+              {cover?.photo ? (cover.block?.isVisible ? copy.coverVisible : copy.coverHidden) : copy.coverNone}
+            </span>
+          </li>
+        </ul>
+      ) : (
+        <Notice tone="error">{copy.errors.failed}</Notice>
+      )}
+      <p className="text-muted text-sm">{copy.disclosure}</p>
+      <p>
+        <Link href={`/app/weddings/${encodeURIComponent(weddingId)}/site/photos`} className={textLinkClass}>
+          {copy.manage}
+        </Link>
+      </p>
+    </section>
   );
 }

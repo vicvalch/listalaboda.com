@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { Notice } from "@/components/ui/Notice";
@@ -30,6 +29,7 @@ import { EMPTY_TIMELINE_FORM, timelineFormValues } from "@/lib/timeline/validati
 import { phoneHref, vendorCategoryDisplay } from "@/lib/vendors/presentation";
 
 import { ConfirmButton } from "../guests/ConfirmButton";
+import { BackToWeddingLink } from "../BackToWeddingLink";
 import { createTimelineEntryAction, deleteTimelineEntryAction, updateTimelineEntryAction } from "./actions";
 import { PrintButton } from "./PrintButton";
 import { TimelineEntryForm, type VendorChoice } from "./TimelineEntryForm";
@@ -186,9 +186,7 @@ function PageHeader({
       ) : null}
       <p className="text-muted print:hidden">{copy.intro}</p>
       <p className="text-sm print:hidden">
-        <Link href={`/app/weddings/${weddingId}`} className={textLinkClass}>
-          {copy.backToChecklist}
-        </Link>
+        <BackToWeddingLink weddingId={weddingId} className={textLinkClass} />
       </p>
     </header>
   );

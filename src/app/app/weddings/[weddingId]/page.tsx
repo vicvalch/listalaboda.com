@@ -85,6 +85,7 @@ export default async function WeddingPage({
       {removed === "member" ? <Notice tone="success">{copy.memberRemoved}</Notice> : null}
 
       <header className="space-y-3">
+        {isCouple ? <p className="text-muted text-sm font-semibold">{copy.home.coupleLabel}</p> : null}
         <h1 id="wedding-name" className="text-3xl font-semibold tracking-tight break-words">
           {wedding.name}
         </h1>
@@ -111,7 +112,7 @@ export default async function WeddingPage({
           </div>
         </dl>
         {/* Secondary areas: the checklist below stays the wedding's home. */}
-        <p className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+        <nav aria-label={copy.sectionsLabel} className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
           <Link href={`/app/weddings/${wedding.id}/guests`} className={textLinkClass}>
             {getMessages().guests.navLink}
           </Link>
@@ -138,7 +139,7 @@ export default async function WeddingPage({
               {copy.settingsLink}
             </Link>
           ) : null}
-        </p>
+        </nav>
       </header>
 
       <ChecklistSection

@@ -109,14 +109,19 @@ test.describe("account type onboarding", () => {
     await chooseAccountTypeInBrowser(page, "couple");
     await expect(page).toHaveURL(/\/app$/);
     await expect(page.getByRole("heading", { name: es.app.weddings.couple.emptyTitle })).toBeVisible();
-    // No portfolio: no "Mis bodas", no "Crear boda" in the header.
-    await expect(headerNav(page)).toHaveCount(0);
+    // No portfolio: the header offers only "Mi boda", never "Mis bodas" or "Crear boda".
+    await expect(headerNav(page).getByRole("link")).toHaveText([es.app.nav.myWedding]);
     await expect(page.getByRole("link", { name: es.app.nav.myWeddings })).toHaveCount(0);
 
     await page.getByRole("link", { name: es.app.weddings.couple.emptyCta }).click();
     await expect(page).toHaveURL(/\/app\/weddings\/new$/);
     const weddingId = await createWedding(page, "Boda de Ana y Luis", "2090-06-01");
     await expect(page.getByRole("link", { name: es.wedding.backToWeddings })).toHaveCount(0);
+    // UX-01A: the wedding home is the couple's "Mi boda"; sections lead back to it by that name.
+    await page.getByRole("navigation", { name: es.wedding.sectionsLabel }).getByRole("link", { name: es.guests.navLink }).click();
+    await page.getByRole("link", { name: es.wedding.home.backToCouple }).click();
+    await expect(page).toHaveURL(WEDDING_URL(weddingId));
+    await expect(page.getByRole("heading", { level: 2, name: es.checklist.title })).toBeVisible();
 
     // /app is the wedding now; asking for the list changes nothing.
     await page.goto("/app");

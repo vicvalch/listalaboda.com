@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { Notice } from "@/components/ui/Notice";
@@ -14,6 +13,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatWeddingTimestamp } from "@/lib/weddings/format";
 import { labelMembers } from "@/lib/weddings/members";
 import { getWeddingDetail, listWeddingMembers } from "@/lib/weddings/service";
+
+import { BackToWeddingLink } from "../BackToWeddingLink";
 
 export const metadata: Metadata = { title: getMessages().activity.title };
 
@@ -58,9 +59,7 @@ export default async function ActivityPage({ params }: PageProps<"/app/weddings/
         <h1 className="text-3xl font-semibold tracking-tight">{copy.title}</h1>
         <p className="text-muted">{copy.intro}</p>
         <p>
-          <Link href={`/app/weddings/${wedding.id}`} className={`${textLinkClass} text-sm`}>
-            {copy.backToChecklist}
-          </Link>
+          <BackToWeddingLink weddingId={wedding.id} className={`${textLinkClass} text-sm`} />
         </p>
       </header>
 

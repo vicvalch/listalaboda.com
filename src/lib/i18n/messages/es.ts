@@ -192,7 +192,7 @@ export const es = {
         photoAlt: "Pareja recién casada sonriendo al atardecer.",
       },
       checklist: {
-        eyebrow: "Tu lista de pendientes",
+        eyebrow: "Tus pendientes",
         title: "Siempre sabes qué sigue.",
         body: "Puedes empezar con una lista sugerida para toda la boda. Ves cuánto llevas, qué toca primero y qué se atrasó, y cada pendiente puede tener a alguien a cargo.",
         shotAlt:
@@ -290,7 +290,7 @@ export const es = {
         ],
       },
       closing: {
-        title: "Tu boda, organizada en un solo lugar.",
+        title: "Tu boda, lista para disfrutarla.",
         body: "Escríbenos y te contamos cómo empezar con tu boda.",
         note: "Estamos abriendo el acceso de forma gradual.",
         planners: "Ver para planners",
@@ -330,7 +330,7 @@ export const es = {
         cadenceLabel: "Pago único",
         featuresLabel: "Qué incluye el acceso para tu boda",
         features: [
-          "Lista de pendientes de la boda",
+          "Pendientes de toda la boda",
           "Invitados y confirmaciones (RSVP)",
           "Proveedores",
           "Presupuesto",
@@ -800,6 +800,8 @@ export const es = {
     nav: {
       label: "Navegación principal",
       myWeddings: "Mis bodas",
+      /** UX-01A: a couple's own wedding (`/app` takes them to it). */
+      myWedding: "Mi boda",
       createWedding: "Crear boda",
       /** BILLING-01: shown only once billing is configured. */
       billing: "Facturación",
@@ -825,7 +827,7 @@ export const es = {
       /** ACCOUNT-01 (ADR-020 §6): a couple's account is about their own wedding. */
       couple: {
         emptyTitle: "Empieza a organizar tu boda",
-        emptyBody: "Crea tu boda y tendrás tus pendientes, invitados, mesas, presupuesto y más en un solo lugar.",
+        emptyBody: "Crea tu boda y tendrás tus pendientes, invitados, mesas, presupuesto y más en un solo lugar, para llegar al gran día con todo listo.",
         emptyInviteHint: "Si tu pareja o tu wedding planner ya la creó, abre el enlace de invitación que te compartieron.",
         emptyCta: "Crear mi boda",
         legacyTitle: "Tus bodas",
@@ -980,6 +982,16 @@ export const es = {
     joined: "¡Te damos la bienvenida! Ya formas parte de esta boda.",
     alreadyMember: "Ya tienes acceso a esta boda.",
     backToWeddings: "Volver a mis bodas",
+    /**
+     * UX-01A: the wedding home (the checklist-first page) is a couple's "Mi boda"; a planner or a
+     * not-yet-typed account sees the neutral "la boda" (account-level copy stays persona-neutral, ADR-017).
+     */
+    home: {
+      coupleLabel: "Mi boda",
+      backToCouple: "Volver a Mi boda",
+      backTo: "Volver a la boda",
+    },
+    sectionsLabel: "Secciones de la boda",
     peopleTitle: "Personas",
     settingsLink: "Ajustes de la boda",
     settingsSaved: "Guardamos los cambios de la boda.",
@@ -1002,7 +1014,7 @@ export const es = {
       "Solo quienes organizan la boda pueden cambiar su nombre, fecha, ciudad y zona horaria.",
   },
   checklist: {
-    title: "Lista de la boda",
+    title: "Pendientes",
     loadFailed: "No pudimos cargar la lista. Recarga la página.",
     init: {
       ownerTitle: "Prepara tu lista",
@@ -1020,7 +1032,7 @@ export const es = {
       failed: "No pudimos crear la lista. Inténtalo de nuevo en unos minutos.",
     },
     progress: {
-      label: "Avance de la lista",
+      label: "Avance de los pendientes",
       summary: "{done} de {total} completados",
       notApplicableOne: "1 pendiente no aplica y no cuenta en el avance.",
       notApplicableMany: "{count} pendientes no aplican y no cuentan en el avance.",
@@ -1313,7 +1325,6 @@ export const es = {
     navLink: "Invitados",
     intro:
       "Organiza a tus invitados por grupos (una familia, una pareja o una persona). Cada grupo recibe un enlace para confirmar su asistencia, sin crear cuenta.",
-    backToChecklist: "Volver a la lista de la boda",
     loadFailed: "No pudimos cargar los invitados. Recarga la página.",
     partiesTitle: "Grupos",
     summary: {
@@ -1641,7 +1652,6 @@ export const es = {
     navLink: "Mesas",
     intro:
       "Crea las mesas y decide dónde se sienta cada invitado. Cada persona ocupa un lugar en su mesa, haya respondido o no.",
-    backToChecklist: "Volver a la lista de la boda",
     backToGuests: "Ir a Invitados",
     loadFailed: "No pudimos cargar las mesas. Recarga la página.",
     summary: {
@@ -1816,7 +1826,6 @@ export const es = {
     title: "Proveedores",
     navLink: "Proveedores",
     intro: "A quién están considerando, qué les cotizaron y con quién ya tienen contrato.",
-    backToChecklist: "Volver a la lista de la boda",
     backToList: "Volver a la lista",
     loadFailed: "No pudimos cargar los proveedores. Recarga la página.",
     categories: {
@@ -1994,7 +2003,6 @@ export const es = {
     navLink: "Presupuesto",
     intro:
       "Cuánto esperan gastar, cuánto ya está contratado y cuánto falta pagar. Cada moneda va por separado: no sumamos colones con dólares ni convertimos.",
-    backToChecklist: "Volver a la lista de la boda",
     loadFailed: "No pudimos cargar el presupuesto. Recarga la página.",
     empty: {
       title: "Todavía no hay presupuesto.",
@@ -2207,7 +2215,6 @@ export const es = {
     title: "Cronograma",
     navLink: "Cronograma",
     intro: "Qué pasa el día de la boda, a qué hora, dónde y quién se encarga.",
-    backToChecklist: "Volver a la lista de la boda",
     loadFailed: "No pudimos cargar el cronograma. Recarga la página.",
     print: "Imprimir",
     phases: {
@@ -2342,7 +2349,6 @@ export const es = {
     navLink: "Actividad",
     intro:
       "Lo que ha pasado con tus invitados: grupos creados, enlaces, correos y respuestas. Lo más reciente aparece primero.",
-    backToChecklist: "Volver a la lista de la boda",
     listLabel: "Actividad reciente",
     loadFailed: "No pudimos cargar la actividad. Recarga la página.",
     empty: {
@@ -2436,7 +2442,6 @@ export const es = {
     navLink: "Sitio web",
     intro:
       "Escribe aquí la información que tus invitados necesitan. Nada es público hasta que se publique el sitio, y solo aparecen las secciones marcadas como visibles.",
-    backToChecklist: "Volver a la lista de la boda",
     loadFailed: "No pudimos cargar el sitio. Recarga la página.",
     status: {
       title: "Publicación",

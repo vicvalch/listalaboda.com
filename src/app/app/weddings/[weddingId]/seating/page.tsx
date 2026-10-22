@@ -28,6 +28,7 @@ import {
   unseatGuestAction,
   updateTableAction,
 } from "./actions";
+import { BackToWeddingLink } from "../BackToWeddingLink";
 import { AssignmentForm } from "./AssignmentForm";
 import { PlannerGate } from "./PlannerGate";
 import { SeatingPlanner } from "./SeatingPlanner";
@@ -84,9 +85,7 @@ export default async function SeatingPage({
         <h1 className="text-3xl font-semibold tracking-tight">{copy.title}</h1>
         <p className="text-muted">{copy.intro}</p>
         <p className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
-          <Link href={`/app/weddings/${wedding.id}`} className={textLinkClass}>
-            {copy.backToChecklist}
-          </Link>
+          <BackToWeddingLink weddingId={wedding.id} className={textLinkClass} />
           <Link href={`/app/weddings/${wedding.id}/guests`} className={textLinkClass}>
             {copy.backToGuests}
           </Link>

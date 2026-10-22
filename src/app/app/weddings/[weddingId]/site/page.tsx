@@ -17,6 +17,7 @@ import { formatWeddingDate } from "@/lib/weddings/format";
 import { getWeddingDetail } from "@/lib/weddings/service";
 
 import { ConfirmButton } from "../guests/ConfirmButton";
+import { BackToWeddingLink } from "../BackToWeddingLink";
 import { unpublishSiteAction } from "./actions";
 import { PublishForm } from "./PublishForm";
 import { SectionForm } from "./SectionForm";
@@ -75,9 +76,7 @@ export default async function WeddingSitePage({
         <h1 className="text-3xl font-semibold tracking-tight">{copy.title}</h1>
         <p className="text-muted">{copy.intro}</p>
         <p>
-          <Link href={`/app/weddings/${wedding.id}`} className={`${textLinkClass} text-sm`}>
-            {copy.backToChecklist}
-          </Link>
+          <BackToWeddingLink weddingId={wedding.id} className={`${textLinkClass} text-sm`} />
         </p>
       </header>
 

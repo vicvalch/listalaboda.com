@@ -80,6 +80,13 @@ function billingEnv() {
   };
 }
 
+// UX-01B (ADR-022): wedding-site photos are behind a server flag that is OFF
+// by default everywhere else; the journeys exercise them against the local
+// stack's private bucket only.
+function photosEnv() {
+  return { WEDDING_SITE_PHOTOS: "on" };
+}
+
 export default defineConfig({
   testDir: "./e2e",
   // Marketing screenshots are captured on demand (`npm run marketing:capture`).
@@ -100,7 +107,7 @@ export default defineConfig({
       url: baseURL,
       reuseExistingServer: false,
       timeout: 300_000,
-      env: { ...supabaseEnv(), ...emailEnv(), ...capabilityEnv(), ...cronEnv(), ...webhookEnv(), ...billingEnv() },
+      env: { ...supabaseEnv(), ...emailEnv(), ...capabilityEnv(), ...cronEnv(), ...webhookEnv(), ...billingEnv(), ...photosEnv() },
     },
     {
       command: "node e2e/support/stripe-stand-in.mjs",

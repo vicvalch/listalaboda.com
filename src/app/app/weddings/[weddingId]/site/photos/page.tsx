@@ -45,6 +45,7 @@ import {
   savePhotoAction,
   setCoverAction,
 } from "./actions";
+import { PhotoAnnouncer } from "./PhotoAnnouncer";
 import { PhotoForm } from "./PhotoForm";
 import { PhotoUploader } from "./PhotoUploader";
 
@@ -111,7 +112,9 @@ export default async function WeddingSitePhotosPage({ params }: PageProps<"/app/
       {editor === null ? (
         <Notice tone="error">{getMessages().site.loadFailed}</Notice>
       ) : (
-        <PhotosEditor weddingId={wedding.id} editor={editor} />
+        <PhotoAnnouncer>
+          <PhotosEditor weddingId={wedding.id} editor={editor} />
+        </PhotoAnnouncer>
       )}
     </div>
   );

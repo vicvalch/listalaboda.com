@@ -5,6 +5,7 @@ import { useActionState, type ReactNode } from "react";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 
 import type { PhotoFormState } from "./actions";
+import { useAnnounce } from "./PhotoAnnouncer";
 
 type Props = {
   action: (prev: PhotoFormState, formData: FormData) => Promise<PhotoFormState>;
@@ -21,10 +22,9 @@ type Props = {
 };
 
 /**
- * One photo edit: fields, a submit button, and the result in a live region
- * (polite for success, an alert for failures). The component keeps its
- * state across the page refresh the action triggers, so the message stays
- * announced next to the item it is about (keyed by id in the lists).
+ * One photo edit: fields, a submit button, and the result shown next to the
+ * item it is about and announced by the page's `PhotoAnnouncer` (which also
+ * covers forms the refreshed page no longer renders).
  */
 export function PhotoForm({
   action,
@@ -37,7 +37,13 @@ export function PhotoForm({
   buttonClassName = "",
   children,
 }: Props) {
-  const [state, formAction] = useActionState<PhotoFormState, FormData>(action, null);
+  const announce = useAnnounce();
+  const [state, formAction] = useActionState<PhotoFormState, FormData>(async (previous, formData) => {
+    const result = await action(previous, formData);
+    if (result?.ok) announce(result.data.message, "status");
+    else if (result?.formError) announce(result.formError, "error");
+    return result;
+  }, null);
   return (
     <form action={formAction} className={className}>
       {Object.entries(hidden).map(([name, value]) => (
@@ -52,15 +58,12 @@ export function PhotoForm({
           className={buttonClassName}
           ariaLabel={submitAriaLabel}
         />
-        <p role="status" aria-live="polite" className="text-sm">
+        {/* Shown here, announced once by the page's announcer (no second live region). */}
+        <p className="text-sm" data-testid="photo-form-result">
           {state?.ok ? <span key={state.data.nonce}>{state.data.message}</span> : null}
         </p>
       </div>
-      {state && !state.ok && state.formError ? (
-        <p role="alert" className="text-danger mt-2 text-sm">
-          {state.formError}
-        </p>
-      ) : null}
+      {state && !state.ok && state.formError ? <p className="text-danger mt-2 text-sm">{state.formError}</p> : null}
     </form>
   );
 }

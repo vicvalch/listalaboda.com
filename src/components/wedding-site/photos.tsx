@@ -139,9 +139,12 @@ export function SitePhotoBlockView({
 function Gallery({ block, basePath, design }: { block: SitePhotoBlock; basePath: string; design: ResolvedSiteDesign }) {
   const style = PHOTO_STYLE[design.sectionStyle];
   const label = getMessages().publicSite.photos.gallery;
+  // One or two photos fill the width; three or more use three columns on wider screens.
+  const count = block.photos.length;
   if (block.variant === "masonry") {
+    const columns = count === 1 ? "columns-1" : count === 2 ? "columns-2" : "columns-2 sm:columns-3";
     return (
-      <ul aria-label={label} className="m-0 list-none columns-2 gap-3 p-0 sm:columns-3 [&>li]:mb-3">
+      <ul aria-label={label} className={cx("m-0 list-none gap-3 p-0 [&>li]:mb-3", columns)}>
         {block.photos.map((photo) => (
           <li key={photo.id} className="break-inside-avoid">
             <figure className={cx("m-0 space-y-1.5", style.tile)}>
@@ -160,7 +163,13 @@ function Gallery({ block, basePath, design }: { block: SitePhotoBlock; basePath:
     );
   }
   return (
-    <ul aria-label={label} className="m-0 grid list-none grid-cols-2 gap-3 p-0 sm:grid-cols-3">
+    <ul
+      aria-label={label}
+      className={cx(
+        "m-0 grid list-none gap-3 p-0",
+        count === 1 ? "grid-cols-1" : count === 2 ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3",
+      )}
+    >
       {block.photos.map((photo) => (
         <li key={photo.id}>
           <figure className={cx("m-0 space-y-1.5", style.tile)}>

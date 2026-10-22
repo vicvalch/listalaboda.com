@@ -338,7 +338,7 @@ export async function deleteWeddingPhoto(supabase: Client, weddingId: string, ph
   return { ok: true };
 }
 
-/** Makes a ready photo the cover (the previous one returns to the library and is purged). */
+/** Makes a ready photo the cover (the previous one returns to the library); both are purged. */
 export async function setCoverPhoto(supabase: Client, weddingId: string, photoId: string): Promise<PhotoResult> {
   const auth = await authorize(supabase, weddingId);
   if (!auth.ok) return auth;
@@ -348,7 +348,8 @@ export async function setCoverPhoto(supabase: Client, weddingId: string, photoId
     target_photo_id: photoId,
   });
   if (error) return fail(photoFailure(error));
-  if (typeof data === "string") purgePhotoCache([data]);
+  // The previous cover left the site; the new one may have left a visible block for a hidden cover.
+  purgePhotoCache(typeof data === "string" ? [data, photoId] : [photoId]);
   return { ok: true };
 }
 

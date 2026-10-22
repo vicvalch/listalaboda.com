@@ -5,6 +5,8 @@ Amended: LB-24A (2026-10-09, [ADR-017](../architecture/ADR-017-dual-couple-plann
 of the same Wedding workspace: §2, §3, §6, §7 (item 11), §8, §9, §11, §14, §17.
 Amended: Wedding site themes (2026-10-12, [ADR-019](../architecture/ADR-019-wedding-site-design-and-themes.md)) —
 curated visual themes for the published wedding website: §8.
+Amended: Wedding site photography (2026-10-22, [ADR-022](../architecture/ADR-022-wedding-site-photography.md)) —
+curated photos on the published wedding website: §8, §10. Ratified by the product owner on 2026-10-22.
 
 This document governs every subsequent product and implementation decision for
 listalaboda.com. Changing a rule here requires an explicit, reviewed amendment —
@@ -230,6 +232,9 @@ The smallest version of listalaboda.com that delivers the original promise:
 - Minimal wedding website made of explicitly published content (see table below).
 - Basic wedding activity history.
 - Checklist items may link to guest-related work (explicit FKs).
+- Curated wedding-site photography (ADR-022): one cover photo and up to 20 photos per wedding in
+  predefined sections (gallery, carousel, photo with text), processed on the server, quota-limited and shown only on
+  a published site.
 
 **PHASE 3 — Running the wedding**
 
@@ -244,8 +249,8 @@ The smallest version of listalaboda.com that delivers the original promise:
 
 **DEFERRED (no committed phase)**
 
-- AI suggestions (§12), billing (§11), gallery, gift registry, mobile apps,
-  additional UI languages, vendor portal (likely never).
+- AI suggestions (§12), billing (§11), photo albums, photo backup or post-event photographer delivery,
+  gift registry, mobile apps, additional UI languages, vendor portal (likely never).
 
 **Wedding website section classification** (WFM-derived content):
 
@@ -262,15 +267,15 @@ The smallest version of listalaboda.com that delivers the original promise:
 | Travel | OPTIONAL |
 | Local recommendations | OPTIONAL |
 | Gifts (info/links) | OPTIONAL — must not become a registry product |
-| Gallery | OUT for now (media storage + privacy cost) |
+| Photos (cover, gallery, carousel, photo with text) | POST-MVP (Phase 2), ADR-022: curated and limited; never an album or backup |
 
 The published website may be shown in one of several curated visual themes (amended, ADR-019). A wedding site design
 is presentation-only: it changes how already-public wedding-site content is rendered, never which wedding data is
 public. It never stores or changes wedding content, never publishes or unpublishes a wedding (publication stays
 owner-only), and "custom" never means user HTML, CSS, URLs or code. A wedding site design may add only the selected
 theme and its validated presentation choices, closed by the design contract, to the public projection; it never
-exposes private wedding, membership, guest, RSVP capability, financial, operational or internal data. Images and media
-stay deferred with Gallery; section reordering, planner presets and AI-generated design each need their own decision.
+exposes private wedding, membership, guest, RSVP capability, financial, operational or internal data. Photos are wedding
+content governed by ADR-022, never design; section reordering, planner presets and AI-generated design each need their own decision.
 
 ## 9. Explicit Non-Goals
 
@@ -300,14 +305,17 @@ Full detail in ADR-002. Constitutional summary:
 8. MembershipInvite and GuestInvitation tokens are high-entropy, hashed at rest, expiring and revocable.
 9. Nothing is public unless explicitly published. Wedding fields are private by default.
 10. No shared passwords; no UI-only authorization; no authorization from user-editable metadata.
+11. Photos are processed (re-encoded, metadata removed) before they can be public, limited by server-enforced quotas,
+    and served only while their wedding is published. We never promise that a published photo can be recalled from
+    people who already saw or saved it (amended, ADR-022).
 
 **Visibility classes**
 
 | Class | Meaning | Examples |
 |---|---|---|
-| PRIVATE | Wedding members only | Checklist, notes, budget, vendors, contracts, guest list, member list |
+| PRIVATE | Wedding members only | Checklist, notes, budget, vendors, contracts, guest list, member list, unpublished or hidden photos |
 | SHARED | A specific outside party, via scoped token | A household's GuestInvitation and its RSVP |
-| PUBLIC | Anyone with the link, after explicit publishing | Ceremony/reception place & time, schedule, FAQ, dress code |
+| PUBLIC | Anyone with the link, after explicit publishing | Ceremony/reception place & time, schedule, FAQ, dress code, photos in visible sections of a published site (anyone with the link can view and download them) |
 
 ## 11. Commercial Model Boundary
 

@@ -31,6 +31,9 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   ADR-017 §4, §7)
 - `docs/architecture/ADR-021-stripe-billing-entitlements.md` (Stripe Checkout, signed webhooks, persistent entitlements;
   amends Constitution §11 and ADR-002 §6; the fourth and fifth service-role modules)
+- `docs/architecture/ADR-022-wedding-site-photography.md` (curated wedding-site photos: private Supabase Storage,
+  processed WebP renditions, quotas, publication-gated delivery; owner-ratified 2026-10-22, amends Constitution §8,
+  §10 and ADR-002 §6; the sixth service-role module, read-only)
 
 ## Product rules
 
@@ -58,8 +61,11 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   FOURTH and FIFTH (BILLING-01, ADR-021 §12) are the billing customer recorder (`src/lib/billing/customer-recorder.ts`:
   `record` → `record_billing_customer`, the Stripe Customer → user mapping) and the billing webhook store
   (`src/lib/billing/webhook-store.ts`: `applySubscription` / `applyCheckoutPayment`, called only after the
-  Stripe-Signature verified). Five modules, separate authorities, never merged: app-authorized provider result /
-  system scheduler / provider signature / app's own Stripe result / Stripe signature. No generic privileged client
+  Stripe-Signature verified). The SIXTH (UX-01B, ADR-022 §4) is the read-only photo origin
+  (`src/lib/wedding-site/photo-origin.ts`: `fetchPublishedPhoto` → `claim_published_wedding_photo`, then one object
+  download from the private `wedding-photos` bucket; never a write, member authorization, client or URL signer).
+  Six modules, separate authorities, never merged: app-authorized provider result / system scheduler / provider
+  signature / app's own Stripe result / Stripe signature / publication gate. No generic privileged client
   anywhere. Any other use needs its own `server-only` module plus a written justification (ADR-002 §6). ESLint blocks
   `process.env.SUPABASE_SERVICE_ROLE_KEY` everywhere else, `process.env.CRON_SECRET` everywhere but
   `src/lib/scheduler/cron-auth.ts`, `process.env.RESEND_WEBHOOK_SECRET` everywhere but `src/lib/email/webhook-auth.ts`,
@@ -666,7 +672,7 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
 - Owners and collaborators may change the design; publishing stays owner-only. Saved changes apply live on a published
   site; the member-only preview is the pre-save check. No drafts/versions until advanced custom mode.
 - The RSVP section stays guidance only in every theme: no form, `/rsvp` link or guest-specific call to action.
-- Deferred, each needing an explicit decision: images/media (no uploads, storage, image URLs or media schema; own ADR),
+- Deferred, each needing an explicit decision: images/media in the design (photos are wedding content under ADR-022, never design),
   section reordering (amends the LB-10 fixed order), planner presets (copy into a wedding, never live-link), custom
   design (closed, versioned schema; never an arbitrary node tree).
 - Every theme's text meets WCAG AA (4.5:1) in light and dark; decorations are `aria-hidden` and carry no information.

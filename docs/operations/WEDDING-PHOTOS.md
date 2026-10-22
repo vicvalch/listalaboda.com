@@ -3,6 +3,11 @@
 Status: **code ready behind `WEDDING_SITE_PHOTOS` (off)**. Nothing here has been done in production. Every production
 step below is a separate, explicitly approved action by the owner.
 
+Production snapshot (read-only audit, 2026-10-22, UX-01B4): migration history 41/41 (last `20261027120000`; the photo
+migration is NOT applied), no Storage buckets, 0 objects, 0 `storage.objects` policies, database 14.6 MB, 0 published
+sites; Vercel Production serves `bf77128` (governance only, no photo code). The photo code reached `main` only through
+the UX-01B4 QA PR (PR #51 had been merged into the governance branch, not `main`).
+
 ## 1. What exists
 
 - Migration `supabase/migrations/20261028120000_lb_wedding_site_photos.sql`:
@@ -87,7 +92,8 @@ order by o.created_at;
 ```
 
 Delete exactly the listed names through the Storage API, e.g. in the dashboard (Storage → `wedding-photos`) or with
-the Supabase CLI from the operator's machine:
+the Supabase CLI from the operator's machine (it asks for confirmation; `--yes` skips the prompt, so use it only after
+checking the list):
 
 ```sh
 npx supabase storage rm --linked --experimental ss:///wedding-photos/<photo id>/1600.webp ss:///wedding-photos/<photo id>/640.webp
@@ -97,7 +103,17 @@ Never run this against names that still have a row. Stale `pending` uploads (old
 next upload of the same wedding; a wedding that never uploads again keeps at most 3 pending rows and their objects
 (≤ 6 MB), which this query does not list (they still have rows) and which are never public.
 
-## 7. Privacy limits to remember
+## 7. Known residual risks
+
+- Member previews and editor thumbnails (`…/site/photos/<id>/<rendition>`, `private, no-store`) download from Storage
+  on every view and are NOT counted by the 3 GB origin meter. Only members of the wedding can trigger them (≤ 20 photos
+  × ~0.4 MB per full page view), so the exposure is bounded by membership, not by a quota. Watch Supabase egress after
+  activation; if needed, a short private browser cache (`private, max-age=300`) is the first lever.
+- CDN purge by tag (`revalidateTag(tag, { expire: 0 })` → Vercel delete-by-tag) can only be verified on a Vercel
+  deployment (§2 step 4 checks it); locally there is no CDN.
+- Vercel Hobby is "personal, non-commercial" per Vercel's terms; this predates photos and applies to the paid product.
+
+## 8. Privacy limits to remember
 
 - Published photos are public by address (`noindex`), not secret: anyone with the link can view and save them.
 - Unpublishing, hiding, removing or deleting purges the CDN by tag; browsers may keep a copy for up to 10 minutes;

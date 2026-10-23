@@ -115,6 +115,49 @@ describe("Privacy page", () => {
   });
 });
 
+// UX-01B8: wedding-site photos (ADR-022), stated only as implemented.
+
+describe("photo sections", () => {
+  const termsBody = text(terms);
+  const privacyBody = text(privacy);
+
+  it("sit under the same stable id on both pages", () => {
+    expect(terms).toContain('id="fotos-del-sitio"');
+    expect(privacy).toContain('id="fotos-del-sitio"');
+  });
+
+  it("state the real limits, the publication gate and that anyone with the link can view and download", () => {
+    expect(termsBody).toContain("hasta 20 fotos por boda");
+    expect(termsBody).toContain("hasta 15 MB");
+    expect(termsBody).toContain("solo si la boda está publicada, la sección donde está la foto está visible y la foto tiene una descripción");
+    expect(termsBody).toContain("cualquier persona con el enlace del sitio puede ver y descargar esa foto");
+    expect(termsBody).toContain("el sitio no es privado");
+  });
+
+  it("put the right to share on the uploader and route reports to the support address, reviewed manually", () => {
+    expect(termsBody).toContain("Sube solo fotos que tengas derecho a usar y a compartir.");
+    expect(termsBody).toContain(`escríbenos a ${SUPPORT_EMAIL} con el enlace del sitio. Revisamos cada solicitud de forma manual.`);
+    expect(privacyBody).toContain(`escríbenos a ${SUPPORT_EMAIL} con el enlace del sitio`);
+  });
+
+  it("describe storage, metadata removal and delivery, naming both providers", () => {
+    expect(privacyBody).toContain("No guardamos el archivo original ni su nombre.");
+    expect(privacyBody).toContain("la ubicación (GPS), la fecha y los datos de la cámara (EXIF)");
+    expect(privacyBody).toContain("almacenamiento privado de Supabase");
+    expect(privacyBody).toContain("se entregan a través de Vercel");
+    expect(privacyBody).toContain("almacenamiento de las fotos del sitio");
+    expect(privacyBody).toContain("entrega de las fotos publicadas");
+  });
+
+  it("are honest about cache and copies: no absolute or instant erasure promise", () => {
+    for (const body of [termsBody, privacyBody]) {
+      expect(body).toMatch(/no podemos borrar/i);
+      expect(body).not.toMatch(/de inmediato|inmediatamente|para siempre|permanentemente|garantizamos/i);
+    }
+    expect(termsBody).toContain("hasta 10 minutos");
+  });
+});
+
 describe("both pages", () => {
   it("are plain text in sections, cross-link each other and are not indexed yet", () => {
     for (const html of [terms, privacy]) {

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth/session";
 import { formText, type FormState } from "@/lib/forms/result";
@@ -20,7 +20,7 @@ import {
   photosIn,
   type TextResult,
 } from "@/lib/wedding-site/photos/editor";
-import { isPhotoBlockKind, type PhotoBlockKind } from "@/lib/wedding-site/photos/model";
+import { isPhotoBlockKind, PHOTO_BLOCK_VARIANTS, type PhotoBlockKind } from "@/lib/wedding-site/photos/model";
 import {
   addPhotoToBlock,
   createPhotoBlock,
@@ -208,28 +208,60 @@ function readBlockFields(formData: FormData, kind: PhotoBlockKind): BlockFields 
   };
 }
 
-export async function createBlockAction(_prev: PhotoFormState, formData: FormData): Promise<PhotoFormState> {
+/** Closed reasons the site editor may show after "Agregar sección aquí" (`?error=`). */
+export type InsertFailure = "block_limit" | "invalid" | "not_found" | "error";
+
+function sitePath(weddingId: string): string {
+  return `/app/weddings/${encodeURIComponent(weddingId)}/site`;
+}
+
+/**
+ * "Agregar sección aquí" (UX-01D): a gallery, carousel or photo with text at
+ * one slot of the site editor. The form names only the kind and the slot's
+ * anchor; the block starts hidden with the kind's default design and, since
+ * the database appends new blocks, lands at the end of that slot, which is
+ * where the button was. Then back to the editor, opened on the new section
+ * (`?nueva=<id>`, compared against the wedding's own blocks), or with a
+ * closed `?error=`.
+ */
+export async function insertBlockAction(formData: FormData): Promise<void> {
+  const weddingId = formText(formData, "weddingId");
+  await requireUser(sitePath(weddingId));
+  const kind = formText(formData, "kind");
+  const anchor = parseAnchor(formText(formData, "anchor"));
+  const back = (error: InsertFailure) => redirect(`${sitePath(weddingId)}?error=${error}#secciones`);
+  if (!isPhotoBlockKind(kind) || kind === "cover" || anchor === undefined) back("invalid");
+  const blockKind = kind as Exclude<PhotoBlockKind, "cover">;
+
+  const result = await createPhotoBlock(await createSupabaseServerClient(), weddingId, blockKind, {
+    variant: PHOTO_BLOCK_VARIANTS[blockKind][0],
+    anchor: anchor ?? null,
+    title: null,
+    body: null,
+  });
+  if (!result.ok) {
+    if (result.reason === "unauthenticated") await requireUser(sitePath(weddingId));
+    if (result.reason === "disabled") notFound();
+    back(result.reason === "block_limit" || result.reason === "invalid" || result.reason === "not_found" ? result.reason : "error");
+    return;
+  }
+  refresh(weddingId);
+  redirect(`${sitePath(weddingId)}?nueva=${result.value}#bloque-${result.value}`);
+}
+
+/** "Mostrar / Ocultar" on a photo section's row (the cover included): visibility only. */
+export async function setBlockVisibilityAction(_prev: PhotoFormState, formData: FormData): Promise<PhotoFormState> {
   const weddingId = formText(formData, "weddingId");
   await requireUser(photosPath(weddingId));
-  const copy = getMessages().site.photos;
-
-  const kind = formText(formData, "kind");
-  if (!isPhotoBlockKind(kind) || kind === "cover") return { ok: false, formError: copy.errors.invalid };
-  const fields = readBlockFields(formData, kind);
-  if (!fields.ok) return fields;
-  const variant = fields.variant ? parseVariant(kind, fields.variant) : null;
-  const chosen = variant ?? (kind === "gallery" ? "grid" : kind === "photo_text" ? "image_start" : "standard");
-  if (fields.anchor === undefined) return { ok: false, formError: copy.errors.invalid };
-
-  const result = await createPhotoBlock(await createSupabaseServerClient(), weddingId, kind, {
-    variant: chosen,
-    anchor: fields.anchor,
-    title: fields.title,
-    body: fields.body,
+  const isVisible = formText(formData, "visible") === "on";
+  const name = formText(formData, "name").slice(0, 120);
+  const result = await updatePhotoBlock(await createSupabaseServerClient(), weddingId, formText(formData, "blockId"), {
+    isVisible,
   });
   if (!result.ok) return failure(weddingId, result.reason);
   refresh(weddingId);
-  return done(copy.blocks.created);
+  const copy = getMessages().site.compose;
+  return done(interpolate(isVisible ? copy.shownMessage : copy.hiddenMessage, { name }));
 }
 
 export async function saveBlockAction(_prev: PhotoFormState, formData: FormData): Promise<PhotoFormState> {

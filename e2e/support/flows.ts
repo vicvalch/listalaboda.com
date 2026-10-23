@@ -169,3 +169,16 @@ export async function addChecklistItem(page: Page, item: NewItem) {
   await expect(section.getByRole("status")).toHaveText(es.checklist.announcements.created);
   await expect(checklistItem(page, item.title)).toHaveCount(1);
 }
+
+/**
+ * UX-01D: a text section's row in "Secciones del sitio" (on the site page),
+ * with its editor behind "Editar" opened (left open if it already is).
+ */
+export async function siteSectionEditor(page: Page, kind: string): Promise<Locator> {
+  const card = page.locator(`[data-testid="site-section"][data-kind="${kind}"]`);
+  const details = card.getByTestId("site-section-editor");
+  if (!(await details.evaluate((element) => (element as HTMLDetailsElement).open))) {
+    await details.locator("summary").click();
+  }
+  return card;
+}

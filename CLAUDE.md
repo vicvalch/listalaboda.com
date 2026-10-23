@@ -762,6 +762,14 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   scroll-snap with in-page "Anterior/Siguiente" links, no script, no autoplay. No photos = the text-only page,
   markup-identical (Classic golden tests). Reordering by "Mover antes/después" buttons only (LB-20: no drag library).
 - Orphan objects (after wedding/account deletion) are never served; the operator reconcile is in the runbook.
+- Editing (UX-01D): ONE composition surface, the site page. "Portada" (header data + cover photo, chosen from the
+  library there) and "Secciones del sitio": text sections and photo blocks in one list in PUBLIC order
+  (`siteComposition`, the same order as `orderedBlocks`/the renderer), each row with its Visible/Oculta state, "Editar",
+  "Mostrar/Ocultar" and, for blocks, "Mover antes/después" within the slot ("Ubicación" changes the slot). "Agregar
+  sección aquí" sits at the END of each slot only (after the cover and after every text section): the database appends
+  new blocks, so that is exactly where they land; there is no insertion point between two blocks of one slot. The
+  "Biblioteca de fotos" (`…/site/photos`) only uploads, describes and deletes files; it composes nothing. Text sections
+  keep their fixed order (no reordering); their row switch re-saves the SERVER-read title/body with the new visibility.
 
 ## Account type (ACCOUNT-01, ADR-020)
 
@@ -1057,4 +1065,7 @@ private Supabase Storage bucket with two processed WebP renditions per photo, se
 cover in every theme's opening, gallery, carousel and photo-with-text blocks at fixed slots, button reordering, the
 member preview and a publication-gated, CDN-cached public photo route through a read-only sixth service-role module
 (production migration and activation are separate approved steps).
+UX-01D unifies the site editor: the cover, text sections and photo sections in one public-order list with "Agregar
+sección aquí" at each slot end, per-row visibility and reordering, and the photo page reduced to a library (no
+migration, no new storage or security path).
 Don't implement ahead of the current prompt.

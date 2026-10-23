@@ -1,7 +1,7 @@
 import { expect, test, type Browser, type Locator, type Page } from "@playwright/test";
 import pg from "pg";
 
-import { createAccount, createWedding, es, logIn } from "./support/flows";
+import { createAccount, createWedding, es, logIn, siteSectionEditor } from "./support/flows";
 import { readLocalSupabase } from "./support/local-supabase";
 
 // LB-23 (ADR-016): "Cronograma" — the wedding day's run of show. Wedding-
@@ -513,7 +513,7 @@ test.describe("cronograma", () => {
     });
 
     await page.goto(`/app/weddings/${weddingId}/site`);
-    const schedule = page.locator('[data-testid="site-section"][data-kind="schedule"]');
+    const schedule = await siteSectionEditor(page, "schedule");
     await schedule.getByLabel(site.sections.titleLabel).fill("Programa");
     await schedule.getByLabel(site.sections.bodyLabel).fill("Ceremonia a las 3 p. m.");
     await schedule.getByLabel(site.sections.visibleLabel).setChecked(true);

@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 import pg from "pg";
 import sharp from "sharp";
 
-import { createAccount, createWedding, es, logIn } from "./support/flows";
+import { createAccount, createWedding, es, logIn, siteSectionEditor } from "./support/flows";
 import { readLocalSupabase } from "./support/local-supabase";
 
 // UX-01B (ADR-022): wedding-site photos end to end, with the server flag on
@@ -12,9 +12,12 @@ import { readLocalSupabase } from "./support/local-supabase";
 // upload with progress, EXIF/GPS removal, alt text, cover, member preview,
 // publication-gated public delivery, unpublish, blocks and keyboard
 // reordering, deletion, quota messages, and an outsider's 404.
+// UX-01D: photos are uploaded and described in the "Biblioteca de fotos";
+// the cover and photo sections are composed in "Secciones del sitio".
 
 const site = es.site;
 const photos = es.site.photos;
+const compose = es.site.compose;
 
 function uniqueSlug(label: string): string {
   return `${label}-${randomBytes(4).toString("hex")}`;
@@ -45,10 +48,27 @@ async function withDb<T>(run: (db: pg.Client) => Promise<T>): Promise<T> {
 
 async function openPhotos(page: Page, weddingId: string) {
   await page.goto(`/app/weddings/${weddingId}/site`);
-  const card = page.getByTestId("site-photos-card");
-  await expect(card).toContainText(photos.disclosure);
-  await card.getByRole("link", { name: photos.manage }).click();
+  await page.getByTestId("photo-library-link").click();
   await expect(page.getByRole("heading", { level: 1, name: photos.title })).toBeVisible();
+  await expect(page.getByText(photos.disclosure)).toBeVisible();
+}
+
+async function openSite(page: Page, weddingId: string) {
+  await page.goto(`/app/weddings/${weddingId}/site`);
+  await expect(page.getByRole("heading", { level: 1, name: site.title })).toBeVisible();
+}
+
+/** The order of "Secciones del sitio": text kinds, `block:<kind>` and `+<anchor>` insertion points. */
+async function compositionOrder(page: Page): Promise<string[]> {
+  return page.getByTestId("site-composition").evaluate((list) =>
+    [...list.children].map((item) => {
+      const section = item.querySelector<HTMLElement>('[data-testid="site-section"]');
+      if (section) return section.dataset.kind ?? "";
+      const block = item.querySelector<HTMLElement>('[data-testid="photo-block"]');
+      if (block) return `block:${block.dataset.blockKind}`;
+      return `+${item.querySelector<HTMLElement>('[data-testid="site-insert"]')?.dataset.anchor}`;
+    }),
+  );
 }
 
 async function upload(page: Page, files: Array<{ name: string; buffer: Buffer }>) {
@@ -74,7 +94,7 @@ async function describePhoto(page: Page, index: number, alt: string, caption = "
 
 async function publishWithIntro(page: Page, weddingId: string, slug: string) {
   await page.goto(`/app/weddings/${weddingId}/site`);
-  const intro = page.locator('[data-testid="site-section"][data-kind="intro"]');
+  const intro = await siteSectionEditor(page, "intro");
   await intro.getByLabel(site.sections.bodyLabel).fill("Nos casamos y queremos compartirlo.");
   await intro.getByLabel(site.sections.visibleLabel).setChecked(true);
   await intro.getByRole("button", { name: site.sections.submit }).click();
@@ -115,15 +135,23 @@ test.describe("wedding-site photos", () => {
     expect([meta.format, meta.width, meta.height, meta.exif]).toEqual(["webp", 640, 427, undefined]);
     const photoId = /photos\/([0-9a-f-]{36})\/640$/.exec(src!)![1];
 
-    // Describe it, make it the cover, show the cover.
+    // Describe it in the library; the library itself composes nothing.
     await describePhoto(page, 0, "Ana y Luis frente al mar", "Puntarenas, 2026");
-    await libraryCards(page).first().getByRole("button", { name: photos.library.useAsCover }).click();
-    await expect(page.getByTestId("photo-announcer")).toHaveText(photos.library.coverSet);
+    await expect(page.getByRole("button", { name: photos.library.useAsCover })).toHaveCount(0);
+    await expect(libraryCards(page).first()).toContainText(photos.library.notPlaced);
+
+    // The cover is chosen in "Portada", on the site page, and starts hidden.
+    await openSite(page, weddingId);
     const cover = page.getByTestId("photos-cover");
-    await expect(cover.locator("img")).toHaveAttribute("alt", "Ana y Luis frente al mar");
-    await cover.getByLabel(photos.cover.visibleLabel).check();
-    await cover.getByRole("button", { name: photos.cover.save }).click();
-    await expect(page.getByTestId("photo-announcer")).toHaveText(photos.cover.saved);
+    await expect(cover).toContainText(compose.cover.none);
+    await cover.getByTestId("cover-picker").locator("summary").click();
+    await cover.getByRole("button", { name: "Usar la foto 1 como portada" }).click();
+    await expect(page.getByTestId("photo-announcer")).toHaveText(photos.library.coverSet);
+    await expect(cover.locator("img").first()).toHaveAttribute("alt", "Ana y Luis frente al mar");
+    await expect(cover.getByTestId("photo-cover-visibility")).toHaveText(site.sections.hidden);
+    await cover.getByRole("button", { name: `Mostrar «${compose.cover.photoTitle}» en el sitio` }).click();
+    await expect(page.getByTestId("photo-announcer")).toHaveText(`«${compose.cover.photoTitle}» ahora es visible.`);
+    await expect(cover.getByTestId("photo-cover-visibility")).toHaveText(site.sections.shown);
 
     // Member preview shows it before anything is published.
     await page.goto(`/app/weddings/${weddingId}/site/preview`);
@@ -167,6 +195,8 @@ test.describe("wedding-site photos", () => {
     // Delete: objects and row are gone; the member route is a 404 too.
     await openPhotos(page, weddingId);
     const card = libraryCards(page).first();
+    await expect(card).toContainText(`En el sitio: ${photos.blocks.kinds.cover}`);
+    await card.locator("summary").click();
     await card.getByRole("button", { name: photos.library.delete }).click();
     await card.getByRole("button", { name: photos.library.delete }).click();
     await expect(libraryCards(page)).toHaveCount(0);
@@ -192,30 +222,53 @@ test.describe("wedding-site photos", () => {
     await describePhoto(page, 0, "Primera foto");
     await describePhoto(page, 1, "Segunda foto");
 
-    // A carousel after the ceremony section, with both photos.
-    const create = page.getByTestId("photo-block-create");
-    const carouselForm = create.locator("li").filter({ hasText: photos.blocks.kinds.carousel });
-    await carouselForm.getByLabel(photos.blocks.anchorLabel).selectOption("ceremony");
-    await carouselForm.getByRole("button", { name: `${photos.blocks.create}: ${photos.blocks.kinds.carousel}` }).click();
-    await expect(page.getByTestId("photo-block")).toHaveCount(1);
-    for (const index of [0, 1]) {
-      const photoCard = libraryCards(page).nth(index);
-      await photoCard.getByRole("button", { name: photos.library.addToButton }).click();
+    // "Secciones del sitio": text and photo sections in one list, with an insertion point at each slot end.
+    await openSite(page, weddingId);
+    expect(await compositionOrder(page)).toEqual([
+      "+top",
+      ...["intro", "ceremony", "reception", "schedule", "dress_code", "faq", "rsvp"].flatMap((kind) => [kind, `+${kind}`]),
+    ]);
+
+    // A carousel right after the ceremony, from the keyboard: open the insertion point, choose "Carrusel".
+    const insert = page.locator('[data-testid="site-insert"][data-anchor="ceremony"]');
+    await insert.locator("summary").focus();
+    await page.keyboard.press("Enter");
+    await insert.getByRole("button", { name: `Agregar ${photos.blocks.kinds.carousel}, después de «Ceremonia»` }).click();
+    await expect(page).toHaveURL(/\?nueva=[0-9a-f-]{36}#bloque-/);
+    const block = page.getByTestId("photo-block");
+    await expect(block).toHaveCount(1);
+    expect((await compositionOrder(page)).slice(3, 7)).toEqual(["ceremony", "block:carousel", "+ceremony", "reception"]);
+    // New: hidden, opened, focused, with the next steps spelled out.
+    await expect(block.getByTestId("photo-block-visibility")).toHaveText(site.sections.hidden);
+    await expect(block.getByText(compose.nextSteps[0])).toBeVisible();
+    await expect(block.getByTestId("photo-block-editor")).toHaveAttribute("open", "");
+    await expect(block.getByTestId("photo-block-editor").locator("summary")).toBeFocused();
+
+    // Photos come from the library, through the block's own picker.
+    for (const position of [1, 2]) {
+      await block.getByRole("button", { name: `Agregar la foto ${position} a «${photos.blocks.kinds.carousel}»` }).click();
       await expect(page.getByTestId("photo-announcer")).toHaveText(photos.library.added);
     }
-    const block = page.getByTestId("photo-block");
-    await expect(block.locator("ol img")).toHaveCount(2);
-    await block.getByLabel(photos.blocks.visibleLabel).check();
-    await block.getByRole("button", { name: photos.blocks.save }).click();
-    await expect(page.getByTestId("photo-announcer")).toHaveText(photos.blocks.saved);
+    await expect(block.getByTestId("photo-block-photos").locator("img")).toHaveCount(2);
+    await expect(block.getByTestId("photo-block-count")).toHaveText("2 fotos");
+    await block.getByRole("button", { name: `Mostrar «${photos.blocks.kinds.carousel}» en el sitio` }).click();
+    await expect(page.getByTestId("photo-announcer")).toHaveText(`«${photos.blocks.kinds.carousel}» ahora es visible.`);
+    await expect(block.getByTestId("photo-block-visibility")).toHaveText(site.sections.shown);
 
     // Keyboard reordering: "Mover antes" on the second photo, announced with its new position.
-    const second = block.locator("ol > li").nth(1);
+    const second = block.getByTestId("photo-block-photos").locator("> li").nth(1);
     const moveBefore = second.getByRole("button", { name: /Mover «Foto 2/ }).first();
     await moveBefore.focus();
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("photo-announcer")).toHaveText(/a la posición 1 de 2/);
-    await expect(block.locator("ol > li").first().locator("img")).toHaveAttribute("alt", "Segunda foto");
+    await expect(block.getByTestId("photo-block-photos").locator("> li").first().locator("img")).toHaveAttribute("alt", "Segunda foto");
+
+    // Phone width: the editor fits without sideways scrolling.
+    await page.setViewportSize({ width: 375, height: 800 });
+    await openSite(page, weddingId);
+    await page.getByTestId("photo-block-editor").locator("summary").click();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.setViewportSize({ width: 1280, height: 800 });
 
     // The preview draws the carousel without script, with its position text.
     await page.goto(`/app/weddings/${weddingId}/site/preview`);

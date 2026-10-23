@@ -173,37 +173,6 @@ export function parseVariant(kind: PhotoBlockKind, raw: string): PhotoBlockVaria
 
 // ---------------------------------------------------------- composition
 
-/**
- * One row of the unified site editor (UX-01D), in the public page's order:
- * the photo blocks right after the opening, then each fixed text section
- * followed by the blocks anchored to it. An `insert` row is the end of a
- * slot: a block created there gets that anchor and, because the database
- * appends new blocks (`position = max + 1`), lands exactly at that row.
- * There is no insertion point between two blocks of the same slot (the
- * schema can't place one there); "Mover antes" moves it afterwards.
- */
-export type CompositionRow =
-  | Readonly<{ type: "section"; kind: SectionKind }>
-  | Readonly<{ type: "block"; block: EditorBlock }>
-  | Readonly<{ type: "insert"; anchor: SectionKind | null }>;
-
-/** The editor's rows. Without photos (flag off or a failed read): the text sections only. */
-export function siteComposition(editor: PhotoEditor | null): CompositionRow[] {
-  const rows: CompositionRow[] = [];
-  const blocks = editor ? orderedBlocks(editor) : [];
-  const slot = (anchor: SectionKind | null) => {
-    if (!editor) return;
-    for (const block of blocks) if (block.anchor === anchor) rows.push({ type: "block", block });
-    rows.push({ type: "insert", anchor });
-  };
-  slot(null);
-  for (const kind of SECTION_KINDS) {
-    rows.push({ type: "section", kind });
-    slot(kind);
-  }
-  return rows;
-}
-
 /** The blocks sharing a block's slot, in order (what "Mover antes / después" moves within). */
 export function slotSiblings(editor: PhotoEditor, block: EditorBlock): EditorBlock[] {
   return orderedBlocks(editor).filter((other) => other.anchor === block.anchor);

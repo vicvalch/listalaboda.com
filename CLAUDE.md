@@ -762,14 +762,18 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   scroll-snap with in-page "Anterior/Siguiente" links, no script, no autoplay. No photos = the text-only page,
   markup-identical (Classic golden tests). Reordering by "Mover antes/después" buttons only (LB-20: no drag library).
 - Orphan objects (after wedding/account deletion) are never served; the operator reconcile is in the runbook.
-- Editing (UX-01D): ONE composition surface, the site page. "Portada" (header data + cover photo, chosen from the
-  library there) and "Secciones del sitio": text sections and photo blocks in one list in PUBLIC order
-  (`siteComposition`, the same order as `orderedBlocks`/the renderer), each row with its Visible/Oculta state, "Editar",
-  "Mostrar/Ocultar" and, for blocks, "Mover antes/después" within the slot ("Ubicación" changes the slot). "Agregar
-  sección aquí" sits at the END of each slot only (after the cover and after every text section): the database appends
-  new blocks, so that is exactly where they land; there is no insertion point between two blocks of one slot. The
-  "Biblioteca de fotos" (`…/site/photos`) only uploads, describes and deletes files; it composes nothing. Text sections
-  keep their fixed order (no reordering); their row switch re-saves the SERVER-read title/body with the new visibility.
+- Editing (STUDIO-01): ListaLaBoda Studio (`…/site/studio`) is the ONE composition surface; the site page is a hub
+  (open Studio, style, publication). A full-screen modal `<dialog>`: element library left, canvas center, the
+  selected element's properties right (drawers below `lg`). The canvas is the REAL `WeddingSite` rendered into a
+  same-origin iframe through a React portal (so a 390 px phone is a real viewport), wrapped by the renderer's optional
+  `studio` hooks (`SiteStudioHooks`: hero/section/block wrappers + slot ends). Public pages never pass `studio`, and
+  without it the markup is unchanged (golden tests). The canvas draws SAVED content plus unsaved drafts
+  (`@/lib/wedding-site/studio`); hidden content is drawn and marked "Oculta"; undescribed photos are drawn and flagged
+  (never public). Text/block fields are drafts saved explicitly through the existing actions; photo add/remove/move,
+  cover and descriptions are single actions; nothing writes on open. Insertion is click-to-add at slot ENDS only
+  (`createStudioBlockAction` → existing `createPhotoBlock`; the database appends), never between two blocks of a slot;
+  text sections keep their fixed order. No drag library; no fake drag affordances. The "Biblioteca de fotos" only
+  uploads, describes and deletes files.
 
 ## Account type (ACCOUNT-01, ADR-020)
 
@@ -1068,4 +1072,8 @@ member preview and a publication-gated, CDN-cached public photo route through a 
 UX-01D unifies the site editor: the cover, text sections and photo sections in one public-order list with "Agregar
 sección aquí" at each slot end, per-row visibility and reordering, and the photo page reduced to a library (no
 migration, no new storage or security path).
+STUDIO-01 replaces it with ListaLaBoda Studio: a visual editor where the couple's real site, in its theme, is the canvas
+(iframe + portal, desktop/phone widths), elements are added from a left library by click-to-add at supported slots
+(carousel, gallery, photo with text, single photo), and the selected element is edited in a right properties panel
+with live drafts (no migration; drag and drop is STUDIO-02).
 Don't implement ahead of the current prompt.

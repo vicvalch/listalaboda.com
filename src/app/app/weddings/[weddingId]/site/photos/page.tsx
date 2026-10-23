@@ -32,8 +32,8 @@ export const metadata: Metadata = {
  * "Biblioteca de fotos" (UX-01B, ADR-022; reframed in UX-01D): the wedding's
  * photo files, for any member (owner or collaborator): upload, describe
  * (alt text, caption, focal point) and delete. Putting photos on the site
- * (cover, galleries, carousels, photo with text) happens in "Secciones del
- * sitio" on the site page, never here. Membership is checked server-side
+ * (cover, galleries, carousels, photo with text) happens in Studio
+ * (STUDIO-01), never here. Membership is checked server-side
  * first; a non-member, a nonexistent wedding, a malformed id and the flag
  * being off all get the same 404. Reading never writes.
  */
@@ -66,8 +66,8 @@ export default async function WeddingSitePhotosPage({ params }: PageProps<"/app/
         <h1 className="text-3xl font-semibold tracking-tight">{copy.title}</h1>
         <p className="text-muted">{copy.intro}</p>
         <p className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
-          <Link href={`${sitePath}#secciones`} className={textLinkClass}>
-            {copy.back}
+          <Link href={`${sitePath}/studio`} className={textLinkClass}>
+            {getMessages().site.studio.open}
           </Link>
           <Link href={`${sitePath}/preview`} className={textLinkClass}>
             {copy.previewLink}
@@ -158,7 +158,7 @@ function LibraryPhoto({
       <p className="text-muted text-sm">
         {placedIn ? (
           <Link
-            href={`/app/weddings/${encodeURIComponent(weddingId)}/site#${placedIn.kind === "cover" ? "site-header-title" : `bloque-${placedIn.id}`}`}
+            href={`/app/weddings/${encodeURIComponent(weddingId)}/site/studio`}
             className={textLinkClass}
           >
             {interpolate(copy.library.placedIn, { place: blockName(placedIn, editor) })}

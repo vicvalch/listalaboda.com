@@ -1,7 +1,7 @@
 import { expect, test, type Browser, type Locator, type Page } from "@playwright/test";
 import pg from "pg";
 
-import { createAccount, createWedding, es, logIn, siteSectionEditor } from "./support/flows";
+import { createAccount, createWedding, es, logIn, saveSiteSection } from "./support/flows";
 import { readLocalSupabase } from "./support/local-supabase";
 
 // LB-23 (ADR-016): "Cronograma" — the wedding day's run of show. Wedding-
@@ -513,12 +513,7 @@ test.describe("cronograma", () => {
     });
 
     await page.goto(`/app/weddings/${weddingId}/site`);
-    const schedule = await siteSectionEditor(page, "schedule");
-    await schedule.getByLabel(site.sections.titleLabel).fill("Programa");
-    await schedule.getByLabel(site.sections.bodyLabel).fill("Ceremonia a las 3 p. m.");
-    await schedule.getByLabel(site.sections.visibleLabel).setChecked(true);
-    await schedule.getByRole("button", { name: site.sections.submit }).click();
-    await expect(schedule.getByRole("status")).toHaveText(site.sections.saved);
+    await saveSiteSection(page, "schedule", { title: "Programa", body: "Ceremonia a las 3 p. m.", visible: true });
     const slug = `cronograma-${Date.now().toString(36)}`;
     await page.getByLabel(site.slug.label, { exact: true }).fill(slug);
     await page.getByRole("button", { name: site.slug.submit }).click();

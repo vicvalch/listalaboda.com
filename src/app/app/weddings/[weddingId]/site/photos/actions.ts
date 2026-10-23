@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import { requireUser } from "@/lib/auth/session";
 import { formText, type FormState } from "@/lib/forms/result";
@@ -208,45 +208,35 @@ function readBlockFields(formData: FormData, kind: PhotoBlockKind): BlockFields 
   };
 }
 
-/** Closed reasons the site editor may show after "Agregar sección aquí" (`?error=`). */
-export type InsertFailure = "block_limit" | "invalid" | "not_found" | "error";
-
-function sitePath(weddingId: string): string {
-  return `/app/weddings/${encodeURIComponent(weddingId)}/site`;
-}
+export type CreateBlockResult =
+  | Readonly<{ ok: true; blockId: string; message: string }>
+  | Readonly<{ ok: false; formError: string }>;
 
 /**
- * "Agregar sección aquí" (UX-01D): a gallery, carousel or photo with text at
- * one slot of the site editor. The form names only the kind and the slot's
- * anchor; the block starts hidden with the kind's default design and, since
- * the database appends new blocks, lands at the end of that slot, which is
- * where the button was. Then back to the editor, opened on the new section
- * (`?nueva=<id>`, compared against the wedding's own blocks), or with a
- * closed `?error=`.
+ * Studio's "Agregar … aquí" (STUDIO-01): a gallery, carousel or photo with
+ * text at one slot of the page. The form names only the kind, its design
+ * and the slot's anchor; the block starts hidden and, since the database
+ * appends new blocks, lands at the end of that slot, where the button was.
+ * Returns the new block's id so Studio can select it.
  */
-export async function insertBlockAction(formData: FormData): Promise<void> {
+export async function createStudioBlockAction(formData: FormData): Promise<CreateBlockResult> {
   const weddingId = formText(formData, "weddingId");
-  await requireUser(sitePath(weddingId));
+  await requireUser(photosPath(weddingId));
+  const copy = getMessages().site.photos;
   const kind = formText(formData, "kind");
   const anchor = parseAnchor(formText(formData, "anchor"));
-  const back = (error: InsertFailure) => redirect(`${sitePath(weddingId)}?error=${error}#secciones`);
-  if (!isPhotoBlockKind(kind) || kind === "cover" || anchor === undefined) back("invalid");
-  const blockKind = kind as Exclude<PhotoBlockKind, "cover">;
+  if (!isPhotoBlockKind(kind) || kind === "cover" || anchor === undefined) return { ok: false, formError: copy.errors.invalid };
+  const variant = parseVariant(kind, formText(formData, "variant")) ?? PHOTO_BLOCK_VARIANTS[kind][0];
 
-  const result = await createPhotoBlock(await createSupabaseServerClient(), weddingId, blockKind, {
-    variant: PHOTO_BLOCK_VARIANTS[blockKind][0],
-    anchor: anchor ?? null,
+  const result = await createPhotoBlock(await createSupabaseServerClient(), weddingId, kind, {
+    variant,
+    anchor,
     title: null,
     body: null,
   });
-  if (!result.ok) {
-    if (result.reason === "unauthenticated") await requireUser(sitePath(weddingId));
-    if (result.reason === "disabled") notFound();
-    back(result.reason === "block_limit" || result.reason === "invalid" || result.reason === "not_found" ? result.reason : "error");
-    return;
-  }
+  if (!result.ok) return failure(weddingId, result.reason);
   refresh(weddingId);
-  redirect(`${sitePath(weddingId)}?nueva=${result.value}#bloque-${result.value}`);
+  return { ok: true, blockId: result.value, message: copy.blocks.saved };
 }
 
 /** "Mostrar / Ocultar" on a photo section's row (the cover included): visibility only. */

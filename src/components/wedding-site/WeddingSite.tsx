@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, type ReactNode } from "react";
 
 import { SiteHero } from "@/components/wedding-site/hero";
 import { SiteFooter } from "@/components/wedding-site/parts";
@@ -8,7 +8,7 @@ import { customColorStyle, cx, DENSITY, PALETTE_SURFACE, TYPOGRAPHY, WIDTH } fro
 import { getMessages } from "@/lib/i18n";
 import type { ResolvedSiteDesign } from "@/lib/wedding-site/design/resolve";
 import { blocksAt, coverBlock, type SitePhotoBlock, type SitePhotos } from "@/lib/wedding-site/photos/model";
-import { SECTION_KINDS, type PublishedWeddingSite } from "@/lib/wedding-site/sections";
+import { SECTION_KINDS, type PublishedWeddingSite, type SectionKind } from "@/lib/wedding-site/sections";
 
 /**
  * The public wedding website, drawn from two separate inputs: the published
@@ -34,17 +34,35 @@ import { SECTION_KINDS, type PublishedWeddingSite } from "@/lib/wedding-site/sec
  * section order (after the opening, or after a section kind's place),
  * whether or not that section is shown. No photos = the text-only page,
  * markup unchanged.
+ *
+ * `studio` (STUDIO-01) is only for the member-only Studio canvas: hooks that
+ * wrap each element in authoring chrome and add insertion points, around
+ * the very same markup. Public pages never pass it, and without it the
+ * output is exactly the page above (golden tests).
  */
+export type SiteStudioHooks = Readonly<{
+  /** The opening: names, date, city and the cover. */
+  hero: (node: ReactNode) => ReactNode;
+  /** A text section at its fixed place; `node` is null where the page draws nothing there. */
+  section: (kind: SectionKind, node: ReactNode) => ReactNode;
+  /** A photo block other than the cover, with its rendered markup. */
+  block: (block: SitePhotoBlock, node: ReactNode) => ReactNode;
+  /** The end of a slot: after the opening (null) or after a section kind's place. */
+  slotEnd: (anchor: SectionKind | null) => ReactNode;
+}>;
+
 export function WeddingSite({
   site,
   design,
   photos,
   element: Root = "main",
+  studio,
 }: {
   site: PublishedWeddingSite;
   design: ResolvedSiteDesign;
   photos?: SitePhotos;
   element?: "main" | "div";
+  studio?: SiteStudioHooks;
 }) {
   const { publicSite } = getMessages();
   // Classic draws with the app palette and sets no palette scope, which keeps
@@ -59,16 +77,22 @@ export function WeddingSite({
   const order = new Map<SitePhotoBlock, number>(blocks.filter((b) => b.kind !== "cover").map((b, i) => [b, i]));
   const photoBlocks = (anchor: (typeof SECTION_KINDS)[number] | null) =>
     photos
-      ? blocksAt(blocks, anchor).map((block) => (
-          <SitePhotoBlockView
-            key={`photos-${order.get(block)}`}
-            block={block}
-            basePath={photos.basePath}
-            design={design}
-            index={order.get(block) ?? 0}
-          />
-        ))
+      ? blocksAt(blocks, anchor).map((block) => {
+          const view = (
+            <SitePhotoBlockView
+              key={`photos-${order.get(block)}`}
+              block={block}
+              basePath={photos.basePath}
+              design={design}
+              index={order.get(block) ?? 0}
+            />
+          );
+          return studio ? <Fragment key={`photos-${order.get(block)}`}>{studio.block(block, view)}</Fragment> : view;
+        })
       : null;
+  const hero = (
+    <SiteHero site={site} design={design} cover={cover && photos ? { block: cover, basePath: photos.basePath } : null} />
+  );
   return (
     <Root
       className={cx(
@@ -82,14 +106,17 @@ export function WeddingSite({
       style={custom ?? undefined}
     >
       <article className={cx("w-full", WIDTH[design.width], DENSITY[design.density].stack)} data-testid="public-site">
-        <SiteHero site={site} design={design} cover={cover && photos ? { block: cover, basePath: photos.basePath } : null} />
+        {studio ? studio.hero(hero) : hero}
         {photoBlocks(null)}
+        {studio?.slotEnd(null)}
         {SECTION_KINDS.map((kind) => {
           const section = site.sections.find((s) => s.kind === kind);
+          const view = section ? <SiteSection section={section} design={design} /> : null;
           return (
             <Fragment key={kind}>
-              {section ? <SiteSection section={section} design={design} /> : null}
+              {studio ? studio.section(kind, view) : view}
               {photoBlocks(kind)}
+              {studio?.slotEnd(kind)}
             </Fragment>
           );
         })}

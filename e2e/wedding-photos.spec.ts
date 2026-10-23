@@ -1,10 +1,10 @@
 import { randomBytes } from "node:crypto";
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type FrameLocator, type Page } from "@playwright/test";
 import pg from "pg";
 import sharp from "sharp";
 
-import { createAccount, createWedding, es, logIn, siteSectionEditor } from "./support/flows";
+import { createAccount, createWedding, es, logIn, saveSiteSection } from "./support/flows";
 import { readLocalSupabase } from "./support/local-supabase";
 
 // UX-01B (ADR-022): wedding-site photos end to end, with the server flag on
@@ -12,12 +12,14 @@ import { readLocalSupabase } from "./support/local-supabase";
 // upload with progress, EXIF/GPS removal, alt text, cover, member preview,
 // publication-gated public delivery, unpublish, blocks and keyboard
 // reordering, deletion, quota messages, and an outsider's 404.
-// UX-01D: photos are uploaded and described in the "Biblioteca de fotos";
-// the cover and photo sections are composed in "Secciones del sitio".
+// UX-01D / STUDIO-01: photos are uploaded and described in the "Biblioteca
+// de fotos" (or inside Studio); the cover and photo sections are composed in
+// Studio.
 
 const site = es.site;
 const photos = es.site.photos;
 const compose = es.site.compose;
+const studio = es.site.studio;
 
 function uniqueSlug(label: string): string {
   return `${label}-${randomBytes(4).toString("hex")}`;
@@ -53,22 +55,14 @@ async function openPhotos(page: Page, weddingId: string) {
   await expect(page.getByText(photos.disclosure)).toBeVisible();
 }
 
-async function openSite(page: Page, weddingId: string) {
-  await page.goto(`/app/weddings/${weddingId}/site`);
-  await expect(page.getByRole("heading", { level: 1, name: site.title })).toBeVisible();
+async function openStudio(page: Page, weddingId: string) {
+  await page.goto(`/app/weddings/${weddingId}/site/studio`);
+  await expect(page.getByTestId("studio")).toBeVisible();
+  await expect(canvas(page).getByTestId("public-site")).toBeVisible();
 }
 
-/** The order of "Secciones del sitio": text kinds, `block:<kind>` and `+<anchor>` insertion points. */
-async function compositionOrder(page: Page): Promise<string[]> {
-  return page.getByTestId("site-composition").evaluate((list) =>
-    [...list.children].map((item) => {
-      const section = item.querySelector<HTMLElement>('[data-testid="site-section"]');
-      if (section) return section.dataset.kind ?? "";
-      const block = item.querySelector<HTMLElement>('[data-testid="photo-block"]');
-      if (block) return `block:${block.dataset.blockKind}`;
-      return `+${item.querySelector<HTMLElement>('[data-testid="site-insert"]')?.dataset.anchor}`;
-    }),
-  );
+function canvas(page: Page): FrameLocator {
+  return page.frameLocator('[data-testid="studio-canvas"]');
 }
 
 async function upload(page: Page, files: Array<{ name: string; buffer: Buffer }>) {
@@ -94,11 +88,7 @@ async function describePhoto(page: Page, index: number, alt: string, caption = "
 
 async function publishWithIntro(page: Page, weddingId: string, slug: string) {
   await page.goto(`/app/weddings/${weddingId}/site`);
-  const intro = await siteSectionEditor(page, "intro");
-  await intro.getByLabel(site.sections.bodyLabel).fill("Nos casamos y queremos compartirlo.");
-  await intro.getByLabel(site.sections.visibleLabel).setChecked(true);
-  await intro.getByRole("button", { name: site.sections.submit }).click();
-  await expect(intro.getByRole("status")).toHaveText(site.sections.saved);
+  await saveSiteSection(page, "intro", { body: "Nos casamos y queremos compartirlo.", visible: true });
   await page.getByLabel(site.slug.label, { exact: true }).fill(slug);
   await page.getByRole("button", { name: site.slug.submit }).click();
   await expect(page.getByText(site.slug.saved)).toBeVisible();
@@ -140,18 +130,20 @@ test.describe("wedding-site photos", () => {
     await expect(page.getByRole("button", { name: photos.library.useAsCover })).toHaveCount(0);
     await expect(libraryCards(page).first()).toContainText(photos.library.notPlaced);
 
-    // The cover is chosen in "Portada", on the site page, and starts hidden.
-    await openSite(page, weddingId);
-    const cover = page.getByTestId("photos-cover");
-    await expect(cover).toContainText(compose.cover.none);
-    await cover.getByTestId("cover-picker").locator("summary").click();
+    // The cover is chosen in Studio ("Portada" in the palette) and starts hidden.
+    await openStudio(page, weddingId);
+    await page.getByTestId("studio-palette-cover").click();
+    const cover = page.getByTestId("studio-panel");
+    await expect(cover).toHaveAttribute("data-target", "cover");
+    await expect(cover).toContainText(studio.panel.cover.noPhoto);
     await cover.getByRole("button", { name: "Usar la foto 1 como portada" }).click();
-    await expect(page.getByTestId("photo-announcer")).toHaveText(photos.library.coverSet);
+    await expect(page.getByTestId("studio-announcer")).toHaveText(photos.library.coverSet);
     await expect(cover.locator("img").first()).toHaveAttribute("alt", "Ana y Luis frente al mar");
-    await expect(cover.getByTestId("photo-cover-visibility")).toHaveText(site.sections.hidden);
-    await cover.getByRole("button", { name: `Mostrar «${compose.cover.photoTitle}» en el sitio` }).click();
-    await expect(page.getByTestId("photo-announcer")).toHaveText(`«${compose.cover.photoTitle}» ahora es visible.`);
-    await expect(cover.getByTestId("photo-cover-visibility")).toHaveText(site.sections.shown);
+    await expect(canvas(page).getByTestId("site-cover").locator("img")).toHaveAttribute("alt", "Ana y Luis frente al mar");
+    await expect(cover.getByTestId("studio-cover-visibility")).toHaveText(site.sections.hidden);
+    await cover.getByRole("button", { name: compose.show }).click();
+    await expect(page.getByTestId("studio-announcer")).toHaveText(`«${compose.cover.photoTitle}» ahora es visible.`);
+    await expect(cover.getByTestId("studio-cover-visibility")).toHaveText(site.sections.shown);
 
     // Member preview shows it before anything is published.
     await page.goto(`/app/weddings/${weddingId}/site/preview`);
@@ -222,51 +214,42 @@ test.describe("wedding-site photos", () => {
     await describePhoto(page, 0, "Primera foto");
     await describePhoto(page, 1, "Segunda foto");
 
-    // "Secciones del sitio": text and photo sections in one list, with an insertion point at each slot end.
-    await openSite(page, weddingId);
-    expect(await compositionOrder(page)).toEqual([
-      "+top",
-      ...["intro", "ceremony", "reception", "schedule", "dress_code", "faq", "rsvp"].flatMap((kind) => [kind, `+${kind}`]),
-    ]);
-
-    // A carousel right after the ceremony, from the keyboard: open the insertion point, choose "Carrusel".
-    const insert = page.locator('[data-testid="site-insert"][data-anchor="ceremony"]');
-    await insert.locator("summary").focus();
+    // Studio: choose "Carrusel" in the palette, then its place on the canvas, from the keyboard.
+    await openStudio(page, weddingId);
+    await page.getByTestId("studio-element-carousel").click();
+    const here = canvas(page).locator('[data-testid="studio-insert"][data-anchor="ceremony"]');
+    await expect(canvas(page).getByTestId("studio-insert")).toHaveCount(8);
+    await here.focus();
     await page.keyboard.press("Enter");
-    await insert.getByRole("button", { name: `Agregar ${photos.blocks.kinds.carousel}, después de «Ceremonia»` }).click();
-    await expect(page).toHaveURL(/\?nueva=[0-9a-f-]{36}#bloque-/);
-    const block = page.getByTestId("photo-block");
-    await expect(block).toHaveCount(1);
-    expect((await compositionOrder(page)).slice(3, 7)).toEqual(["ceremony", "block:carousel", "+ceremony", "reception"]);
-    // New: hidden, opened, focused, with the next steps spelled out.
-    await expect(block.getByTestId("photo-block-visibility")).toHaveText(site.sections.hidden);
-    await expect(block.getByText(compose.nextSteps[0])).toBeVisible();
-    await expect(block.getByTestId("photo-block-editor")).toHaveAttribute("open", "");
-    await expect(block.getByTestId("photo-block-editor").locator("summary")).toBeFocused();
+    const panel = page.getByTestId("studio-panel");
+    await expect(panel).toHaveAttribute("data-block-kind", "carousel");
+    await expect(canvas(page).getByTestId("studio-insert")).toHaveCount(0);
+    // New: hidden, selected, asking for photos.
+    await expect(panel.getByTestId("studio-block-visibility")).toHaveText(site.sections.hidden);
+    await expect(panel.getByTestId("studio-choose-photos")).toBeVisible();
 
     // Photos come from the library, through the block's own picker.
-    for (const position of [1, 2]) {
-      await block.getByRole("button", { name: `Agregar la foto ${position} a «${photos.blocks.kinds.carousel}»` }).click();
-      await expect(page.getByTestId("photo-announcer")).toHaveText(photos.library.added);
-    }
-    await expect(block.getByTestId("photo-block-photos").locator("img")).toHaveCount(2);
-    await expect(block.getByTestId("photo-block-count")).toHaveText("2 fotos");
-    await block.getByRole("button", { name: `Mostrar «${photos.blocks.kinds.carousel}» en el sitio` }).click();
-    await expect(page.getByTestId("photo-announcer")).toHaveText(`«${photos.blocks.kinds.carousel}» ahora es visible.`);
-    await expect(block.getByTestId("photo-block-visibility")).toHaveText(site.sections.shown);
+    const picker = panel.getByTestId("studio-photo-picker");
+    for (const item of await picker.locator("li label").all()) await item.click();
+    await picker.getByRole("button", { name: "Agregar 2 fotos" }).click();
+    await expect(page.getByTestId("studio-announcer")).toHaveText("Agregamos 2 fotos.");
+    await expect(panel.getByTestId("studio-block-photo")).toHaveCount(2);
+    await panel.getByLabel(photos.blocks.visibleLabel).check();
+    await panel.getByRole("button", { name: photos.blocks.save }).click();
+    await expect(panel.getByTestId("studio-panel-status")).toHaveText(photos.blocks.saved);
+    await expect(panel.getByTestId("studio-block-visibility")).toHaveText(site.sections.shown);
 
-    // Keyboard reordering: "Mover antes" on the second photo, announced with its new position.
-    const second = block.getByTestId("photo-block-photos").locator("> li").nth(1);
-    const moveBefore = second.getByRole("button", { name: /Mover «Foto 2/ }).first();
-    await moveBefore.focus();
+    // Keyboard reordering: "Subir" on the second photo, announced with its new position.
+    const moveUp = panel.getByRole("button", { name: "Subir la foto 2" });
+    await moveUp.focus();
     await page.keyboard.press("Enter");
-    await expect(page.getByTestId("photo-announcer")).toHaveText(/a la posición 1 de 2/);
-    await expect(block.getByTestId("photo-block-photos").locator("> li").first().locator("img")).toHaveAttribute("alt", "Segunda foto");
+    await expect(page.getByTestId("studio-announcer")).toHaveText(/a la posición 1 de 2/);
+    await expect(panel.getByTestId("studio-block-photo").first().locator("img")).toHaveAttribute("alt", "Segunda foto");
+    await expect(canvas(page).getByTestId("site-photo-block-carousel").locator("img").first()).toHaveAttribute("alt", "Segunda foto");
 
-    // Phone width: the editor fits without sideways scrolling.
+    // Phone width: Studio fits without sideways scrolling (drawers instead of columns).
     await page.setViewportSize({ width: 375, height: 800 });
-    await openSite(page, weddingId);
-    await page.getByTestId("photo-block-editor").locator("summary").click();
+    await openStudio(page, weddingId);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.setViewportSize({ width: 1280, height: 800 });
 

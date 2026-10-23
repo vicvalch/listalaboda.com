@@ -4,18 +4,15 @@ import {
   blockStatus,
   canAddBlock,
   photosForBlock,
-  previewPhotoBlocks,
-  siteComposition,
   slotSiblings,
-  type CompositionRow,
   type EditorBlock,
   type EditorPhoto,
   type PhotoEditor,
 } from "@/lib/wedding-site/photos/editor";
-import { SECTION_KINDS, type SectionKind } from "@/lib/wedding-site/sections";
+import type { SectionKind } from "@/lib/wedding-site/sections";
 
-// UX-01D: "Secciones del sitio" lists text and photo sections together in
-// the public page's order, with an insertion point at the end of each slot.
+// UX-01D / STUDIO-01: the pure block helpers Studio's panels use (slots,
+// what a block shows, picker candidates, the block limit).
 
 let seq = 0;
 const id = () => `00000000-0000-4000-8000-${String(++seq).padStart(12, "0")}`;
@@ -49,50 +46,6 @@ function photo(blockId: string | null, position: number, altText: string | null 
     createdAt: `2026-10-23T00:00:${String(seq).padStart(2, "0")}Z`,
   };
 }
-
-/** A row as a short label: "intro", "+top", "block:carousel". */
-function labels(rows: CompositionRow[]): string[] {
-  return rows.map((row) =>
-    row.type === "section" ? row.kind : row.type === "insert" ? `+${row.anchor ?? "top"}` : `block:${row.block.kind}`,
-  );
-}
-
-describe("siteComposition", () => {
-  it("without photos is the seven text sections in their fixed order, with no insertion points", () => {
-    expect(labels(siteComposition(null))).toEqual([...SECTION_KINDS]);
-  });
-
-  it("puts an insertion point after the cover and after every text section when there are no blocks", () => {
-    expect(labels(siteComposition({ photos: [], blocks: [] }))).toEqual([
-      "+top",
-      ...SECTION_KINDS.flatMap((kind) => [kind, `+${kind}`]),
-    ]);
-  });
-
-  it("follows the public order: blocks after their anchor, by position, the insertion point closing each slot; the cover is not a row", () => {
-    const cover = block("cover", null, 0, true);
-    const top = block("gallery", null, 3);
-    const second = block("photo_text", "ceremony", 5);
-    const first = block("carousel", "ceremony", 1);
-    const editor: PhotoEditor = { photos: [], blocks: [second, cover, top, first] };
-    const rows = siteComposition(editor);
-    expect(labels(rows).slice(0, 6)).toEqual(["block:gallery", "+top", "intro", "+intro", "ceremony", "block:carousel"]);
-    expect(labels(rows).slice(6, 9)).toEqual(["block:photo_text", "+ceremony", "reception"]);
-    expect(rows.filter((row) => row.type === "block").map((row) => (row.type === "block" ? row.block.id : ""))).toEqual([
-      top.id,
-      first.id,
-      second.id,
-    ]);
-  });
-
-  it("matches the member preview's block order", () => {
-    const blocks = [block("gallery", "faq", 2, true), block("carousel", null, 4, true), block("gallery", "intro", 1, true)];
-    const photos = blocks.map((b, i) => photo(b.id, i));
-    const editor: PhotoEditor = { photos, blocks };
-    const fromRows = siteComposition(editor).flatMap((row) => (row.type === "block" ? [row.block.anchor] : []));
-    expect(fromRows).toEqual(previewPhotoBlocks(editor, { includeHidden: true }).map((b) => b.anchor));
-  });
-});
 
 describe("row helpers", () => {
   it("slotSiblings: only the blocks of the same slot, in order", () => {

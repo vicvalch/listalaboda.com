@@ -171,14 +171,31 @@ export async function addChecklistItem(page: Page, item: NewItem) {
 }
 
 /**
- * UX-01D: a text section's row in "Secciones del sitio" (on the site page),
- * with its editor behind "Editar" opened (left open if it already is).
+ * STUDIO-01: a text section's properties in Studio (from any page of the
+ * wedding): opens Studio and selects the section from the left palette.
  */
-export async function siteSectionEditor(page: Page, kind: string): Promise<Locator> {
-  const card = page.locator(`[data-testid="site-section"][data-kind="${kind}"]`);
-  const details = card.getByTestId("site-section-editor");
-  if (!(await details.evaluate((element) => (element as HTMLDetailsElement).open))) {
-    await details.locator("summary").click();
-  }
-  return card;
+export async function studioSection(page: Page, kind: string): Promise<Locator> {
+  const weddingId = /\/app\/weddings\/([0-9a-f-]{36})(?:[/?#]|$)/.exec(page.url())?.[1];
+  if (!weddingId) throw new Error("not on a wedding page");
+  await page.goto(`/app/weddings/${weddingId}/site/studio`);
+  await page.getByTestId(`studio-palette-${kind}`).click();
+  const panel = page.getByTestId("studio-panel");
+  await expect(panel).toHaveAttribute("data-target", `section:${kind}`);
+  return panel;
+}
+
+/** Saves a text section in Studio, then goes back to the page it came from. */
+export async function saveSiteSection(
+  page: Page,
+  kind: string,
+  fields: { title?: string; body?: string; visible?: boolean },
+): Promise<void> {
+  const back = page.url();
+  const panel = await studioSection(page, kind);
+  if (fields.title !== undefined) await panel.getByLabel(es.site.sections.titleLabel).fill(fields.title);
+  if (fields.body !== undefined) await panel.getByLabel(es.site.sections.bodyLabel).fill(fields.body);
+  if (fields.visible !== undefined) await panel.getByLabel(es.site.sections.visibleLabel).setChecked(fields.visible);
+  await panel.getByRole("button", { name: es.site.sections.submit }).click();
+  await expect(panel.getByTestId("studio-panel-status")).toHaveText(es.site.sections.saved);
+  await page.goto(back);
 }

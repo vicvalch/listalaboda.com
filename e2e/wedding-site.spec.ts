@@ -5,7 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import pg from "pg";
 
 import type { Database } from "../src/lib/supabase/database.types";
-import { createAccount, createInvite, es, formAlert, logIn, siteSectionEditor } from "./support/flows";
+import { createAccount, createInvite, es, formAlert, logIn, studioSection } from "./support/flows";
 import { E2E_PASSWORD } from "./support/identities";
 import { readLocalSupabase } from "./support/local-supabase";
 
@@ -47,9 +47,16 @@ async function openSite(page: Page, weddingId: string) {
   await expect(page.getByRole("heading", { level: 1, name: site.title })).toBeVisible();
 }
 
-/** UX-01D: the section's row, with its editor ("Editar") open. */
+/** STUDIO-01: the section's properties in Studio (navigates there). */
 function sectionCard(page: Page, kind: keyof typeof site.kinds): Promise<Locator> {
-  return siteSectionEditor(page, kind);
+  return studioSection(page, kind);
+}
+
+/** Checks a section's saved body in Studio, then goes back. */
+async function expectSectionBody(page: Page, kind: keyof typeof site.kinds, body: string) {
+  const back = page.url();
+  await expect((await sectionCard(page, kind)).getByLabel(site.sections.bodyLabel)).toHaveValue(body);
+  await page.goto(back);
 }
 
 async function saveSection(
@@ -57,17 +64,19 @@ async function saveSection(
   kind: keyof typeof site.kinds,
   fields: { title?: string; body?: string; visible?: boolean },
 ) {
+  const back = page.url();
   const card = await sectionCard(page, kind);
   if (fields.title !== undefined) await card.getByLabel(site.sections.titleLabel).fill(fields.title);
   if (fields.body !== undefined) await card.getByLabel(site.sections.bodyLabel).fill(fields.body);
   if (fields.visible !== undefined) await card.getByLabel(site.sections.visibleLabel).setChecked(fields.visible);
   await card.getByRole("button", { name: site.sections.submit }).click();
-  await expect(card.getByRole("status")).toHaveText(site.sections.saved);
+  await expect(card.getByTestId("studio-panel-status")).toHaveText(site.sections.saved);
   if (fields.visible !== undefined) {
     await expect(card.getByTestId("site-section-visibility")).toHaveText(
       fields.visible ? site.sections.shown : site.sections.hidden,
     );
   }
+  await page.goto(back);
 }
 
 async function saveSlug(page: Page, slug: string, { confirm = false } = {}) {
@@ -182,7 +191,7 @@ test.describe("wedding website", () => {
     await page.getByRole("link", { name: site.navLink }).click();
     await expect(page).toHaveURL(new RegExp(`/app/weddings/${weddingId}/site$`));
     await expect(page.getByTestId("site-status")).toContainText(site.status.unpublished);
-    await expect(page.getByTestId("site-section")).toHaveCount(7);
+    await expect(page.getByTestId("site-studio-card")).toBeVisible();
     // A suggestion is prefilled but not saved.
     await expect(page.getByLabel(site.slug.label, { exact: true })).toHaveValue("boda-de-prueba-sitio");
     expect(await publication(weddingId)).toBeNull();
@@ -220,7 +229,12 @@ test.describe("wedding website", () => {
 
     // E: publish.
     await publishSite(page);
-    await expect(page.getByTestId("site-live-edits")).toHaveText(site.status.publishedNote);
+    // STUDIO-01: Studio says plainly that saved visible changes go live.
+    await page.getByTestId("open-studio").click();
+    await expect(page.getByTestId("studio-status")).toHaveText(site.studio.published);
+    await expect(page.getByTestId("studio").getByText(site.studio.publishedWarning).first()).toBeVisible();
+    await page.getByTestId("studio-exit").click();
+    await expect(page.getByRole("heading", { level: 1, name: site.title })).toBeVisible();
     await expect(page.getByRole("link", { name: site.status.open })).toHaveAttribute("href", `/boda/${slug}`);
 
     // F: the anonymous public page.
@@ -319,9 +333,7 @@ test.describe("wedding website", () => {
 
     // The owner sees the collaborator's work, chooses the address.
     await openSite(owner.page, weddingId);
-    await expect((await sectionCard(owner.page, "intro")).getByLabel(site.sections.bodyLabel)).toHaveValue(
-      "Texto de la colaboradora",
-    );
+    await expectSectionBody(owner.page, "intro", "Texto de la colaboradora");
     const slug = uniqueSlug("colaboracion");
     await saveSlug(owner.page, slug);
 
@@ -380,7 +392,7 @@ test.describe("wedding website", () => {
     await expect(visitor.page.getByRole("heading", { level: 2, name: "Código de vestimenta" })).toHaveCount(0);
     await expect(visitor.page.getByText("Elegante")).toHaveCount(0);
     await collab.page.reload();
-    await expect((await sectionCard(collab.page, "dress_code")).getByLabel(site.sections.bodyLabel)).toHaveValue("Elegante");
+    await expectSectionBody(collab.page, "dress_code", "Elegante");
 
     for (const ctx of [owner, collab, visitor]) await ctx.context.close();
   });
@@ -401,7 +413,7 @@ test.describe("wedding website", () => {
     // I: unpublish — gone at once; the editor keeps everything.
     await unpublishSite(page);
     await expectPublicNotFound(visitor.page, slug);
-    await expect((await sectionCard(page, "intro")).getByLabel(site.sections.bodyLabel)).toHaveValue("Bienvenida del ciclo");
+    await expectSectionBody(page, "intro", "Bienvenida del ciclo");
     await expect(page.getByLabel(site.slug.label, { exact: true })).toHaveValue(slug);
 
     // J: republish — the same address, the same content.
@@ -1583,6 +1595,7 @@ async function signedInClient(email: string) {
 }
 
 async function saveSectionExpectingError(page: Page, kind: keyof typeof site.kinds, error: string) {
+  const back = page.url();
   const card = await sectionCard(page, kind);
   await card.getByLabel(site.sections.visibleLabel).check();
   await card.getByRole("button", { name: site.sections.submit }).click();
@@ -1591,6 +1604,7 @@ async function saveSectionExpectingError(page: Page, kind: keyof typeof site.kin
     `${site.sections.bodyHint} ${error}`,
   );
   await card.getByLabel(site.sections.visibleLabel).uncheck();
+  await page.goto(back);
 }
 
 async function reopen(page: Page, weddingId: string): Promise<Page> {

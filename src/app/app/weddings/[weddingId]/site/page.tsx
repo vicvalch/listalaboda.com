@@ -8,25 +8,22 @@ import { loginPath } from "@/lib/auth/redirect";
 import { requireUser } from "@/lib/auth/session";
 import { requireWeddingMembership } from "@/lib/authz/wedding";
 import { getRequestOrigin } from "@/lib/http/origin";
-import { getMessages } from "@/lib/i18n";
+import { getMessages, interpolate } from "@/lib/i18n";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { coverOf, photoCount } from "@/lib/wedding-site/photos/editor";
 import { isWeddingSitePhotosEnabled } from "@/lib/wedding-site/photos/flag";
-import { PHOTO_LIMITS } from "@/lib/wedding-site/photos/model";
-import type { PhotoEditor } from "@/lib/wedding-site/photos/editor";
 import { getPhotoEditor } from "@/lib/wedding-site/photos/service";
 import { toPreviewSite } from "@/lib/wedding-site/preview";
 import { getWeddingSiteEditor } from "@/lib/wedding-site/service";
 import { PUBLIC_SITE_BASE_PATH, publicSitePath, suggestSlug } from "@/lib/wedding-site/slug";
 import { formatWeddingDate } from "@/lib/weddings/format";
 import { getWeddingDetail } from "@/lib/weddings/service";
-import { interpolate } from "@/lib/i18n";
 
 import { ConfirmButton } from "../guests/ConfirmButton";
 import { BackToWeddingLink } from "../BackToWeddingLink";
 import { unpublishSiteAction } from "./actions";
+import { CoverPhoto, SiteComposition } from "./SiteComposition";
+import { PhotoAnnouncer } from "./photos/PhotoAnnouncer";
 import { PublishForm } from "./PublishForm";
-import { SectionForm } from "./SectionForm";
 import { SlugForm } from "./SlugForm";
 import { ThemeSection } from "./ThemeSection";
 
@@ -35,6 +32,10 @@ export const metadata: Metadata = { title: getMessages().site.title };
 /**
  * "Sitio web": the private editor of the wedding's public website, a
  * secondary area next to the checklist (which stays the wedding's home).
+ * UX-01D: one composition surface, top to bottom like the public page:
+ * "Portada" (header data and cover photo), "Secciones del sitio" (text and
+ * photo sections together, in public order, with "Agregar sección aquí"),
+ * the style, then preview and publication.
  * Any member edits the sections and chooses and customizes the theme ("Estilo del sitio",
  * ADR-019); only owners see the address and publication controls, which the service and database also enforce.
  * Membership is checked server-side first; a non-member, a nonexistent
@@ -66,13 +67,18 @@ export default async function WeddingSitePage({
   if (!wedding) notFound();
 
   const isOwner = access.access.role === "owner";
-  const { done } = await searchParams;
+  const { done, nueva, error } = await searchParams;
   const copy = getMessages().site;
   const publication = editor?.publication ?? null;
   const isPublished = Boolean(publication?.publishedAt);
   // The address as people would type it, for this deployment's origin.
   const host = origin ? new URL(origin).host : "";
   const publicUrl = publication && origin ? `${origin}${publicSitePath(publication.slug)}` : null;
+
+  const compose = copy.compose;
+  // A block just created from "Agregar sección aquí": only one of this wedding's own blocks counts.
+  const newBlockId = photoEditor && typeof nueva === "string" && photoEditor.blocks.some((block) => block.id === nueva) ? nueva : null;
+  const insertError = typeof error === "string" ? insertErrorMessage(error) : null;
 
   return (
     <div className="space-y-8">
@@ -83,15 +89,102 @@ export default async function WeddingSitePage({
         <p className="text-muted text-sm font-semibold break-words">{wedding.name}</p>
         <h1 className="text-3xl font-semibold tracking-tight">{copy.title}</h1>
         <p className="text-muted">{copy.intro}</p>
-        <p>
-          <BackToWeddingLink weddingId={wedding.id} className={`${textLinkClass} text-sm`} />
+        {editor ? (
+          <p className="text-sm" data-testid="site-status-line">
+            {interpolate(compose.statusLine, { status: isPublished ? copy.status.published : copy.status.unpublished })}
+            {" · "}
+            <a href="#publicar" className={textLinkClass}>
+              {compose.publishLink}
+            </a>
+          </p>
+        ) : null}
+        <p className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          <BackToWeddingLink weddingId={wedding.id} className={textLinkClass} />
+          <Link href={`${selfPath}/preview`} className={textLinkClass}>
+            {compose.previewLink}
+          </Link>
+          {photoEditor ? (
+            <Link href={`${selfPath}/photos`} className={textLinkClass} data-testid="photo-library-link">
+              {compose.libraryLink}
+            </Link>
+          ) : null}
         </p>
       </header>
 
       {editor === null ? <Notice tone="error">{copy.loadFailed}</Notice> : null}
+      {insertError ? <Notice tone="error">{insertError}</Notice> : null}
+      {photosEnabled && photoEditor === null ? <Notice tone="error">{copy.photos.errors.failed}</Notice> : null}
+
+      <PhotoAnnouncer>
+        {/* ---------------------------------------------------- Portada */}
+        <section className={`${cardClass} space-y-4`} aria-labelledby="site-header-title" data-testid="site-cover-card">
+          <header className="space-y-1">
+            <h2 id="site-header-title" className="text-2xl font-semibold tracking-tight">
+              {compose.cover.title}
+            </h2>
+            <p className="text-muted">{compose.cover.intro}</p>
+          </header>
+          <dl className="flex flex-wrap gap-x-8 gap-y-2">
+            <div>
+              <dt className="text-muted text-sm">{getMessages().weddingSettings.nameLabel}</dt>
+              <dd className="font-semibold break-words">{wedding.name}</dd>
+            </div>
+            <div>
+              <dt className="text-muted text-sm">{getMessages().wedding.dateLabel}</dt>
+              <dd className="font-semibold">
+                {wedding.weddingDate ? formatWeddingDate(wedding.weddingDate) : copy.header.noDate}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted text-sm">{getMessages().wedding.cityLabel}</dt>
+              <dd className="font-semibold break-words">{wedding.city ?? copy.header.noCity}</dd>
+            </div>
+          </dl>
+          {isOwner ? (
+            <p className="text-sm">
+              <Link href={`/app/weddings/${wedding.id}/settings`} className={textLinkClass}>
+                {copy.header.ownerLink}
+              </Link>
+            </p>
+          ) : (
+            <p className="text-muted text-sm">{copy.header.collaboratorNote}</p>
+          )}
+          {photoEditor ? <CoverPhoto weddingId={wedding.id} editor={photoEditor} /> : null}
+        </section>
+
+        {/* ------------------------------------------ Secciones del sitio */}
+        {editor ? (
+          <section id="secciones" className="scroll-mt-24 space-y-4" aria-labelledby="site-sections-title">
+            <header className="space-y-1">
+              <h2 id="site-sections-title" className="text-2xl font-semibold tracking-tight">
+                {compose.title}
+              </h2>
+              <p className="text-muted">{photoEditor ? compose.intro : compose.introNoPhotos}</p>
+              <p className="text-muted text-sm">{compose.legend}</p>
+              {photoEditor ? <p className="text-muted text-sm">{compose.altRule}</p> : null}
+              {isPublished ? (
+                <p className="text-sm font-semibold" data-testid="site-live-edits">
+                  {copy.status.publishedNote}
+                </p>
+              ) : null}
+            </header>
+            <SiteComposition weddingId={wedding.id} sections={editor.sections} photos={photoEditor} newBlockId={newBlockId} />
+          </section>
+        ) : null}
+      </PhotoAnnouncer>
 
       {editor ? (
-        <section className={`${cardClass} space-y-5`} aria-labelledby="site-status-title">
+        <ThemeSection
+          weddingId={wedding.id}
+          site={toPreviewSite(wedding, editor.sections, publication?.slug ?? "")}
+          design={editor.design}
+          isPublished={isPublished}
+        />
+      ) : null}
+
+      {/* ------------------------------------- Vista previa y publicación */}
+      {editor ? (
+        <section id="publicar" className={`${cardClass} scroll-mt-24 space-y-5`} aria-labelledby="site-status-title">
           <header className="space-y-2">
             <h2 id="site-status-title" className="text-xl font-semibold">
               {copy.status.title}
@@ -105,6 +198,12 @@ export default async function WeddingSitePage({
             <p className="text-muted text-sm">
               {isPublished ? copy.status.publishedNote : copy.status.unpublishedNote}
             </p>
+            <p className="text-sm">
+              <Link href={`${selfPath}/preview`} className={textLinkClass}>
+                {compose.previewLink}
+              </Link>
+            </p>
+            {photoEditor ? <p className="text-muted text-sm">{copy.photos.disclosure}</p> : null}
           </header>
 
           {/* The address: owners always see the chosen one; collaborators
@@ -162,110 +261,23 @@ export default async function WeddingSitePage({
           )}
         </section>
       ) : null}
-
-      {editor ? (
-        <ThemeSection
-          weddingId={wedding.id}
-          site={toPreviewSite(wedding, editor.sections, publication?.slug ?? "")}
-          design={editor.design}
-          isPublished={isPublished}
-        />
-      ) : null}
-
-      {photosEnabled ? <PhotosCard weddingId={wedding.id} editor={photoEditor} /> : null}
-
-      <section className="space-y-3" aria-labelledby="site-header-title">
-        <h2 id="site-header-title" className="text-2xl font-semibold tracking-tight">
-          {copy.header.title}
-        </h2>
-        <p className="text-muted">{copy.header.body}</p>
-        <dl className="flex flex-wrap gap-x-8 gap-y-2">
-          <div>
-            <dt className="text-muted text-sm">{getMessages().weddingSettings.nameLabel}</dt>
-            <dd className="font-semibold break-words">{wedding.name}</dd>
-          </div>
-          <div>
-            <dt className="text-muted text-sm">{getMessages().wedding.dateLabel}</dt>
-            <dd className="font-semibold">
-              {wedding.weddingDate ? formatWeddingDate(wedding.weddingDate) : copy.header.noDate}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-muted text-sm">{getMessages().wedding.cityLabel}</dt>
-            <dd className="font-semibold break-words">{wedding.city ?? copy.header.noCity}</dd>
-          </div>
-        </dl>
-        {isOwner ? (
-          <p className="text-sm">
-            <Link href={`/app/weddings/${wedding.id}/settings`} className={textLinkClass}>
-              {copy.header.ownerLink}
-            </Link>
-          </p>
-        ) : (
-          <p className="text-muted text-sm">{copy.header.collaboratorNote}</p>
-        )}
-      </section>
-
-      {editor ? (
-        <section className="space-y-4" aria-labelledby="site-sections-title">
-          <header className="space-y-1">
-            <h2 id="site-sections-title" className="text-2xl font-semibold tracking-tight">
-              {copy.sections.title}
-            </h2>
-            <p className="text-muted">{copy.sections.intro}</p>
-            {isPublished ? (
-              <p className="text-sm font-semibold" data-testid="site-live-edits">
-                {copy.status.publishedNote}
-              </p>
-            ) : null}
-          </header>
-          <ul className="space-y-4">
-            {editor.sections.map((section) => (
-              <li key={section.kind}>
-                <SectionForm weddingId={wedding.id} section={section} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
     </div>
   );
 }
 
-/**
- * "Fotos" (UX-01B, ADR-022): a summary of the wedding's photos and the way
- * into the photo editor, with the fixed disclosure next to publishing.
- */
-function PhotosCard({ weddingId, editor }: { weddingId: string; editor: PhotoEditor | null }) {
-  const copy = getMessages().site.photos;
-  const cover = editor ? coverOf(editor) : null;
-  return (
-    <section className={`${cardClass} space-y-4`} aria-labelledby="site-photos-title" data-testid="site-photos-card">
-      <header className="space-y-1">
-        <h2 id="site-photos-title" className="text-xl font-semibold">
-          {copy.cardTitle}
-        </h2>
-        <p className="text-muted">{copy.cardIntro}</p>
-      </header>
-      {editor ? (
-        <ul className="space-y-1 text-sm">
-          <li>{interpolate(copy.count, { count: String(photoCount(editor)), max: String(PHOTO_LIMITS.photosPerWedding) })}</li>
-          <li>
-            <span className="text-muted">{copy.coverSummary} </span>
-            <span className="font-semibold">
-              {cover?.photo ? (cover.block?.isVisible ? copy.coverVisible : copy.coverHidden) : copy.coverNone}
-            </span>
-          </li>
-        </ul>
-      ) : (
-        <Notice tone="error">{copy.errors.failed}</Notice>
-      )}
-      <p className="text-muted text-sm">{copy.disclosure}</p>
-      <p>
-        <Link href={`/app/weddings/${encodeURIComponent(weddingId)}/site/photos`} className={textLinkClass}>
-          {copy.manage}
-        </Link>
-      </p>
-    </section>
-  );
+/** The closed `?error=` of "Agregar sección aquí" (anything else shows nothing). */
+function insertErrorMessage(code: string): string | null {
+  const errors = getMessages().site.photos.errors;
+  switch (code) {
+    case "block_limit":
+      return errors.blockLimit;
+    case "invalid":
+      return errors.invalid;
+    case "not_found":
+      return errors.notFound;
+    case "error":
+      return errors.failed;
+    default:
+      return null;
+  }
 }

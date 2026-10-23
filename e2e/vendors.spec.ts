@@ -2,7 +2,7 @@ import { expect, test, type Browser, type Locator, type Page } from "@playwright
 import pg from "pg";
 
 import { formatMoney } from "../src/lib/vendors/money";
-import { createAccount, createWedding, es, formAlert, logIn } from "./support/flows";
+import { createAccount, createWedding, es, formAlert, logIn, siteSectionEditor } from "./support/flows";
 import { readLocalSupabase } from "./support/local-supabase";
 
 // LB-21 (ADR-014): "Proveedores" — the wedding's vendor engagements. Plain
@@ -468,7 +468,7 @@ test.describe("vendor privacy", () => {
 
     // Publish A's site and create a party, then look as a visitor and as a guest.
     await page.goto(`/app/weddings/${weddingA}/site`);
-    const intro = page.locator('[data-testid="site-section"][data-kind="intro"]');
+    const intro = await siteSectionEditor(page, "intro");
     await intro.getByLabel(site.sections.titleLabel).fill("Bienvenidos");
     await intro.getByLabel(site.sections.bodyLabel).fill("Nos casamos.");
     await intro.getByLabel(site.sections.visibleLabel).setChecked(true);

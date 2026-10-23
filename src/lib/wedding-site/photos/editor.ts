@@ -170,3 +170,67 @@ export function parseAnchor(raw: string): SectionKind | null | undefined {
 export function parseVariant(kind: PhotoBlockKind, raw: string): PhotoBlockVariant | null {
   return isVariantOf(kind, raw) ? raw : null;
 }
+
+// ---------------------------------------------------------- composition
+
+/**
+ * One row of the unified site editor (UX-01D), in the public page's order:
+ * the photo blocks right after the opening, then each fixed text section
+ * followed by the blocks anchored to it. An `insert` row is the end of a
+ * slot: a block created there gets that anchor and, because the database
+ * appends new blocks (`position = max + 1`), lands exactly at that row.
+ * There is no insertion point between two blocks of the same slot (the
+ * schema can't place one there); "Mover antes" moves it afterwards.
+ */
+export type CompositionRow =
+  | Readonly<{ type: "section"; kind: SectionKind }>
+  | Readonly<{ type: "block"; block: EditorBlock }>
+  | Readonly<{ type: "insert"; anchor: SectionKind | null }>;
+
+/** The editor's rows. Without photos (flag off or a failed read): the text sections only. */
+export function siteComposition(editor: PhotoEditor | null): CompositionRow[] {
+  const rows: CompositionRow[] = [];
+  const blocks = editor ? orderedBlocks(editor) : [];
+  const slot = (anchor: SectionKind | null) => {
+    if (!editor) return;
+    for (const block of blocks) if (block.anchor === anchor) rows.push({ type: "block", block });
+    rows.push({ type: "insert", anchor });
+  };
+  slot(null);
+  for (const kind of SECTION_KINDS) {
+    rows.push({ type: "section", kind });
+    slot(kind);
+  }
+  return rows;
+}
+
+/** The blocks sharing a block's slot, in order (what "Mover antes / después" moves within). */
+export function slotSiblings(editor: PhotoEditor, block: EditorBlock): EditorBlock[] {
+  return orderedBlocks(editor).filter((other) => other.anchor === block.anchor);
+}
+
+/**
+ * What a block will show: its ready photos, how many lack the description
+ * the public read requires, and whether the published page would draw it
+ * (visible and at least one described photo; the same rule as
+ * `previewPhotoBlocks`).
+ */
+export function blockStatus(
+  editor: PhotoEditor,
+  block: EditorBlock,
+): Readonly<{ photos: number; missingAlt: number; appears: boolean }> {
+  const photos = photosIn(editor, block.id);
+  const described = photos.filter((photo) => photo.altText && photo.width && photo.height).length;
+  return { photos: photos.length, missingAlt: photos.length - described, appears: block.isVisible && described > 0 };
+}
+
+/** Whether another block can be created (the cover counts, like the database). */
+export function canAddBlock(editor: PhotoEditor): boolean {
+  return editor.blocks.length < PHOTO_LIMITS.blocksPerWedding;
+}
+
+/** Library photos a block can take: not already in it and not the cover (choosing one would replace the cover). */
+export function photosForBlock(editor: PhotoEditor, block: EditorBlock): EditorPhoto[] {
+  const cover = coverOf(editor).block;
+  return libraryPhotos(editor).filter((photo) => photo.blockId !== block.id && (!cover || photo.blockId !== cover.id));
+}

@@ -3,7 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { expect, test, type Browser, type Locator, type Page } from "@playwright/test";
 import pg from "pg";
 
-import { createAccount, createInvite, createWedding, es, logIn } from "./support/flows";
+import { createAccount, createInvite, createWedding, es, logIn, siteSectionEditor } from "./support/flows";
 import { readLocalSupabase } from "./support/local-supabase";
 import { emailsTo, expectEmailCount, rsvpLinkOf } from "./support/outbox";
 
@@ -252,7 +252,7 @@ test.describe("recoverable RSVP link", () => {
 
     // Publish a minimal site through the real editor.
     await page.goto(`/app/weddings/${weddingId}/site`);
-    const intro = page.locator('[data-testid="site-section"][data-kind="intro"]');
+    const intro = await siteSectionEditor(page, "intro");
     await intro.getByLabel(site.sections.bodyLabel).fill("Bienvenidos a nuestra boda de prueba.");
     await intro.getByLabel(site.sections.visibleLabel).setChecked(true);
     await intro.getByRole("button", { name: site.sections.submit }).click();

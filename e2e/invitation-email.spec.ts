@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { expect, test, type Browser, type Locator, type Page } from "@playwright/test";
 
-import { createAccount, createInvite, createWedding, es, logIn } from "./support/flows";
+import { createAccount, createInvite, createWedding, es, logIn, siteSectionEditor } from "./support/flows";
 import { REJECTING_DOMAIN, emailsTo, expectEmailCount, rsvpLinkOf } from "./support/outbox";
 
 // LB-11: the party's contact email and its invitation email. The app under
@@ -271,7 +271,7 @@ test.describe("guest invitation email", () => {
     await page.getByLabel(site.slug.label, { exact: true }).fill(slug);
     await page.getByRole("button", { name: site.slug.submit }).click();
     await expect(page.getByText(site.slug.saved)).toBeVisible();
-    const intro = page.locator('[data-testid="site-section"][data-kind="intro"]');
+    const intro = await siteSectionEditor(page, "intro");
     await intro.getByLabel(site.sections.bodyLabel).fill("Bienvenidos a nuestra boda.");
     await intro.getByLabel(site.sections.visibleLabel).setChecked(true);
     await intro.getByRole("button", { name: site.sections.submit }).click();

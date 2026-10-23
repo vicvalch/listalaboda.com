@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth/session";
+import { requireWeddingMembership } from "@/lib/authz/wedding";
 import { formText, type FormState } from "@/lib/forms/result";
 import { getMessages, interpolate } from "@/lib/i18n";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -24,8 +25,15 @@ import {
 import { CUSTOMIZABLE_FIELDS, isWeddingSiteThemeKey, type CustomizableField } from "@/lib/wedding-site/design/themes";
 import { purgeWeddingPhotos } from "@/lib/wedding-site/photos/service";
 import { siteCustomPreviewPath } from "@/lib/wedding-site/preview";
-import { isSectionKind, parseSectionInput, type SectionField } from "@/lib/wedding-site/sections";
 import {
+  hasPublicContent,
+  isSectionKind,
+  parseSectionInput,
+  sectionTitle,
+  type SectionField,
+} from "@/lib/wedding-site/sections";
+import {
+  getWeddingSiteEditor,
   publishWeddingSite,
   resetWeddingSiteCustomization,
   saveContentSection,
@@ -101,6 +109,54 @@ export async function saveSectionAction(
 
   revalidatePath(sitePath(weddingId));
   return { ok: true, data: { message: copy.sections.saved, nonce: crypto.randomUUID() } };
+}
+
+export type VisibilityFormState = FormState<never, { message: string; nonce: string }> | null;
+
+/**
+ * "Mostrar / Ocultar" on a text section's row (UX-01D). The form names only
+ * the kind and the wanted state; the title and body are the ones saved now,
+ * read on the server, so the switch never writes text from the page. A
+ * section without content can't be shown (the database refuses it too).
+ */
+export async function setSectionVisibilityAction(
+  _prev: VisibilityFormState,
+  formData: FormData,
+): Promise<VisibilityFormState> {
+  const weddingId = formText(formData, "weddingId");
+  await requireUser(sitePath(weddingId));
+  const copy = getMessages().site;
+  const kind = formText(formData, "kind");
+  if (!isSectionKind(kind)) return { ok: false, formError: copy.errors.failed };
+  const isVisible = formText(formData, "visible") === "on";
+
+  const supabase = await createSupabaseServerClient();
+  const access = await requireWeddingMembership(supabase, weddingId);
+  if (!access.ok) return { ok: false, formError: await handleFailure(weddingId, access.reason) };
+  const editor = await getWeddingSiteEditor(supabase, access.access);
+  const current = editor?.sections.find((section) => section.kind === kind);
+  if (!current) return { ok: false, formError: copy.errors.failed };
+  if (isVisible && !hasPublicContent(kind, current.body)) return { ok: false, formError: copy.sections.needsContent };
+
+  const result = await saveContentSection(supabase, weddingId, {
+    kind,
+    title: current.title,
+    body: current.body,
+    isVisible,
+  });
+  if (!result.ok) {
+    if (result.reason === "invalid") return { ok: false, formError: copy.sections.needsContent };
+    return { ok: false, formError: await handleFailure(weddingId, result.reason) };
+  }
+  revalidatePath(sitePath(weddingId));
+  const name = sectionTitle(kind, current.title);
+  return {
+    ok: true,
+    data: {
+      message: interpolate(isVisible ? copy.compose.shownMessage : copy.compose.hiddenMessage, { name }),
+      nonce: crypto.randomUUID(),
+    },
+  };
 }
 
 // ------------------------------------------------------------------ theme

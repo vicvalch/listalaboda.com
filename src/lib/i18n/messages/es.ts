@@ -358,6 +358,9 @@ export const es = {
    * `{supportEmail}` = `SUPPORT_EMAIL`, `{plannerPrice}` / `{couplePrice}` =
    * the display prices (`@/lib/billing/display-prices`); never typed here.
    * Never "de por vida" or any equivalent promise for the couple access.
+   * UX-01B8: the wedding-site photo sections (`fotos-del-sitio` in both) state
+   * only what ADR-022 implements (limits, publication gate, metadata removal,
+   * CDN purge on removal); never an absolute erasure or a consent rule.
    */
   legal: {
     links: {
@@ -365,7 +368,7 @@ export const es = {
       privacy: "Política de privacidad",
       refunds: "Reembolsos y cancelaciones",
     },
-    updated: "Última actualización: 17 de octubre de 2026",
+    updated: "Última actualización: 22 de octubre de 2026",
     terms: {
       metadata: {
         title: "Términos · ListaLaBoda",
@@ -430,6 +433,18 @@ export const es = {
           ],
         },
         {
+          id: "fotos-del-sitio",
+          title: "Fotos del sitio web",
+          paragraphs: [
+            "Quienes forman parte de una boda pueden subir fotos para su sitio web: una foto de portada y hasta 20 fotos por boda, en galerías, carruseles o junto a un texto. Cada archivo puede pesar hasta 15 MB (JPG, PNG, WebP o HEIC) y también hay límites diarios y de espacio por boda. Esta función se activa por etapas y puede no estar disponible todavía.",
+            "Una foto aparece en el sitio público solo si la boda está publicada, la sección donde está la foto está visible y la foto tiene una descripción. Desde ese momento, cualquier persona con el enlace del sitio puede ver y descargar esa foto. Pedimos a los buscadores que no muestren el sitio, pero el sitio no es privado: quien tenga el enlace puede compartirlo.",
+            "Sube solo fotos que tengas derecho a usar y a compartir. Si aparecen otras personas, te corresponde asegurarte de que puedes publicarlas. No subas fotos ilegales. Podemos quitar una foto que no cumpla estos Términos.",
+            "Las fotos siguen siendo de quien tenga sus derechos. Al subir una foto nos permites guardarla, procesarla y mostrarla en el sitio web de tu boda y en sus vistas previas, solo para prestarte el servicio.",
+            "Puedes quitar una foto del sitio o eliminarla cuando quieras. Al quitarla, ocultar su sección, despublicar el sitio o eliminarla, pedimos que se borren las copias temporales de nuestra red de entrega; suele tardar unos minutos, y un navegador que ya la abrió puede conservarla hasta 10 minutos. No podemos borrar las copias que otras personas ya hayan guardado o compartido.",
+            "Si apareces en una foto o crees que una foto no debería estar publicada, pídele a quien organiza la boda que la quite o escríbenos a {supportEmail} con el enlace del sitio. Revisamos cada solicitud de forma manual.",
+          ],
+        },
+        {
           id: "uso-aceptable",
           title: "Uso aceptable",
           paragraphs: [
@@ -478,6 +493,7 @@ export const es = {
             "La información de cada boda: nombre, fecha y ciudad; pendientes; invitados y sus grupos, el correo de contacto opcional de cada grupo y sus respuestas de asistencia, incluidas las notas de comida; proveedores y sus datos de contacto; presupuesto y pagos registrados; mesas; cronograma; y el contenido del sitio web de la boda.",
             "Facturación: los identificadores de cliente, suscripción y pago que nos da Stripe, y el estado de tu acceso. Nunca recibimos ni guardamos los datos de tu tarjeta.",
             "Correos: cuando ListaLaBoda envía un correo (por ejemplo, una invitación o un recordatorio), guardamos a quién se envió, cuándo y si se entregó. No registramos si se abre ni en qué enlaces se hace clic.",
+            "Fotos del sitio web: si quienes organizan una boda suben fotos, guardamos lo que se explica en «Fotos del sitio web».",
           ],
         },
         {
@@ -498,10 +514,22 @@ export const es = {
           ],
         },
         {
+          id: "fotos-del-sitio",
+          title: "Fotos del sitio web",
+          paragraphs: [
+            "De cada foto guardamos dos copias optimizadas (de 1600 y 640 píxeles en su lado más largo), su descripción, su pie de foto, su encuadre y en qué parte del sitio aparece. No guardamos el archivo original ni su nombre.",
+            "Antes de guardarlas quitamos los datos que traía el archivo, como la ubicación (GPS), la fecha y los datos de la cámara (EXIF). Lo que se ve en la imagen, como rostros, lugares o letreros, sigue siendo visible.",
+            "Las copias se guardan en un almacenamiento privado de Supabase. Cuando el sitio está publicado, las fotos visibles se entregan a través de Vercel, que guarda copias temporales en su red para que carguen rápido.",
+            "Las ven las personas que forman parte de la boda y, cuando la boda está publicada y la foto es visible, cualquier persona con el enlace del sitio, que puede verlas y descargarlas.",
+            "Conservamos las fotos mientras sigan en la boda. Si se elimina una foto, borramos sus dos copias de nuestro almacenamiento y pedimos que se borren las copias temporales de Vercel; los navegadores pueden conservar una copia unos minutos y no podemos borrar las que otras personas hayan guardado. Si se elimina una boda, también eliminamos sus fotos.",
+            "Si apareces en una foto y quieres que se quite, pídeselo a quien organiza la boda o escríbenos a {supportEmail} con el enlace del sitio.",
+          ],
+        },
+        {
           id: "servicios",
           title: "Servicios que usamos",
           paragraphs: [
-            "Supabase (base de datos y cuentas), Vercel (alojamiento de la aplicación), Resend (envío de correos) y Stripe (pagos). Cada uno trata los datos solo para prestarnos su servicio.",
+            "Supabase (base de datos, cuentas y almacenamiento de las fotos del sitio), Vercel (alojamiento de la aplicación y entrega de las fotos publicadas), Resend (envío de correos) y Stripe (pagos). Cada uno trata los datos solo para prestarnos su servicio.",
           ],
         },
         {
@@ -524,6 +552,7 @@ export const es = {
           title: "Acceso y eliminación",
           paragraphs: [
             "Puedes pedirnos una copia, una corrección o la eliminación de tu cuenta y de tus datos escribiendo a {supportEmail} desde el correo de tu cuenta. Por ahora estas solicitudes se atienden por correo: la aplicación todavía no tiene una opción para que elimines tu cuenta directamente.",
+            "Si al eliminar tu cuenta se elimina también una boda, eliminamos sus fotos del sitio web.",
             "No haber pagado no borra, por sí solo, la información que ya guardaste.",
           ],
         },

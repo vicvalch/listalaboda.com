@@ -436,7 +436,7 @@ export const es = {
           id: "fotos-del-sitio",
           title: "Fotos del sitio web",
           paragraphs: [
-            "Quienes forman parte de una boda pueden subir fotos para su sitio web: una foto de portada y hasta 20 fotos por boda, en galerías, carruseles o junto a un texto. Cada archivo puede pesar hasta 15 MB (JPG, PNG, WebP o HEIC) y también hay límites diarios y de espacio por boda. Esta función se activa por etapas y puede no estar disponible todavía.",
+            "Quienes forman parte de una boda pueden subir fotos para su sitio web: hasta 20 fotos por boda en total, incluida la foto de portada, para usarlas en la portada, galerías, carruseles o junto a un texto. Cada archivo puede pesar hasta 15 MB, en formato JPG, PNG o WebP, y también hay límites diarios y de espacio por boda. Esta función se activa por etapas y puede no estar disponible todavía.",
             "Una foto aparece en el sitio público solo si la boda está publicada, la sección donde está la foto está visible y la foto tiene una descripción. Desde ese momento, cualquier persona con el enlace del sitio puede ver y descargar esa foto. Pedimos a los buscadores que no muestren el sitio, pero el sitio no es privado: quien tenga el enlace puede compartirlo.",
             "Sube solo fotos que tengas derecho a usar y a compartir. Si aparecen otras personas, te corresponde asegurarte de que puedes publicarlas. No subas fotos ilegales. Podemos quitar una foto que no cumpla estos Términos.",
             "Las fotos siguen siendo de quien tenga sus derechos. Al subir una foto nos permites guardarla, procesarla y mostrarla en el sitio web de tu boda y en sus vistas previas, solo para prestarte el servicio.",
@@ -521,7 +521,7 @@ export const es = {
             "Antes de guardarlas quitamos los datos que traía el archivo, como la ubicación (GPS), la fecha y los datos de la cámara (EXIF). Lo que se ve en la imagen, como rostros, lugares o letreros, sigue siendo visible.",
             "Las copias se guardan en un almacenamiento privado de Supabase. Cuando el sitio está publicado, las fotos visibles se entregan a través de Vercel, que guarda copias temporales en su red para que carguen rápido.",
             "Las ven las personas que forman parte de la boda y, cuando la boda está publicada y la foto es visible, cualquier persona con el enlace del sitio, que puede verlas y descargarlas.",
-            "Conservamos las fotos mientras sigan en la boda. Si se elimina una foto, borramos sus dos copias de nuestro almacenamiento y pedimos que se borren las copias temporales de Vercel; los navegadores pueden conservar una copia unos minutos y no podemos borrar las que otras personas hayan guardado. Si se elimina una boda, también eliminamos sus fotos.",
+            "Conservamos las fotos mientras sigan en la boda. Si se elimina una foto desde el editor de fotos de la boda, borramos sus dos copias de nuestro almacenamiento y pedimos que se borren las copias temporales de Vercel; los navegadores pueden conservar una copia unos minutos y no podemos borrar las que otras personas hayan guardado. Si se elimina una boda, borramos sus fotos de nuestro almacenamiento y pedimos que se borren las copias temporales de Vercel en un paso manual posterior, así que pueden pasar algunos días hasta que desaparezcan del todo.",
             "Si apareces en una foto y quieres que se quite, pídeselo a quien organiza la boda o escríbenos a {supportEmail} con el enlace del sitio.",
           ],
         },
@@ -552,7 +552,7 @@ export const es = {
           title: "Acceso y eliminación",
           paragraphs: [
             "Puedes pedirnos una copia, una corrección o la eliminación de tu cuenta y de tus datos escribiendo a {supportEmail} desde el correo de tu cuenta. Por ahora estas solicitudes se atienden por correo: la aplicación todavía no tiene una opción para que elimines tu cuenta directamente.",
-            "Si al eliminar tu cuenta se elimina también una boda, eliminamos sus fotos del sitio web.",
+            "Si al atender tu solicitud se elimina también una boda, sus fotos se borran como se explica en «Fotos del sitio web».",
             "No haber pagado no borra, por sí solo, la información que ya guardaste.",
           ],
         },

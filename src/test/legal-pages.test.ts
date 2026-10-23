@@ -127,8 +127,11 @@ describe("photo sections", () => {
   });
 
   it("state the real limits, the publication gate and that anyone with the link can view and download", () => {
-    expect(termsBody).toContain("hasta 20 fotos por boda");
-    expect(termsBody).toContain("hasta 15 MB");
+    // The cover is one of the 20 (`photos_per_wedding` counts every photo row).
+    expect(termsBody).toContain("hasta 20 fotos por boda en total, incluida la foto de portada");
+    expect(termsBody).toContain("hasta 15 MB, en formato JPG, PNG o WebP");
+    // HEIC depends on the browser's decoder (`createImageBitmap`), so it is never promised.
+    expect(`${termsBody} ${privacyBody}`).not.toMatch(/HEIC|HEIF/i);
     expect(termsBody).toContain("solo si la boda está publicada, la sección donde está la foto está visible y la foto tiene una descripción");
     expect(termsBody).toContain("cualquier persona con el enlace del sitio puede ver y descargar esa foto");
     expect(termsBody).toContain("el sitio no es privado");
@@ -155,6 +158,11 @@ describe("photo sections", () => {
       expect(body).not.toMatch(/de inmediato|inmediatamente|para siempre|permanentemente|garantizamos/i);
     }
     expect(termsBody).toContain("hasta 10 minutos");
+  });
+
+  it("say that a deleted wedding's photos are removed in a later manual step, not at once", () => {
+    expect(privacyBody).toContain("en un paso manual posterior, así que pueden pasar algunos días hasta que desaparezcan del todo");
+    expect(privacyBody).not.toContain("Si se elimina una boda, también eliminamos sus fotos.");
   });
 });
 

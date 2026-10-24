@@ -107,7 +107,15 @@ export function StudioCanvas({
 
   return (
     <DndContext sensors={sensors} collisionDetection={pointerWithin}
-      accessibility={{ screenReaderInstructions: { draggable: copy.reorder.instructions } }}
+      accessibility={{
+        screenReaderInstructions: { draggable: copy.reorder.instructions },
+        announcements: {
+          onDragStart: () => copy.reorder.moving,
+          onDragOver: ({ over }) => over ? copy.reorder.validTarget : copy.reorder.invalidTarget,
+          onDragEnd: () => copy.reorder.finished,
+          onDragCancel: () => copy.reorder.cancelled,
+        },
+      }}
       onDragStart={({ active }) => {
         snapshot.current = editor;
         setDragging(String(active.id));
@@ -130,6 +138,7 @@ export function StudioCanvas({
         element="div"
         photos={{ blocks, basePath }}
         studio={{
+          blockKey: (block) => blockInfo.get(block)?.id,
           hero: (node) => target({ type: "cover" }, copy.palette.cover, coverHidden, node),
           section: (kind, node) => {
             const key: StudioTarget = { type: "section", kind };

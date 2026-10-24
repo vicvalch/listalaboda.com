@@ -54,8 +54,11 @@ describe("atomic same-slot placement", () => {
     const { wedding, ids } = await fixture();
     const { wedding: other, ids: others } = await fixture();
     const cover = await as.ownerA.from("wedding_site_photo_blocks").insert({ wedding_id: wedding, kind: "cover", variant: "standard" }).select("id").single();
+    const otherSlot = await as.ownerA.from("wedding_site_photo_blocks").insert({ wedding_id: wedding, kind: "gallery", variant: "grid", anchor: "faq" }).select("id").single();
+    expect(otherSlot.error).toBeNull();
     const before = await rows(wedding);
     const invalid = [
+      move(wedding, ids[0]!, ids, otherSlot.data!.id),
       move(wedding, ids[0]!, [...ids].reverse(), ids[2]),
       move(wedding, ids[0]!, ids, others[0]),
       move(wedding, ids[0]!, ids, ids[2], "ownerA", "faq"),

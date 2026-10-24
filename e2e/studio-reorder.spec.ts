@@ -44,7 +44,7 @@ test("same-slot drag persists, preserves selection and unsaved text, and agrees 
   const { wedding, ids } = await fixture(page);
   await frame(page).locator(`[data-studio-target="block:${ids[2]}"]`).getByRole("button").first().click();
   const panel = page.getByTestId("studio-panel");
-  await panel.getByLabel(es.site.photos.blocks.bodyLabel).fill("Borrador sin guardar");
+  await panel.getByRole("textbox", { name: es.site.photos.blocks.bodyLabel, exact: true }).fill("Borrador sin guardar");
   await panel.getByLabel(es.site.photos.blocks.anchorLabel).selectOption("intro");
   await expect(block(page, ids[2]!).getByTestId("studio-drag-handle")).toBeDisabled();
   await expect(page.getByText(es.site.studio.reorder.saveSlot)).toBeVisible();
@@ -53,7 +53,7 @@ test("same-slot drag persists, preserves selection and unsaved text, and agrees 
   await expect(page.getByTestId("studio-announcer")).toHaveText(es.site.studio.reorder.saved);
   await expect.poll(() => order(page)).toEqual([ids[2], ids[0], ids[1]]);
   await expect(panel).toHaveAttribute("data-target", `block:${ids[2]}`);
-  await expect(panel.getByLabel(es.site.photos.blocks.bodyLabel)).toHaveValue("Borrador sin guardar");
+  await expect(panel.getByRole("textbox", { name: es.site.photos.blocks.bodyLabel, exact: true })).toHaveValue("Borrador sin guardar");
   // Explicitly save the draft before leaving; reordering itself must not have saved it.
   const db = new pg.Client({ connectionString: readLocalSupabase().dbUrl });
   await db.connect();

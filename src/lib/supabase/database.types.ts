@@ -837,7 +837,7 @@ isOneToOne: false
 { Args: { "acting_user_id": string,"invitation_token_hash": string,"provider_message_id": string,"recipient": string,"target_invitation_id": string,"target_wedding_id": string }; Returns: string
                            },
 "reorder_wedding_site_photo_block":
-{ Args: { "before_block_id"?: string,"expected_anchor": string,"expected_order": string[],"target_block_id": string,"target_wedding_id": string }; Returns: string[]
+{ Args: { "before_block_id"?: string,"expected_anchor": string,"expected_order": (string)[],"target_block_id": string,"target_wedding_id": string }; Returns: (string)[]
                            },
 "revoke_guest_invitation_link":
 { Args: { "target_invitation_id": string,"target_wedding_id": string }; Returns: boolean

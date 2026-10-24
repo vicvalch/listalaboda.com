@@ -47,6 +47,8 @@ export type SiteStudioHooks = Readonly<{
   section: (kind: SectionKind, node: ReactNode) => ReactNode;
   /** A photo block other than the cover, with its rendered markup. */
   block: (block: SitePhotoBlock, node: ReactNode) => ReactNode;
+  /** Stable member-only identity keeps drag handles/focus attached to their block. */
+  blockKey?: (block: SitePhotoBlock) => string | undefined;
   /** The end of a slot: after the opening (null) or after a section kind's place. */
   slotEnd: (anchor: SectionKind | null) => ReactNode;
 }>;
@@ -87,7 +89,7 @@ export function WeddingSite({
               index={order.get(block) ?? 0}
             />
           );
-          return studio ? <Fragment key={`photos-${order.get(block)}`}>{studio.block(block, view)}</Fragment> : view;
+          return studio ? <Fragment key={studio.blockKey?.(block) ?? `photos-${order.get(block)}`}>{studio.block(block, view)}</Fragment> : view;
         })
       : null;
   const hero = (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { getMessages, interpolate } from "@/lib/i18n";
 import { resolveWeddingSiteDesign, type WeddingSiteDesign } from "@/lib/wedding-site/design/resolve";
@@ -31,6 +31,9 @@ import {
   type StudioDrafts,
   type StudioTarget,
 } from "@/lib/wedding-site/studio";
+
+import { adjacentRequest, type ReorderRequest } from "@/lib/wedding-site/studio-reorder";
+import { reorderBlockAction } from "./reorder-actions";
 
 import { saveSectionAction } from "../actions";
 import {
@@ -104,6 +107,9 @@ export function Studio({ data }: { data: StudioData }) {
   const [drawer, setDrawer] = useState<"palette" | "properties" | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState(false);
+  const [savedPhotos, setSavedPhotos] = useState(data.photos);
+  const [reorderBlocked, setReorderBlocked] = useState(false);
+  const reordering = useRef(false);
   const sitePath = `/app/weddings/${encodeURIComponent(data.weddingId)}/site`;
 
   useEffect(() => {
@@ -115,6 +121,8 @@ export function Studio({ data }: { data: StudioData }) {
   const [seen, setSeen] = useState(data);
   if (seen !== data) {
     setSeen(data);
+    setSavedPhotos(data.photos);
+    setReorderBlocked(data.photos === null);
     setDrafts((current) => prune(current, data));
   }
 
@@ -165,10 +173,29 @@ export function Studio({ data }: { data: StudioData }) {
     [announce, router],
   );
 
+  const reorder = async (request: ReorderRequest | null): Promise<Outcome> => {
+    if (!request) return { ok: true, message: copy.reorder.unchanged };
+    if (reordering.current || reorderBlocked) return { ok: false, error: copy.reorder.failed };
+    reordering.current = true;
+    try {
+      const result = await reorderBlockAction(data.weddingId, request);
+      if (result.editor) setSavedPhotos(result.editor);
+      setReorderBlocked(result.editor === null);
+      return result.ok ? { ok: true, message: copy.reorder.saved } : { ok: false, error: copy.reorder.failed };
+    } catch {
+      // The request may have committed: freeze movement until a fresh server payload arrives.
+      setReorderBlocked(true);
+      router.refresh();
+      return { ok: false, error: copy.reorder.failed };
+    } finally {
+      reordering.current = false;
+    }
+  };
+
   // ---------------------------------------------------------------- model
   const sections = useMemo(() => studioSections(data.sections, drafts), [data.sections, drafts]);
   const site = useMemo(() => studioSite(data.header, sections, data.slug), [data.header, sections, data.slug]);
-  const editor = useMemo(() => (data.photos ? studioEditor(data.photos, drafts) : null), [data.photos, drafts]);
+  const editor = useMemo(() => (savedPhotos ? studioEditor(savedPhotos, drafts) : null), [savedPhotos, drafts]);
   const canvasPhotos = useMemo(() => {
     if (!editor) return { blocks: [] as SitePhotoBlock[], info: new Map<SitePhotoBlock, CanvasBlockInfo>() };
     const { blocks, ids } = studioPhotoBlocks(editor);
@@ -185,9 +212,9 @@ export function Studio({ data }: { data: StudioData }) {
   const cover = editor ? coverOf(editor).block : null;
   const unsaved = new Set([
     ...Object.keys(drafts.sections).map((kind) => `section:${kind}`),
-    ...Object.keys(drafts.blocks).map((id) => (data.photos?.blocks.find((b) => b.id === id)?.kind === "cover" ? "cover" : `block:${id}`)),
+    ...Object.keys(drafts.blocks).map((id) => (savedPhotos?.blocks.find((b) => b.id === id)?.kind === "cover" ? "cover" : `block:${id}`)),
   ]);
-  const canAdd = data.photos ? canAddBlock(data.photos) : false;
+  const canAdd = savedPhotos ? canAddBlock(savedPhotos) : false;
 
   // -------------------------------------------------------------- choose
   const narrow = () => typeof window !== "undefined" && !window.matchMedia("(min-width: 64rem)").matches;
@@ -236,7 +263,7 @@ export function Studio({ data }: { data: StudioData }) {
   };
 
   const saveBlock = async (id: string): Promise<SaveOutcome> => {
-    const saved = data.photos?.blocks.find((block) => block.id === id);
+    const saved = savedPhotos?.blocks.find((block) => block.id === id);
     if (!saved) return { ok: false, error: failed };
     const value = drafts.blocks[id] ?? blockDraftOf(saved);
     const state = await saveBlockAction(
@@ -268,7 +295,7 @@ export function Studio({ data }: { data: StudioData }) {
     });
   const setBlockDraft = (id: string, next: BlockDraft) =>
     setDrafts((current) => {
-      const saved = data.photos?.blocks.find((block) => block.id === id);
+      const saved = savedPhotos?.blocks.find((block) => block.id === id);
       const blocks = { ...current.blocks };
       if (saved && sameBlockDraft(next, blockDraftOf(saved))) delete blocks[id];
       else blocks[id] = next;
@@ -298,7 +325,7 @@ export function Studio({ data }: { data: StudioData }) {
           weddingId={data.weddingId}
           header={data.header}
           isOwner={data.isOwner}
-          editor={data.photos}
+          editor={savedPhotos}
           act={act}
           setCover={async (photoId) => fromPhoto(await setCoverAction(null, form({ photoId })), failed)}
           setCoverVisible={async (blockId, visible) =>
@@ -332,16 +359,17 @@ export function Studio({ data }: { data: StudioData }) {
         />
       );
     }
-    const block = data.photos?.blocks.find((b) => b.id === selected.id);
-    if (!block || !data.photos) {
+    const block = savedPhotos?.blocks.find((b) => b.id === selected.id);
+    if (!block || !savedPhotos) {
       return <p className="text-muted p-2 text-sm">{copy.panel.loading}</p>;
     }
-    const name = blockName(block, data.photos);
+    const name = blockName(block, savedPhotos);
     return (
       <BlockPanel
         key={block.id}
         weddingId={data.weddingId}
-        editor={data.photos}
+        editor={savedPhotos}
+        reorderDisabled={busy || reorderBlocked}
         block={block}
         name={name}
         draft={drafts.blocks[block.id]}
@@ -367,8 +395,7 @@ export function Studio({ data }: { data: StudioData }) {
           removePhoto: async (photoId) => fromPhoto(await removeFromBlockAction(null, form({ photoId })), failed),
           movePhoto: async (photoId, direction, label) =>
             fromPhoto(await moveAction(null, form({ target: "photo", id: photoId, direction, name: `${label} (${name})` })), failed),
-          moveBlock: async (direction) =>
-            fromPhoto(await moveAction(null, form({ target: "block", id: block.id, direction, name })), failed),
+          moveBlock: (direction) => reorder(adjacentRequest(savedPhotos, block.id, direction)),
           describePhoto: async (photo: EditorPhoto, altText, caption) =>
             fromPhoto(
               await savePhotoAction(
@@ -447,7 +474,7 @@ export function Studio({ data }: { data: StudioData }) {
             <a href={`${sitePath}/preview`} className="font-semibold hover:underline">
               {copy.previewLink}
             </a>
-            {data.photos ? (
+            {savedPhotos ? (
               <a href={`${sitePath}/photos`} className="font-semibold hover:underline">
                 {copy.libraryLink}
               </a>
@@ -522,7 +549,7 @@ export function Studio({ data }: { data: StudioData }) {
                   })}
                 </ul>
               </section>
-              {data.photos ? (
+              {savedPhotos ? (
                 <section className="space-y-2" aria-labelledby="studio-add">
                   <h2 id="studio-add" className="text-muted text-xs font-semibold tracking-wide uppercase">
                     {copy.palette.addTitle}
@@ -588,6 +615,9 @@ export function Studio({ data }: { data: StudioData }) {
                   inserting={inserting}
                   onInsert={insert}
                   insertBusy={busy}
+                  editor={savedPhotos}
+                  reorderDisabled={busy || reorderBlocked}
+                  onReorder={(request) => startTransition(() => { void act(() => reorder(request)); })}
                 />
               </CanvasFrame>
             </div>

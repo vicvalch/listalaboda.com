@@ -536,3 +536,20 @@ export async function purgeWeddingPhotos(supabase: Client, weddingId: string): P
     // Best effort.
   }
 }
+
+/** One RPC, never a sequence of adjacent swaps. */
+export async function reorderPhotoBlock(supabase: Client, weddingId: string, request: import("@/lib/wedding-site/studio-reorder").ReorderRequest): Promise<PhotoResult<readonly string[]>> {
+  const auth = await authorize(supabase, weddingId);
+  if (!auth.ok) return auth;
+  if (!isPhotoId(request.blockId) || (request.beforeId !== null && !isPhotoId(request.beforeId)) ||
+      !Array.isArray(request.order) || request.order.length > 12 || !request.order.every(isPhotoId)) return fail("invalid");
+  const { data, error } = await supabase.rpc("reorder_wedding_site_photo_block", {
+    target_wedding_id: auth.access.weddingId,
+    target_block_id: request.blockId,
+    expected_anchor: request.anchor ?? "top",
+    expected_order: [...request.order],
+    ...(request.beforeId === null ? {} : { before_block_id: request.beforeId }),
+  });
+  if (error || !data) return fail("error");
+  return { ok: true, value: data };
+}

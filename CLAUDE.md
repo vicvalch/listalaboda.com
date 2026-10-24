@@ -772,7 +772,7 @@ Wedding-planning checklist for couples. Spanish-first. Next.js (App Router) + Su
   (never public). Text/block fields are drafts saved explicitly through the existing actions; photo add/remove/move,
   cover and descriptions are single actions; nothing writes on open. Insertion is click-to-add at slot ENDS only
   (`createStudioBlockAction` → existing `createPhotoBlock`; the database appends), never between two blocks of a slot;
-  text sections keep their fixed order. No drag library; no fake drag affordances. The "Biblioteca de fotos" only
+  text sections keep their fixed order. STUDIO-02A adds same-slot dragging of existing photo blocks with the existing `@dnd-kit/core`; keyboard/tap controls use the same atomic RPC. See `docs/product/STUDIO-02A-BLOCK-REORDERING.md` for locking, reconciliation and rollout. The "Biblioteca de fotos" only
   uploads, describes and deletes files.
 
 ## Account type (ACCOUNT-01, ADR-020)
@@ -1075,5 +1075,5 @@ migration, no new storage or security path).
 STUDIO-01 replaces it with ListaLaBoda Studio: a visual editor where the couple's real site, in its theme, is the canvas
 (iframe + portal, desktop/phone widths), elements are added from a left library by click-to-add at supported slots
 (carousel, gallery, photo with text, single photo), and the selected element is edited in a right properties panel
-with live drafts (no migration; drag and drop is STUDIO-02).
+with live drafts (STUDIO-02A adds an atomic same-slot reorder RPC and existing-block dragging; palette dragging and cross-slot movement remain deferred).
 Don't implement ahead of the current prompt.

@@ -5,39 +5,7 @@ import { readLocalSupabase } from "./support/local-supabase";
 
 const frame = (page: Page) => page.frameLocator('[data-testid="studio-canvas"]');
 const order = (page: Page) => frame(page).locator("[data-reorder-block]").evaluateAll((nodes) => nodes.map((n) => n.getAttribute("data-reorder-block")));
-// Failure-only diagnostics (CI keeps no traces or screenshots): uncaught
-// browser errors and console errors of the current test, parent document only.
-const browserErrors: string[] = [];
-test.beforeEach(() => { browserErrors.length = 0; });
-test.afterEach(async ({ page }, info) => {
-  if (info.status === info.expectedStatus) return;
-  const log = (line: string) => console.log(`[studio-reorder diag] ${line}`);
-  log(`test: ${info.title}`);
-  log(`url: ${page.url()}`);
-  log(`browser errors (${browserErrors.length}): ${JSON.stringify(browserErrors)}`);
-  const dialog = page.getByTestId("studio");
-  log(`studio dialog count: ${await dialog.count()}; open: ${await dialog.evaluate((d) => (d as HTMLDialogElement).open).catch(() => "n/a")}`);
-  log(`studio canvas iframe count: ${await page.getByTestId("studio-canvas").count()}`);
-  const canvasRoot = frame(page).getByTestId("studio-canvas-root");
-  log(`canvas root count: ${await canvasRoot.count().catch(() => "n/a")}`);
-  log(`canvas block order: ${JSON.stringify(await order(page).catch((e) => String(e)))}`);
-  log(`canvas selected targets: ${JSON.stringify(await frame(page).locator("[data-studio-target][data-selected]").evaluateAll((nodes) => nodes.map((n) => n.getAttribute("data-studio-target"))).catch((e) => String(e)))}`);
-  const panel = page.getByTestId("studio-panel");
-  log(`panel count: ${await panel.count()}; data-target: ${await panel.first().getAttribute("data-target").catch(() => "n/a")}; empty-panel count: ${await page.getByTestId("studio-panel-empty").count()}`);
-  const properties = page.getByTestId("studio-properties");
-  log(`properties aside count: ${await properties.count()}; visible: ${await properties.first().isVisible().catch(() => "n/a")}; class: ${await properties.first().getAttribute("class").catch(() => "n/a")}`);
-  const moveBefore = page.getByRole("button", { name: es.site.studio.panel.block.moveBefore, exact: true });
-  log(`"Mover arriba" (role query) count: ${await moveBefore.count()}`);
-  const moveBeforeText = page.getByText(es.site.studio.panel.block.moveBefore, { exact: true });
-  log(`"Mover arriba" (text query, incl. hidden) count: ${await moveBeforeText.count()}; visible: ${JSON.stringify(await moveBeforeText.evaluateAll((nodes) => nodes.map((n) => ({ tag: n.tagName, disabled: (n as HTMLButtonElement).disabled, rect: n.getBoundingClientRect().toJSON() }))).catch((e) => String(e)))}`);
-  log(`announcer: ${JSON.stringify(await page.getByTestId("studio-announcer").textContent().catch(() => "n/a"))}`);
-  log(`next error overlay/body heading: ${JSON.stringify(await page.locator("h1, h2").allTextContents().catch(() => []))}`);
-  log(`parent aria snapshot:\n${await page.locator("body").ariaSnapshot().catch((e) => String(e))}`);
-});
-
 async function fixture(page: Page) {
-  page.on("pageerror", (error) => browserErrors.push(`pageerror: ${error.message}`));
-  page.on("console", (message) => { if (message.type() === "error") browserErrors.push(`console: ${message.text()}`); });
   await page.setViewportSize({ width: 1440, height: 1800 });
   await logIn(page, await createAccount("studio-reorder", "couple"));
   const wedding = await createWedding(page, "Boda orden atómico");
@@ -114,7 +82,14 @@ test("cancel, invalid fixed-section drop and no-op never send a mutation; keyboa
   await drag(page, block(page, ids[0]!).getByTestId("studio-drag-handle"), block(page, ids[1]!));
   await expect.poll(() => order(page)).toEqual(ids);
   expect(writes).toBe(0);
-  await frame(page).locator(`[data-studio-target="block:${ids[2]}"]`).getByRole("button").first().click();
+  // @dnd-kit swallows one document click for 50 ms after any pointer drag (its
+  // guard against a drag turning into a click). Retry the select so this real
+  // click lands once that window clears; a real user never clicks that fast.
+  const chip = frame(page).locator(`[data-studio-target="block:${ids[2]}"]`);
+  await expect(async () => {
+    await chip.getByRole("button").first().click();
+    await expect(chip).toHaveAttribute("data-selected", "", { timeout: 1000 });
+  }).toPass();
   const before = page.getByRole("button", { name: es.site.studio.panel.block.moveBefore, exact: true });
   await before.focus();
   await page.keyboard.press("Enter");

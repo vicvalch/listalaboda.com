@@ -110,6 +110,10 @@ export function Studio({ data }: { data: StudioData }) {
   const [savedPhotos, setSavedPhotos] = useState(data.photos);
   const [reorderBlocked, setReorderBlocked] = useState(false);
   const reordering = useRef(false);
+  // Studio-01 can preview an unsaved slot change. Do not reorder against a
+  // different persisted slot; text-only drafts remain fully compatible.
+  const hasSlotDraft = Object.entries(drafts.blocks).some(([id, draft]) =>
+    savedPhotos?.blocks.find((block) => block.id === id)?.anchor !== draft.anchor);
   const sitePath = `/app/weddings/${encodeURIComponent(data.weddingId)}/site`;
 
   useEffect(() => {
@@ -175,7 +179,7 @@ export function Studio({ data }: { data: StudioData }) {
 
   const reorder = async (request: ReorderRequest | null): Promise<Outcome> => {
     if (!request) return { ok: true, message: copy.reorder.unchanged };
-    if (reordering.current || reorderBlocked) return { ok: false, error: copy.reorder.failed };
+    if (reordering.current || reorderBlocked || hasSlotDraft) return { ok: false, error: copy.reorder.failed };
     reordering.current = true;
     try {
       const result = await reorderBlockAction(data.weddingId, request);
@@ -369,7 +373,7 @@ export function Studio({ data }: { data: StudioData }) {
         key={block.id}
         weddingId={data.weddingId}
         editor={savedPhotos}
-        reorderDisabled={busy || reorderBlocked}
+        reorderDisabled={busy || reorderBlocked || hasSlotDraft}
         block={block}
         name={name}
         draft={drafts.blocks[block.id]}
@@ -598,6 +602,7 @@ export function Studio({ data }: { data: StudioData }) {
             ) : data.isPublished ? (
               <p className="text-muted text-center text-xs">{copy.publishedWarning}</p>
             ) : null}
+            {hasSlotDraft ? <p role="status" className="text-center text-sm">{copy.reorder.saveSlot}</p> : null}
             <div className="min-h-0 flex-1">
               <CanvasFrame title={copy.canvas.title} width={canvasWidth(device)} testId="studio-canvas">
                 <StudioCanvas
@@ -616,7 +621,7 @@ export function Studio({ data }: { data: StudioData }) {
                   onInsert={insert}
                   insertBusy={busy}
                   editor={savedPhotos}
-                  reorderDisabled={busy || reorderBlocked}
+                  reorderDisabled={busy || reorderBlocked || hasSlotDraft}
                   onReorder={(request) => startTransition(() => { void act(() => reorder(request)); })}
                 />
               </CanvasFrame>

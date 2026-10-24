@@ -334,11 +334,11 @@ function InsertButton({
 function MovableBlock({ id, name, anchor, disabled, eligible, children }: {
   id: string; name: string; anchor: SectionKind | null; disabled: boolean; eligible: boolean; children: ReactNode;
 }) {
-  const drag = useDraggable({ id, disabled });
-  const drop = useDroppable({ id: `before:${id}`, data: { anchor, beforeId: id }, disabled: !eligible });
+  const { setNodeRef: setDragRef, attributes, listeners } = useDraggable({ id, disabled });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: `before:${id}`, data: { anchor, beforeId: id }, disabled: !eligible });
   const copy = getMessages().site.studio.reorder;
-  return <div ref={drop.setNodeRef} data-reorder-block={id} className={`relative ${drop.isOver ? "outline-2 outline-accent" : ""}`}>
-    <button type="button" ref={drag.setNodeRef} {...drag.attributes} {...drag.listeners}
+  return <div ref={setDropRef} data-reorder-block={id} className={`relative ${isOver ? "outline-2 outline-accent" : ""}`}>
+    <button type="button" ref={setDragRef} {...attributes} {...listeners}
       disabled={disabled} aria-label={interpolate(copy.handle, { name })} data-testid="studio-drag-handle"
       className="mb-7 cursor-grab touch-none rounded border border-border bg-surface px-3 py-2 text-sm active:cursor-grabbing disabled:opacity-50">
       {copy.handleText}

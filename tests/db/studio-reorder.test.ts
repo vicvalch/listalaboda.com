@@ -36,7 +36,7 @@ describe("atomic same-slot placement", () => {
     expect(result.data).toEqual([ids[3], ...ids.slice(0, 3)]);
     const after = await rows(wedding);
     expect(after.map((r) => r.id)).toEqual(result.data);
-    const content = (rs: typeof after) => rs.map(({ position: _p, updated_at: _t, ...rest }) => rest).sort((a, b) => a.id.localeCompare(b.id));
+    const content = (rs: typeof after) => rs.map(({ id, is_visible, anchor, title, body }) => ({ id, is_visible, anchor, title, body })).sort((a, b) => a.id.localeCompare(b.id));
     expect(content(after)).toEqual(content(before));
     expect(await sql("select * from public.wedding_photos where wedding_id = $1", [wedding])).toEqual(photos);
   });

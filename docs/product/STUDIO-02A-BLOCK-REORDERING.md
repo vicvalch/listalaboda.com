@@ -2,7 +2,7 @@
 
 Existing gallery, carousel, photo-with-text and single-photo blocks can be dragged before another block or to the end of their current slot. The cover and fixed text sections cannot move. Palette insertion stays click-only at slot ends. Cross-slot moves, palette dragging and new templates are deferred.
 
-Use the drag handle with a mouse or a held touch, or select a block and use **Mover antes / Mover después** with keyboard or tap. Escape cancels a drag. Invalid targets and no-op drops do not issue mutations. Selection and unsaved text drafts survive reordering. Only confirmed server data changes the canvas order; there is no optimistic placement to mistake for a save.
+Use the drag handle with a mouse or a held touch, or select a block and use **Mover antes / Mover después** with keyboard or tap. Escape cancels a drag. Invalid targets and no-op drops do not issue mutations. Selection and unsaved text drafts survive reordering. If the existing properties panel has an unsaved slot change, save or discard that placement change before reordering; controls explain why they are disabled. Only confirmed server data changes the canvas order; there is no optimistic placement to mistake for a save.
 
 ## Persistence and concurrency
 

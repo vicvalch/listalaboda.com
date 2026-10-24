@@ -2572,6 +2572,7 @@ export const es = {
         handle: "Arrastrar {name} dentro de su grupo",
         handleText: "↕ Arrastrar sección",
         moving: "Moviendo sección…",
+        saveSlot: "Guarda o descarta el cambio de ubicación antes de ordenar las secciones.",
         slotEnd: "Mover al final de este grupo",
         instructions: "Para mover con el teclado, selecciona la sección y usa Mover antes o Mover después en sus propiedades. Solo puedes moverla dentro de su grupo.",
         saved: "Guardamos el nuevo orden.",

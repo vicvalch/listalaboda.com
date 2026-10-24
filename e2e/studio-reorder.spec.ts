@@ -45,6 +45,10 @@ test("same-slot drag persists, preserves selection and unsaved text, and agrees 
   await frame(page).locator(`[data-studio-target="block:${ids[2]}"]`).getByRole("button").first().click();
   const panel = page.getByTestId("studio-panel");
   await panel.getByLabel(es.site.photos.blocks.bodyLabel).fill("Borrador sin guardar");
+  await panel.getByLabel(es.site.photos.blocks.anchorLabel).selectOption("intro");
+  await expect(block(page, ids[2]!).getByTestId("studio-drag-handle")).toBeDisabled();
+  await expect(page.getByText(es.site.studio.reorder.saveSlot)).toBeVisible();
+  await panel.getByLabel(es.site.photos.blocks.anchorLabel).selectOption("top");
   await drag(page, block(page, ids[2]!).getByTestId("studio-drag-handle"), block(page, ids[0]!));
   await expect(page.getByTestId("studio-announcer")).toHaveText(es.site.studio.reorder.saved);
   await expect.poll(() => order(page)).toEqual([ids[2], ids[0], ids[1]]);

@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useRef, type MouseEvent, type ReactNode } from "react";
+import { DndContext, DragOverlay, MouseSensor, TouchSensor, pointerWithin, useDraggable, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import type { PhotoEditor } from "@/lib/wedding-site/photos/editor";
+import { reorderRequest, type ReorderRequest } from "@/lib/wedding-site/studio-reorder";
 
 import { WeddingSite } from "@/components/wedding-site/WeddingSite";
 import { getMessages, interpolate } from "@/lib/i18n";
@@ -36,6 +39,9 @@ export function StudioCanvas({
   inserting,
   onInsert,
   insertBusy,
+  editor,
+  onReorder,
+  reorderDisabled,
 }: {
   site: PublishedWeddingSite;
   design: ResolvedSiteDesign;
@@ -51,9 +57,23 @@ export function StudioCanvas({
   inserting: InsertableElement | null;
   onInsert: (anchor: SectionKind | null) => void;
   insertBusy: boolean;
+  editor: PhotoEditor | null;
+  onReorder: (request: ReorderRequest) => void;
+  reorderDisabled: boolean;
 }) {
   const copy = getMessages().site.studio;
   const root = useRef<HTMLDivElement>(null);
+  const snapshot = useRef<PhotoEditor | null>(null);
+  const [dragging, setDragging] = useState<string | null>(null);
+  const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }));
+  const dragDisabled = reorderDisabled || insertBusy || inserting !== null;
+  const activeAnchor = editor?.blocks.find((b) => b.id === dragging)?.anchor;
+  const movable = (id: string, name: string, node: ReactNode) => {
+    const block = editor?.blocks.find((b) => b.id === id && b.kind !== "cover");
+    return block ? <MovableBlock id={id} name={name} anchor={block.anchor} disabled={dragDisabled}
+      eligible={dragging !== null && activeAnchor === block.anchor}>{node}</MovableBlock> : node;
+  };
 
   // Bring the selected element into view (inside the iframe).
   useEffect(() => {
@@ -86,6 +106,31 @@ export function StudioCanvas({
   const element = inserting ? copy.palette.elements[inserting].name : "";
 
   return (
+    <DndContext sensors={sensors} collisionDetection={pointerWithin}
+      accessibility={{
+        screenReaderInstructions: { draggable: copy.reorder.instructions },
+        announcements: {
+          onDragStart: () => copy.reorder.moving,
+          onDragOver: ({ over }) => over ? copy.reorder.validTarget : copy.reorder.invalidTarget,
+          onDragEnd: () => copy.reorder.finished,
+          onDragCancel: () => copy.reorder.cancelled,
+        },
+      }}
+      onDragStart={({ active }) => {
+        snapshot.current = editor;
+        setDragging(String(active.id));
+      }}
+      onDragCancel={() => { snapshot.current = null; setDragging(null); }}
+      onDragEnd={({ active, over }) => {
+        const saved = snapshot.current;
+        snapshot.current = null;
+        setDragging(null);
+        if (dragDisabled || !saved || !over) return;
+        const zone = over.data.current as { anchor: SectionKind | null; beforeId: string | null } | undefined;
+        if (!zone) return;
+        const request = reorderRequest(saved, String(active.id), zone.anchor, zone.beforeId);
+        if (request) onReorder(request);
+      }}>
     <div ref={root} onClickCapture={keepInStudio} className="flex min-h-full flex-1 flex-col" data-testid="studio-canvas-root">
       <WeddingSite
         site={site}
@@ -93,6 +138,7 @@ export function StudioCanvas({
         element="div"
         photos={{ blocks, basePath }}
         studio={{
+          blockKey: (block) => blockInfo.get(block)?.id,
           hero: (node) => target({ type: "cover" }, copy.palette.cover, coverHidden, node),
           section: (kind, node) => {
             const key: StudioTarget = { type: "section", kind };
@@ -119,7 +165,7 @@ export function StudioCanvas({
             const key: StudioTarget = { type: "block", id: info.id };
             if (block.photos.length === 0) {
               return (
-                <Placeholder
+                movable(info.id, info.name, <Placeholder
                   target={key}
                   icon={block.kind === "cover" ? "cover" : block.kind}
                   title={info.name}
@@ -129,11 +175,11 @@ export function StudioCanvas({
                   unsaved={unsaved.has(targetKey(key))}
                   onSelect={onSelect}
                   hidden={block.hidden}
-                />
+                />)
               );
             }
             const note = info.missingAlt > 0 ? interpolate(copy.canvas.missingAlt, { count: String(info.missingAlt) }) : undefined;
-            return target(key, info.name, block.hidden, node, note);
+            return movable(info.id, info.name, target(key, info.name, block.hidden, node, note));
           },
           slotEnd: (anchor) =>
             inserting ? (
@@ -148,10 +194,12 @@ export function StudioCanvas({
                 onInsert={onInsert}
                 busy={insertBusy}
               />
-            ) : null,
+            ) : <SlotEnd anchor={anchor} active={dragging !== null && activeAnchor === anchor} />,
         }}
       />
     </div>
+    <DragOverlay dropAnimation={null}>{dragging ? <div className="rounded border border-accent bg-surface px-3 py-2 text-sm">{copy.reorder.moving}</div> : null}</DragOverlay>
+    </DndContext>
   );
 }
 
@@ -289,4 +337,28 @@ function InsertButton({
       <span className="sr-only"> {where}</span>
     </button>
   );
+}
+
+/** Both the sensor and its targets live in the iframe; no cross-document palette drag. */
+function MovableBlock({ id, name, anchor, disabled, eligible, children }: {
+  id: string; name: string; anchor: SectionKind | null; disabled: boolean; eligible: boolean; children: ReactNode;
+}) {
+  const { setNodeRef: setDragRef, attributes, listeners } = useDraggable({ id, disabled });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: `before:${id}`, data: { anchor, beforeId: id }, disabled: !eligible });
+  const copy = getMessages().site.studio.reorder;
+  return <div ref={setDropRef} data-reorder-block={id} className={`relative ${isOver ? "outline-2 outline-accent" : ""}`}>
+    <button type="button" ref={setDragRef} {...attributes} {...listeners}
+      disabled={disabled} aria-label={interpolate(copy.handle, { name })} data-testid="studio-drag-handle"
+      className="mb-7 cursor-grab touch-none rounded border border-border bg-surface px-3 py-2 text-sm active:cursor-grabbing disabled:opacity-50">
+      {copy.handleText}
+    </button>
+    {children}
+  </div>;
+}
+
+function SlotEnd({ anchor, active }: { anchor: SectionKind | null; active: boolean }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `end:${anchor ?? "top"}`, data: { anchor, beforeId: null }, disabled: !active });
+  return <div ref={setNodeRef} data-reorder-end={anchor ?? "top"} className={active ? `min-h-12 border-2 border-dashed ${isOver ? "border-accent bg-accent-soft" : "border-border"}` : "h-1"}>
+    {active ? <span className="text-sm">{getMessages().site.studio.reorder.slotEnd}</span> : null}
+  </div>;
 }

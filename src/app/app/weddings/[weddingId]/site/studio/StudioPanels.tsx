@@ -418,6 +418,7 @@ export function BlockPanel({
   act,
   isPublished,
   actions,
+  reorderDisabled = false,
 }: {
   weddingId: string;
   editor: PhotoEditor;
@@ -429,6 +430,7 @@ export function BlockPanel({
   onSave: () => Promise<SaveOutcome>;
   act: Act;
   isPublished: boolean;
+  reorderDisabled?: boolean;
   actions: Readonly<{
     addPhotos: (photoIds: readonly string[]) => Promise<Outcome>;
     removePhoto: (photoId: string) => Promise<Outcome>;
@@ -604,7 +606,7 @@ export function BlockPanel({
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              disabled={place <= 0}
+              disabled={reorderDisabled || place <= 0}
               className={`${secondaryButtonClass} ${small}`}
               onClick={() => act(() => actions.moveBlock("before"))}
             >
@@ -612,7 +614,7 @@ export function BlockPanel({
             </button>
             <button
               type="button"
-              disabled={place >= siblings.length - 1}
+              disabled={reorderDisabled || place >= siblings.length - 1}
               className={`${secondaryButtonClass} ${small}`}
               onClick={() => act(() => actions.moveBlock("after"))}
             >
